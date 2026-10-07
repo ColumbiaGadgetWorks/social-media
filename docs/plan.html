@@ -130,28 +130,30 @@ html { scroll-behavior: smooth; }
 </style>
 
 <header class="top">
-  <div class="eyebrow">Columbia Gadget Works · Build plan v0.1</div>
+  <div class="eyebrow">Columbia Gadget Works · Build plan v0.2 · $0 running cost</div>
   <h1>CGW Content Studio</h1>
   <p class="lede">A self-hosted app for turning members' photos and videos, classes, events and shop humor into polished social posts and email blasts. AI drafts everything. A person approves every post before it goes anywhere.</p>
-  <div class="meta"><span>Runs on: Unraid · Docker</span><span>Publishes via: Metricool, SMTP2GO, RSS</span><span>Contacts live in: Dolibarr</span><span>Drafted Oct 7, 2026</span></div>
+  <div class="meta"><span>Runs on: Unraid · Docker</span><span>Publishes via: Postiz (self-hosted), SMTP2GO, RSS</span><span>Metrics: Meta insights + Metricool free</span><span>Contacts live in: Dolibarr</span><span>Revised Oct 7, 2026</span></div>
 </header>
 
 <div class="wrap">
 <nav class="toc" aria-label="Sections">
   <ol>
     <li><a href="#decisions">Key decisions</a></li>
+    <li><a href="#cost">Keeping it free</a></li>
     <li><a href="#approval">Approval rule</a></li>
     <li><a href="#architecture">Architecture</a></li>
     <li><a href="#workflow">Media workflow</a></li>
     <li><a href="#editing">Editing style</a></li>
     <li><a href="#ideas">Content pillars</a></li>
     <li><a href="#claude">Claude Code</a></li>
-    <li><a href="#metricool">Metricool</a></li>
+    <li><a href="#publishing">Publishing & metrics</a></li>
     <li><a href="#email">Email blasts</a></li>
     <li><a href="#rss">RSS & website</a></li>
     <li><a href="#nudges">Reminder emails</a></li>
     <li><a href="#metrics">Metrics</a></li>
     <li><a href="#deploy">Deploy & auth</a></li>
+    <li><a href="#extras">Other ideas</a></li>
     <li><a href="#roadmap">Roadmap</a></li>
     <li><a href="#questions">Open questions</a></li>
   </ol>
@@ -163,28 +165,56 @@ html { scroll-behavior: smooth; }
   <div class="eyebrow">01 · The short version</div>
   <h2>Key decisions</h2>
   <div class="verdict">
-    <div><span class="tag t-yes">Recommended</span><h4>A standalone Docker app, connected to Dolibarr</h4><p>Not a Dolibarr plugin. Video editing, AI calls and background jobs need Python and ffmpeg, which a PHP module can't run well. Dolibarr remains the source of truth for contacts, consent and the email record.</p></div>
-    <div><span class="tag t-yes">Recommended</span><h4>Metricool publishes and measures</h4><p>The Studio creates and approves posts. Metricool posts them to Instagram and Facebook and supplies the analytics. Without Metricool's API plan, you can still use CSV bulk import.</p></div>
-    <div><span class="tag t-yes">Recommended</span><h4>An RSS feed for the website</h4><p>Approved posts marked "website" go into a public feed and an events calendar file. Your site picks them up, so you write each update once.</p></div>
-    <div><span class="tag t-yes">Recommended</span><h4>Claude Code through an MCP server</h4><p>The Studio provides tools that let Claude read media, draft posts, propose schedules and analyze metrics from a chat. No tool can approve a post.</p></div>
-    <div><span class="tag t-maybe">Later, optional</span><h4>A small Dolibarr module</h4><p>Only if the Dolibarr REST API can't reliably update unsubscribe flags or log emails on your version. It would add a hook, not the whole app.</p></div>
-    <div><span class="tag t-no">Not recommended</span><h4>Posting directly to Meta APIs</h4><p>App review, token renewal and per-platform quirks are a lot of upkeep for a volunteer-run org. Metricool already handles this.</p></div>
+    <div><span class="tag t-yes">Recommended</span><h4>A standalone Docker app, connected to Dolibarr</h4><p>Not a Dolibarr plugin. Video editing, AI and background jobs need Python and ffmpeg, which a PHP module can't run well. Dolibarr stays in charge of contacts, unsubscribes and the email record.</p></div>
+    <div><span class="tag t-yes">Recommended</span><h4>Postiz posts to social media, for free</h4><p>Postiz is an open-source scheduler you run on the Unraid box. It posts to Instagram, Facebook, Threads, Bluesky, LinkedIn, YouTube, TikTok and more. The Studio sends approved posts to it through its API. There are no fees or post limits.</p></div>
+    <div><span class="tag t-yes">Recommended</span><h4>Metrics from Meta, with Metricool free on the side</h4><p>The Studio pulls post insights directly from Meta at no cost and keeps the full history. Metricool's free plan stays useful for its dashboard and competitor tracking, but it no longer does the scheduling.</p></div>
+    <div><span class="tag t-yes">Recommended</span><h4>AI through your Claude subscription</h4><p>The creative work happens in Claude Code chats, through the Studio's MCP connection. That uses the Claude plan you already have instead of a separate API bill. A paid API key is optional and the Studio works without one.</p></div>
+    <div><span class="tag t-yes">Recommended</span><h4>An RSS feed for the website</h4><p>Approved posts marked "website" go into a public feed and an events calendar file, so you write each update once.</p></div>
+    <div><span class="tag t-no">Not recommended</span><h4>RSS as the bridge to social media</h4><p>RSS-to-social tools can't schedule a time slot, handle video poorly, and the free ones (IFTTT, dlvr.it) cap posts or add their branding. A direct API push to Postiz is free and keeps the approval check in one place.</p></div>
+    <div><span class="tag t-no">Dropped</span><h4>Metricool API</h4><p>It's only on the paid Advanced plan, about €43 a month. Metricool's free plan also caps scheduling at roughly 20–50 posts a month, too few for 3 posts a week across platforms plus stories.</p></div>
   </div>
 </section>
 
+<section id="cost">
+  <div class="eyebrow">02 · $0 a month</div>
+  <h2>Keeping it free</h2>
+  <p>Everything runs on hardware you already own, using free tiers you already have. The only thing that could cost money is AI, and the plan avoids that by default.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Need</th><th>Free option</th><th>Limit to watch</th></tr></thead>
+    <tbody>
+      <tr><td>Hosting</td><td><p>Your Unraid server, Docker</p></td><td><p>Postiz recommends 4–8 GB of RAM. Video rendering is CPU-heavy but runs in the background.</p></td></tr>
+      <tr><td>Social publishing</td><td><p>Postiz, self-hosted (open source, AGPL)</p></td><td><p>You create a free Meta developer app for Facebook and Instagram. Since only your own pages use it, it should not need Meta's full app review. Confirm this during setup.</p></td></tr>
+      <tr><td>Fallback publishing</td><td><p>Meta Business Suite, manually</p></td><td><p>The Studio always offers a "ready to post" pack: final media files plus caption to copy. Use it if Postiz or a token ever breaks.</p></td></tr>
+      <tr><td>Analytics</td><td><p>Meta Graph API insights, plus Metricool free</p></td><td><p>Metricool free keeps only about 30 days of history, so the Studio stores its own copy of every metric.</p></td></tr>
+      <tr><td>AI</td><td><p>Your Claude plan, through Claude Code and MCP</p></td><td><p>See below. Claude for Nonprofits offers up to 75% off Team plans if the org wants shared seats.</p></td></tr>
+      <tr><td>Subtitles</td><td><p>faster-whisper, running locally</p></td><td><p>None. Runs on CPU, faster with a GPU.</p></td></tr>
+      <tr><td>Music</td><td><p>Pixabay Music and Free Music Archive (CC-BY), stored locally with license notes</p></td><td><p>Some CC-BY tracks need a credit line, so the Studio adds it to the caption automatically.</p></td></tr>
+      <tr><td>Email</td><td><p>SMTP2GO, which you already use</p></td><td><p>The free plan is roughly 1,000 emails a month. A newsletter list bigger than that needs a nonprofit discount request or a paid tier. See the open questions.</p></td></tr>
+      <tr><td>Design assets</td><td><p>Canva for Nonprofits (free Canva Pro)</p></td><td><p>Optional, for one-off graphics. The Studio's brand templates cover the routine ones.</p></td></tr>
+    </tbody>
+  </table></div>
+  <h3>How AI stays free</h3>
+  <ul>
+    <li><strong>Creative work happens in Claude Code.</strong> You open a chat and ask for this week's posts. Claude reads the media, writes captions, picks variants and creates drafts through the Studio's MCP tools. This uses your existing Claude plan.</li>
+    <li><strong>Scheduled AI work can use a Claude Code routine.</strong> A weekly routine that fills schedule gaps and a monthly one that reviews metrics run on the same plan. Their drafts still wait for a person to approve them.</li>
+    <li><strong>The Studio's own automation needs no AI.</strong> Finding schedule gaps, creating promo sets from the event calendar, the hook bank, reminders and export checks are all plain rules.</li>
+    <li><strong>Optional extras.</strong> A Claude API key enables one-click "rewrite" buttons inside the web UI. With a GPU, a local model through Ollama can write basic alt text and descriptions instead. Both are off by default.</li>
+  </ul>
+</section>
+
 <section id="approval">
-  <div class="eyebrow">02 · Non-negotiable</div>
+  <div class="eyebrow">03 · Non-negotiable</div>
   <h2>The approval rule</h2>
   <div class="rule">
     <span class="eyebrow">Hard rule, enforced in the database</span>
     <p>Nothing leaves the Studio until a signed-in person with the Approver role has approved that exact version.</p>
-    <p>"Leaves" covers Metricool (API or CSV), email sends, the RSS feed and the website. AI, API tokens and the Claude Code connection can create and edit drafts. None of them can approve.</p>
+    <p>"Leaves" covers Postiz, the manual "ready to post" pack, email sends, the RSS feed and the website. AI, API tokens and the Claude Code connection can create and edit drafts. None of them can approve.</p>
   </div>
   <h3>How it's enforced</h3>
   <ul>
     <li><strong>Every post moves through a state machine.</strong> Only the Approve button in the web UI, clicked by a user with the Approver role, can move a post into <code>approved</code>.</li>
     <li><strong>Approval covers one exact version.</strong> The approval stores a hash of the caption, media files and platform settings. Any later edit, even fixing a typo, sends the post back to review.</li>
-    <li><strong>Every exporter checks before it sends.</strong> The Metricool push, the CSV export, the email sender and the RSS feed each check the approval record and hash. A failed check blocks the send and is logged.</li>
+    <li><strong>Every exporter checks before it sends.</strong> The Postiz push, the "ready to post" pack, the email sender and the RSS feed each check the approval record and hash. A failed check blocks the send and is logged.</li>
     <li><strong>The approval screen shows the final output.</strong> Approvers see the rendered video with music, the cropped images for each platform, the full caption with hashtags and the scheduled time. They never approve a summary.</li>
     <li><strong>Email blasts need extra checks.</strong> Email can't be unsent, so a blast also shows the recipient count and the list filter and sends a test copy. You can optionally require a second approver.</li>
     <li><strong>Every change is logged.</strong> Who generated, edited, approved, rejected and exported each post, and when.</li>
@@ -198,7 +228,7 @@ stateDiagram-v2
   InReview --> Draft: changes requested
   InReview --> Approved: Approver clicks Approve (human only)
   Approved --> Draft: any edit (approval cleared)
-  Approved --> Queued: export to Metricool / schedule email
+  Approved --> Queued: sent to Postiz / email scheduled
   Queued --> Published: confirmed live
   InReview --> Rejected
   Published --> [*]
@@ -207,7 +237,7 @@ stateDiagram-v2
 </section>
 
 <section id="architecture">
-  <div class="eyebrow">03 · How the pieces fit</div>
+  <div class="eyebrow">04 · How the pieces fit</div>
   <h2>Architecture</h2>
   <div class="diagram">
 <pre class="mermaid">
@@ -221,12 +251,14 @@ flowchart LR
     W --> Media[("/mnt/user/cgw-media")]
     App --> MCP["MCP endpoint<br/>for Claude Code"]
     App --> Feed["Public RSS / iCal"]
+    App -- approved posts --> Postiz["Postiz scheduler<br/>(self-hosted)"]
   end
   Members["Members & staff<br/>(phone / desktop)"] --> Proxy
   CC["Claude Code chat"] --> MCP
-  App <--> Claude["Claude API<br/>captions · vision · ideas"]
-  App -- approved posts --> Metricool
-  Metricool -- metrics --> App
+  App <-.-> Claude["Claude API<br/>(optional)"]
+  Postiz --> Social["Instagram · Facebook<br/>Threads · Bluesky · more"]
+  Meta["Meta insights API"] -- metrics --> App
+  Social -. analytics .-> Metricool["Metricool free<br/>(dashboard only)"]
   App <-- contacts, unsubscribes, email log --> Dolibarr
   App -- approved blasts --> SMTP2GO
   SMTP2GO -- bounces, complaints --> App
@@ -241,23 +273,24 @@ flowchart LR
       <tr><td>Database</td><td><p>Postgres</p></td><td><p>Supports multiple users, a reliable audit log and full-text search over captions and media descriptions.</p></td></tr>
       <tr><td>Jobs</td><td><p>Redis + RQ (or Arq) worker container</p></td><td><p>Transcoding and AI calls run in the background so uploads stay fast.</p></td></tr>
       <tr><td>Media</td><td><p>ffmpeg, Pillow, faster-whisper (local), and an optional on-CPU smart crop</p></td><td><p>Subtitles are transcribed locally, so member audio isn't sent to a third party.</p></td></tr>
-      <tr><td>AI</td><td><p>Claude API (current Sonnet for routine drafts, Opus for monthly strategy)</p></td><td><p>Vision reads photos and video frames. Prompts include the CGW brand guide. Expect roughly $5–25 a month at this volume.</p></td></tr>
+      <tr><td>Publisher</td><td><p>Postiz container in the same stack</p></td><td><p>Handles platform logins, token refresh and posting at the scheduled time. The Studio talks to it only through its API.</p></td></tr>
+      <tr><td>AI</td><td><p>Claude Code over MCP (default); Claude API or local Ollama (optional)</p></td><td><p>Claude reads photos and video frames, and prompts include the CGW brand guide. No API bill unless you turn the optional key on.</p></td></tr>
     </tbody>
   </table></div>
 </section>
 
 <section id="workflow">
-  <div class="eyebrow">04 · Getting media in</div>
+  <div class="eyebrow">05 · Getting media in</div>
   <h2>Media workflow</h2>
   <p>This needs to be quick enough that a member will do it from their phone at the end of hack night.</p>
   <ol class="steps">
     <li><div><strong>Drop it in</strong><span>Upload several files at once from your phone or desktop, or have the Studio watch a shared Unraid folder. Add one line, for example "Sam's walnut ukulele, first laser-engraved rosette," and pick a project or event if you like.</span></div></li>
     <li><div><strong>Consent check</strong><span>Tag the people shown. The Studio checks their photo release, stored on their Dolibarr contact. Anyone without a release, and any minor, is flagged, and the post can't be approved until that's resolved or they're blurred or cropped out.</span></div></li>
-    <li><div><strong>The Studio analyzes it</strong><span>It transcodes, pulls key frames and transcribes any speech. Claude describes what's shown (tools, materials, techniques) and suggests a content pillar and post types.</span></div></li>
+    <li><div><strong>The Studio analyzes it</strong><span>It transcodes, pulls key frames and transcribes any speech. The next time Claude runs, in your chat or the weekly routine, it describes what's shown (tools, materials, techniques) and suggests a content pillar and post types. With the optional API key, this happens right after upload.</span></div></li>
     <li><div><strong>Variants are generated</strong><span>Platform crops (9:16 reel, 4:5 feed, 1:1), a short cut with subtitles, three caption styles and a hashtag set. Each comes with a short explanation of why it was suggested.</span></div></li>
     <li><div><strong>You edit</strong><span>Swap music, trim clips, adjust the subtitles, rewrite captions by hand or with "make it shorter / warmer / less salesy," and change the schedule slot.</span></div></li>
     <li><div><strong>Submit and approve</strong><span>The Approver sees the final render. Approve, request changes with a comment, or reject.</span></div></li>
-    <li><div><strong>Out the door</strong><span>The post goes to Metricool for its time slot, to the RSS feed if marked for the website, and to the next newsletter digest if marked for email.</span></div></li>
+    <li><div><strong>Out the door</strong><span>The post goes to Postiz for its time slot, to the RSS feed if marked for the website, and to the next newsletter digest if marked for email.</span></div></li>
   </ol>
   <h3>The media library</h3>
   <ul>
@@ -268,7 +301,7 @@ flowchart LR
 </section>
 
 <section id="editing">
-  <div class="eyebrow">05 · Polished, not cringe</div>
+  <div class="eyebrow">06 · Polished, not cringe</div>
   <h2>Editing style</h2>
   <p>The AI edits within a brand kit you define once. It doesn't invent a new style for each post.</p>
   <div class="tbl"><table>
@@ -294,7 +327,7 @@ flowchart LR
 </section>
 
 <section id="ideas">
-  <div class="eyebrow">06 · What to post</div>
+  <div class="eyebrow">07 · What to post</div>
   <h2>Content pillars & idea engine</h2>
   <p>These carry over the 3-a-week rhythm from the old system (Day 1 Membership, Day 3 Awareness, Day 5 Flex) and the two-month audience rotation. Each pillar becomes a tag the Studio schedules and measures.</p>
   <div class="pillars">
@@ -320,7 +353,7 @@ flowchart LR
 </section>
 
 <section id="claude">
-  <div class="eyebrow">07 · Chat with the Studio</div>
+  <div class="eyebrow">08 · Chat with the Studio</div>
   <h2>Claude Code integration</h2>
   <p>The Studio exposes an <strong>MCP server</strong> at <code>/mcp</code>. Each user creates a personal token in settings, then connects Claude Code once:</p>
 <pre class="code">claude mcp add --transport http cgw-studio https://social.columbiagadgetworks.org/mcp \
@@ -333,7 +366,7 @@ flowchart LR
       <tr><td>revise_draft</td><td><p>Edit captions or swap media. Any edit clears an existing approval.</p></td></tr>
       <tr><td>render_variant</td><td><p>Ask the worker for a crop, cut, subtitles or music bed</p></td></tr>
       <tr><td>get_queue / get_calendar</td><td><p>See what's scheduled and where the gaps are</p></td></tr>
-      <tr><td>get_metrics</td><td><p>Per-post and per-pillar performance from Metricool, plus email open and click rates</p></td></tr>
+      <tr><td>get_metrics</td><td><p>Per-post and per-pillar performance from Meta insights, plus email open and click rates</p></td></tr>
       <tr><td>propose_schedule</td><td><p>Suggest a 2–4 week plan, created as ideas and drafts</p></td></tr>
       <tr><td>draft_campaign</td><td><p>Write a multi-post plus email campaign, for example a spring class series</p></td></tr>
       <tr><td><s>approve_post</s></td><td><p><span class="tag t-no">Does not exist</span> Approval is only possible in the web UI.</p></td></tr>
@@ -343,29 +376,41 @@ flowchart LR
     <div class="row"><span class="who">you</span><span class="txt">What did well last month? Then fill the gaps in the next two weeks.</span></div>
     <div class="row"><span class="who">claude</span><span class="txt">Hack-night reels averaged 3.1× the reach of single photos; tool spotlights drove most Givebutter clicks. Oct 15 and Oct 20 are empty. I drafted a laser-cutter spotlight from Tuesday's clips and a "parts bin mystery" post. Both are waiting in the review queue.</span></div>
   </div>
+  <h3>Scheduled routines</h3>
+  <p>A Claude Code routine can run the same tools on a schedule, with no one in the chat. Two to start with: <strong>Monday</strong>, fill the next two weeks' gaps with drafts; <strong>1st of the month</strong>, write the performance review and three campaign ideas. Either way, the results land in the review queue as drafts.</p>
+  <p>For routines that run in the cloud, the <code>/mcp</code> path needs to be reachable from the internet. It skips proxy auth and checks the per-user token instead, the same way the feeds do.</p>
   <p>The repo also gets a <code>CLAUDE.md</code> describing the brand voice, pillars and approval rule, so Claude Code sessions working <em>on the codebase</em> follow the same rules.</p>
 </section>
 
-<section id="metricool">
-  <div class="eyebrow">08 · Publishing</div>
-  <h2>Metricool</h2>
-  <p>Metricool does the publishing and analytics. The integration depends on your plan:</p>
-  <div class="verdict">
-    <div><span class="tag t-info">Any plan</span><h4>CSV bulk import</h4><p>The Studio exports approved posts in Metricool's bulk-upload format, the same idea as the old "METRICOOL EXPORT" sheet. You import the file in Metricool. Media is linked from the Studio's public media URLs. Metrics are imported from Metricool's CSV reports.</p></div>
-    <div><span class="tag t-yes">Advanced plan</span><h4>API, fully connected</h4><p>Approved posts are pushed to the Metricool planner automatically, and per-post metrics come back nightly. Third-party sources put API access on the Advanced tier, about €43/mo. Check Metricool's pricing before relying on this.</p></div>
-  </div>
-  <p>Build the CSV path first because it works on day one. Put the API behind the same "publisher" interface so switching to it is a settings change.</p>
+<section id="publishing">
+  <div class="eyebrow">09 · Getting posts out</div>
+  <h2>Publishing & metrics</h2>
+  <h3>Postiz does the posting</h3>
+  <ul>
+    <li><strong>Postiz runs as another container</strong> in the same stack. You connect Instagram, Facebook and any other platforms in Postiz once. For Facebook and Instagram that means creating a free Meta developer app, a one-time setup of about an hour.</li>
+    <li><strong>The Studio pushes each approved post</strong> to Postiz's API with its final media, a caption for each platform and its time slot. Postiz holds it and publishes on time.</li>
+    <li><strong>Postiz is locked down.</strong> Only admins can sign in to it, and it sits behind the same proxy auth. Nobody writes posts there, so it can't be used to skip approval. Its own approval features aren't needed.</li>
+    <li><strong>Each platform gets its own version.</strong> Instagram says "link in bio" and Facebook gets the full Givebutter link, following the old spreadsheet's CTA rules. Bluesky and Threads get shorter captions.</li>
+    <li><strong>A fallback is always there.</strong> If Postiz or a platform login breaks, the post card offers a "ready to post" pack to schedule by hand in Meta Business Suite, which is also free.</li>
+  </ul>
+  <h3>Metrics come from Meta, not Metricool</h3>
+  <ul>
+    <li>Every night the Studio pulls each post's reach, plays, saves, shares and link clicks from Meta's insights API. It uses the same free developer app and stores the history permanently.</li>
+    <li>Keep Metricool's free plan for its dashboard, best-time-to-post suggestions and competitor tracking of other makerspaces. Its free analytics only keep about 30 days of history, which is why the Studio stores its own copy.</li>
+    <li>Postiz also shows basic per-post analytics, which is handy for checking that a post went out.</li>
+  </ul>
+  <p><span class="tag t-maybe">Verify</span> Before building on it, test Postiz with your Instagram account, specifically reels and carousels. Meta changes its rules often. If Postiz falls short, the Studio can post to Meta's API directly using the same developer app. That's more code to maintain but still free.</p>
 </section>
 
 <section id="email">
-  <div class="eyebrow">09 · Newsletters & announcements</div>
+  <div class="eyebrow">10 · Newsletters & announcements</div>
   <h2>Email blasts</h2>
   <p>Dolibarr owns <strong>who</strong> gets email and keeps the record. SMTP2GO handles delivery. The Studio handles writing, approval and sending.</p>
   <ol class="steps">
     <li><div><strong>Write</strong><span>Pick a template (monthly newsletter, class announcement, event, fundraising ask). Approved social posts can be added as newsletter blocks. Claude drafts the subject lines and body.</span></div></li>
     <li><div><strong>Pick the audience</strong><span>Recipients come from Dolibarr contacts, filtered by category or tag (members, class alumni, donors, newsletter list). Anyone with <code>no_email</code> set or on the suppression list is always excluded.</span></div></li>
     <li><div><strong>Approve</strong><span>The approver sees the rendered email, the recipient count and a test send. A second approver is optional.</span></div></li>
-    <li><div><strong>Send</strong><span>Emails go through the SMTP2GO API in throttled batches. Each one includes a <code>List-Unsubscribe</code> header and one-click unsubscribe (RFC 8058), which Gmail and Yahoo require for bulk senders.</span></div></li>
+    <li><div><strong>Send</strong><span>Emails go through the SMTP2GO API in throttled batches that stay within your plan's daily and monthly limits. A blast that would go over the limit is split across days or blocked with a warning. Each one includes a <code>List-Unsubscribe</code> header and one-click unsubscribe (RFC 8058), which Gmail and Yahoo require for bulk senders.</span></div></li>
     <li><div><strong>Record</strong><span>Each send is logged to the contact in Dolibarr as an agenda event, so the email history stays in Dolibarr.</span></div></li>
   </ol>
   <h3>Unsubscribes, with Dolibarr as the source of truth</h3>
@@ -379,7 +424,7 @@ flowchart LR
 </section>
 
 <section id="rss">
-  <div class="eyebrow">10 · The website</div>
+  <div class="eyebrow">11 · The website</div>
   <h2>RSS & website feed</h2>
   <p>Yes, it's worth doing and it's inexpensive. Posts marked "website" at approval time appear in:</p>
   <ul>
@@ -391,7 +436,7 @@ flowchart LR
 </section>
 
 <section id="nudges">
-  <div class="eyebrow">11 · Keeping it going</div>
+  <div class="eyebrow">12 · Keeping it going</div>
   <h2>Reminder emails</h2>
   <p>These are internal emails to you and the content team, sent through SMTP2GO.</p>
   <div class="tbl"><table>
@@ -402,31 +447,33 @@ flowchart LR
       <tr><td>Event with no promo</td><td><p>A class 14 days out has no approved announcement.</p></td></tr>
       <tr><td>Weekly (Monday)</td><td><p>Last week's results in three lines, plus this week's slots.</p></td></tr>
       <tr><td>Monthly</td><td><p>Campaign brainstorm: Claude's strategy notes, the next audience block and 3 campaign concepts to review.</p></td></tr>
-      <tr><td>Export failure</td><td><p>Metricool or SMTP2GO rejected something.</p></td></tr>
+      <tr><td>Export failure</td><td><p>Postiz or SMTP2GO rejected something, or a platform login needs renewing.</p></td></tr>
     </tbody>
   </table></div>
   <p>Each user sets how often they receive these, and every reminder links straight to the relevant screen.</p>
 </section>
 
 <section id="metrics">
-  <div class="eyebrow">12 · What's working</div>
+  <div class="eyebrow">13 · What's working</div>
   <h2>Metrics & analysis</h2>
   <ul>
     <li><strong>Every post is tagged</strong> with pillar, format, audience block, hook, CTA, music, and whether people are shown. That makes "what works" a query instead of a guess.</li>
     <li><strong>Outcomes, not just likes.</strong> UTM tags on every Givebutter and website link show which posts drive membership sign-ups and donations. Hack-night attendance can be logged as a weekly number.</li>
+    <li><strong>Metrics come from Meta's insights API</strong> every night and are kept permanently. Metricool free remains an extra view.</li>
     <li><strong>A dashboard</strong> showing reach and engagement rate by pillar and format, the best posting times, hook rankings, and email open and click rates by list.</li>
-    <li><strong>Claude's monthly read</strong> is a written analysis with recommended changes. It's saved, so you can see whether last month's advice helped.</li>
+    <li><strong>Claude's monthly review</strong>, run as a Claude Code routine, is a written analysis with recommended changes. It's saved, so you can see whether last month's advice helped.</li>
   </ul>
 </section>
 
 <section id="deploy">
-  <div class="eyebrow">13 · Running it</div>
+  <div class="eyebrow">14 · Running it</div>
   <h2>Deploy & auth on Unraid</h2>
   <h3>Containers (one docker-compose stack, plus an Unraid template)</h3>
   <ul>
     <li><code>studio-web</code>: the FastAPI app and UI</li>
     <li><code>studio-worker</code>: ffmpeg, Whisper and AI jobs. Give it most of the CPU and an optional GPU.</li>
-    <li><code>postgres</code> and <code>redis</code></li>
+    <li><code>postiz</code>: the publisher, with its own Postgres, Redis and Temporal containers, as in its official compose file</li>
+    <li><code>postgres</code> and <code>redis</code> for the Studio</li>
     <li>Volumes: <code>/mnt/user/appdata/cgw-studio</code> for the database and config, and <code>/mnt/user/cgw-media</code> for originals and renders on the array</li>
     <li>Nightly <code>pg_dump</code> to the array, included in your existing Unraid backup</li>
   </ul>
@@ -444,55 +491,77 @@ flowchart LR
       <tr><td>Admin</td><td><p>Users, integrations, API tokens, settings</p></td></tr>
     </tbody>
   </table></div>
-  <p>Public paths that bypass proxy auth: <code>/feed/*</code>, <code>/u/&lt;token&gt;</code> (unsubscribe), <code>/m/&lt;id&gt;</code> (published media for Metricool), and SMTP2GO webhooks, which are verified by signature. MCP tokens are per-user, can be revoked, and can't approve anything.</p>
-  <p>Secrets are stored in environment variables or an <code>.env</code> file on the server and never in the repo: Claude API key, Metricool token, SMTP2GO key, Dolibarr API key.</p>
+  <p>Public paths that bypass proxy auth: <code>/feed/*</code>, <code>/u/&lt;token&gt;</code> (unsubscribe), <code>/m/&lt;id&gt;</code> (approved media, which Meta needs to fetch), <code>/mcp</code> (per-user token), and SMTP2GO webhooks, which are verified by signature. Postiz also needs its Meta login callback URL reachable. MCP tokens are per-user, can be revoked, and can't approve anything.</p>
+  <p>Secrets are stored in environment variables or an <code>.env</code> file on the server and never in the repo: Postiz API key, Meta app secret, SMTP2GO key, Dolibarr API key, and the optional Claude API key.</p>
+</section>
+
+<section id="extras">
+  <div class="eyebrow">15 · Free wins</div>
+  <h2>Other ideas</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Idea</th><th>Why it's worth it</th></tr></thead>
+    <tbody>
+      <tr><td>"Show us what you made" QR</td><td><p>A poster by the door and on each big tool links to a phone upload page. Members sign in with a magic link, add a caption and confirm consent. This could become the main source of member-project content.</p></td></tr>
+      <tr><td>Discord or shared-folder drop</td><td><p>If members already use Discord, a bot in a #show-and-tell channel can send photos to the Studio's inbox, with the member's OK. A watched Unraid share does the same for staff.</p></td></tr>
+      <tr><td>Google Ad Grants</td><td><p>Qualifying nonprofits get up to $10,000 a month in free Google search ads. "Makerspace Columbia MO" and "laser cutting class" searches are a natural fit, and the Studio's class pages can be the landing pages.</p></td></tr>
+      <tr><td>Google Business Profile posts</td><td><p>Free local search visibility. Event and class posts can be mirrored there if Postiz supports it, or copied by hand from the "ready to post" pack.</p></td></tr>
+      <tr><td>Automatic alt text</td><td><p>Every image gets an accessible description, written by Claude in your chats or by a local model. It helps screen-reader users and search.</p></td></tr>
+      <tr><td>Monthly impact numbers</td><td><p>Hack-night attendance, classes taught and new members, from Dolibarr and a simple door counter, feed an automatic "this month at CGW" post and newsletter block. Donors and grant reports can reuse the same numbers.</p></td></tr>
+      <tr><td>Grant-ready archive</td><td><p>Tag media with programs, such as youth classes or repair cafés. When a grant application asks for evidence, you can pull a folder of approved photos and the metrics that go with them.</p></td></tr>
+      <tr><td>TechSoup and Canva for Nonprofits</td><td><p>Free or cheap software and design tools. Worth registering CGW once if it hasn't already.</p></td></tr>
+    </tbody>
+  </table></div>
 </section>
 
 <section id="roadmap">
-  <div class="eyebrow">14 · Build order</div>
+  <div class="eyebrow">16 · Build order</div>
   <h2>Roadmap</h2>
+  <div class="phase"><div class="when">Phase 0<small>1 evening</small></div><ul>
+    <li>Install Postiz on Unraid, create the Meta developer app, and post one test reel and one carousel to Instagram and Facebook</li>
+    <li>Confirms the free publishing path works before anything is built on it</li>
+  </ul></div>
   <div class="phase"><div class="when">Phase 1<small>~3–4 weekends</small></div><ul>
     <li>Docker stack, auth (proxy plus local), roles, audit log</li>
-    <li>Upload, media library, transcoding, thumbnails</li>
-    <li>Post drafts, AI captions (3 styles), brand voice guide, approval state machine</li>
-    <li>Metricool CSV export of approved posts</li>
+    <li>Upload, media library, transcoding, thumbnails, consent tags</li>
+    <li>Post drafts, approval state machine, push of approved posts to Postiz, "ready to post" pack</li>
+    <li>MCP server with draft-only tools, so Claude Code writes the captions from day one</li>
     <li>Import the old spreadsheet's hooks, CTAs, hashtags and idea bank</li>
   </ul></div>
   <div class="phase"><div class="when">Phase 2<small>~3 weekends</small></div><ul>
-    <li>Video pipeline: crops, smart cuts, Whisper subtitles, music library with ducking, brand templates</li>
+    <li>Video pipeline: crops, smart cuts, Whisper subtitles, licensed music library with ducking, brand templates</li>
     <li>Events and classes calendar with auto-generated promo ideas</li>
     <li>RSS, iCal and JSON feeds for the website</li>
     <li>Reminder emails through SMTP2GO</li>
   </ul></div>
   <div class="phase"><div class="when">Phase 3<small>~2–3 weekends</small></div><ul>
-    <li>MCP server for Claude Code</li>
-    <li>Metrics import, dashboard, monthly Claude analysis</li>
+    <li>Nightly Meta insights import, dashboard, UTM tracking</li>
+    <li>Weekly and monthly Claude Code routines</li>
     <li>Idea engine with gap filling and an unused-media pool</li>
   </ul></div>
   <div class="phase"><div class="when">Phase 4<small>~3 weekends</small></div><ul>
     <li>Email blasts: Dolibarr lists, templates, one-click unsubscribe, SMTP2GO webhooks, logging to Dolibarr</li>
-    <li>Photo-release consent tracking on Dolibarr contacts</li>
-    <li>Metricool API push (if on Advanced)</li>
+    <li>Photo-release consent stored on Dolibarr contacts</li>
     <li>Optional Dolibarr module, if the API is missing anything</li>
   </ul></div>
 </section>
 
 <section id="questions">
-  <div class="eyebrow">15 · Need your input</div>
+  <div class="eyebrow">17 · Need your input</div>
   <h2>Open questions</h2>
   <ol class="qs">
-    <li>Which Metricool plan are you on? <span>This decides whether we start with CSV import or the API.</span></li>
+    <li>Who pays for Claude today, and which plan? <span>If it's a personal plan, the weekly routines would run on your account. Claude for Nonprofits (up to 75% off Team) could give the content team shared seats.</span></li>
+    <li>How big is the email list? <span>SMTP2GO's free tier is roughly 1,000 emails a month. A larger list needs a nonprofit discount request, a paid tier, or splitting sends across months.</span></li>
     <li>Where do classes and events live today? <span>Dolibarr's Agenda or Events module, the website, Givebutter, or somewhere else? The Studio should read them from one place rather than have them typed in twice.</span></li>
     <li>Which Dolibarr version, and how are newsletter contacts organized? <span>Categories, tags or a custom field. This also confirms whether the REST API can set the opt-out flag.</span></li>
-    <li>What runs the website? <span>This determines the best way to show the RSS feed on it.</span></li>
     <li>Who approves? <span>One person, or a small group? Should email blasts require two approvers?</span></li>
     <li>Do you keep photo releases today? <span>On paper, a waiver form, or a Dolibarr field? Minors at classes are the main concern.</span></li>
-    <li>Which platforms? <span>Instagram and Facebook for now. Do you want TikTok, YouTube Shorts or LinkedIn (good for sponsors) later? Metricool supports all of them.</span></li>
-    <li>GPU on the Unraid box? <span>Not required. With one, subtitles and renders are much faster.</span></li>
+    <li>Which platforms? <span>Postiz makes extra platforms free. Bluesky, Threads, a YouTube Shorts channel, and LinkedIn for sponsors would cost only the setup time.</span></li>
+    <li>What runs the website, and does CGW use Discord? <span>The website determines how to show the feed. A members' Discord could be another way to submit media (see Other ideas).</span></li>
+    <li>How much RAM, and a GPU, on the Unraid box? <span>Postiz plus the Studio needs about 6–8 GB. A GPU is optional and speeds up subtitles and renders.</span></li>
   </ol>
 </section>
 
 </main>
 </div>
 
-<footer>CGW Content Studio · build plan v0.1 · github.com/ColumbiaGadgetWorks/social-media · Sources reviewed: the old social media spreadsheet and generator script (cadence, audiences, hooks, CTAs, idea bank).</footer>
+<footer>CGW Content Studio · build plan v0.2 · github.com/ColumbiaGadgetWorks/social-media · Sources reviewed: the old social media spreadsheet and generator script (cadence, audiences, hooks, CTAs, idea bank).</footer>
