@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}CGW Content Studio{% endblock %}</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+{% if user %}
+<header class="bar"><div class="in">
+  <a class="brand" href="/">CGW <span>Studio</span></a>
+  {% set here = request.url.path %}
+  <nav class="main" aria-label="Main">
+    <a href="/" class="{{ 'on' if here == '/' }}">Dashboard</a>
+    <a href="/upload" class="{{ 'on' if here.startswith('/upload') }}">Upload</a>
+    <a href="/review" class="{{ 'on' if here.startswith('/review') }}">Review</a>
+    <a href="/posts" class="{{ 'on' if here.startswith('/posts') }}">Posts</a>
+    <a href="/media" class="{{ 'on' if here.startswith('/media') }}">Media</a>
+    <a href="/batch" class="{{ 'on' if here.startswith('/batch') }}">Batch day</a>
+    {% if user.has_role('editor') %}<a href="/activity" class="{{ 'on' if here.startswith('/activity') }}">Activity</a>{% endif %}
+    {% if user.has_role('admin') %}<a href="/admin/users" class="{{ 'on' if here.startswith('/admin') }}">Users</a>{% endif %}
+  </nav>
+  <div class="who">
+    <a href="/settings">{{ user.label }}</a>
+    <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link">Sign out</button></form>
+  </div>
+</div></header>
+{% endif %}
+<main>
+  {% for f in flashes %}<div class="flash {{ f.kind }}" role="status">{{ f.text }}</div>{% endfor %}
+  {% block content %}{% endblock %}
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% from "_status.html" import status as st %}
+{% block title %}{{ post.display_title }} · CGW Studio{% endblock %}
+{% block content %}
+{% set any_published = post.versions | selectattr('publish_state', 'equalto', 'published') | list %}
+{% set locked = post.status == 'done' or any_published %}
+<div class="row spread"><h1>{{ post.display_title }}</h1>{{ st(post.status) }}</div>
+
+<div class="two">
+<div class="stack">
+  <div class="card">
+    <div class="thumbs">
+    {% for m in post.media %}
+      <a href="/media/{{ m.id }}" class="media-tile">
+        {% if m.thumb_path %}<img src="/files/{{ m.id }}/thumb" alt="{{ m.alt_text }}">{% else %}<div class="thumb"></div>{% endif %}
+        <span class="tag kind">{{ m.kind }}{% if m.processing_status != 'ready' %} · {{ m.processing_status }}{% endif %}</span>
+      </a>
+    {% endfor %}
+    {% if not post.media %}<p class="muted small">Text-only post.</p>{% endif %}
+    </div>
+    {% if post.note %}<p class="small"><strong>Uploader's note:</strong> {{ post.note }}</p>{% endif %}
+    {% if post.claude_notes %}<p class="small"><strong>Claude's notes:</strong> {{ post.claude_notes }}</p>{% endif %}
+    {% if post.review_comment %}<div class="problems"><strong>Reviewer:</strong> {{ post.review_comment }}</div>{% endif %}
+  </div>
+
+  {% if locked %}
+    <div class="card small muted">{% if post.status == 'done' %}This post is finished.{% else %}Part of this post is already published, so it can't be edited.{% endif %}</div>
+  {% endif %}
+
+  <form method="post" action="/posts/{{ post.id }}" class="stack" id="post-form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="card">
+      <label for="title">Internal title</label>
+      <input type="text" id="title" name="title" value="{{ post.title }}" {{ 'disabled' if locked }}>
+      <label for="pillar">Pillar</label>
+      <select id="pillar" name="pillar" {{ 'disabled' if locked }}><option value="">None</option>
+        {% for key, label in PILLARS %}<option value="{{ key }}" {{ 'selected' if post.pillar == key }}>{{ label }}</option>{% endfor %}</select>
+      <label for="note">Brief</label>
+      <input type="text" id="note" name="note" value="{{ post.note }}" {{ 'disabled' if locked }}>
+    </div>
+
+    {% for key, c in CHANNELS.items() %}
+    {% set v = post.version(key) %}
+    {% if v and (key in compatible or v.enabled) %}
+    <details class="channel {{ '' if v.enabled else 'off' }}" {{ 'open' if v.enabled }}>
+      <summary>
+        <strong>{{ c.label }}</strong>
+        {% if v.enabled %}<span class="tag ok">On</span>{% else %}<span class="tag">Off</span>{% endif %}
+        <span class="tag">{{ {'direct': 'Automatic', 'batch': 'Batch day', 'on_day': 'By hand on the day'}[c.mode] }}</span>
+        {% if v.scheduled_at %}<span class="small muted">{{ v.scheduled_at | local }}</span>{% endif %}
+        {% if problems.get(key) %}<span class="tag warn">{{ problems[key] | length }} to fix</span>{% endif %}
+      </summary>
+      <div class="body">
+        <input type="hidden" name="{{ key }}.present" value="1">
+        <label class="row" style="font-weight:600"><input type="checkbox" name="{{ key }}.enabled" value="1" {{ 'checked' if v.enabled }} {{ 'disabled' if locked }}> Post to {{ c.label }}</label>
+        {% if c.title_chars %}
+          <label for="{{ key }}-title">Title</label>
+          <input type="text" id="{{ key }}-title" name="{{ key }}.title" value="{{ v.title }}" maxlength="{{ c.title_chars }}" {{ 'disabled' if locked }}>
+        {% endif %}
+        <label for="{{ key }}-body">Caption</label>
+        <textarea id="{{ key }}-body" name="{{ key }}.body" data-channel="{{ key }}" data-counter="{{ key }}-count" {{ 'disabled' if locked }}>{{ v.body }}</textarea>
+        <label for="{{ key }}-tags">Hashtags</label>
+        <input type="text" id="{{ key }}-tags" name="{{ key }}.hashtags" value="{{ v.hashtags }}" data-channel="{{ key }}" data-counter="{{ key }}-count" {{ 'disabled' if locked }}>
+        <div class="row spread small"><span class="muted">{{ c.link_note }}</span><span class="count" id="{{ key }}-count" data-max="{{ c.max_chars }}"></span></div>
+        <label for="{{ key }}-when">Date and time</label>
+        <input type="datetime-local" id="{{ key }}-when" name="{{ key }}.scheduled_at" value="{{ v.scheduled_at | input_dt }}" {{ 'disabled' if locked }}>
+        <p class="small muted">{{ c.tips }}</p>
+        {% if problems.get(key) %}<div class="problems small"><ul>{% for p in problems[key] %}<li>{{ p }}</li>{% endfor %}</ul></div>{% endif %}
+      </div>
+    </details>
+    {% endif %}
+    {% endfor %}
+
+    {% if not locked %}
+    <div class="sticky-actions row">
+      <button type="submit" name="action" value="save">Save</button>
+      {% if post.status in ('needs_claude', 'draft', 'rejected') %}<button type="submit" name="action" value="submit" class="primary">Save and send for review</button>{% endif %}
+      {% if post.status == 'approved' %}<span class="small muted">Saving any change clears the approval.</span>{% endif %}
+    </div>
+    {% endif %}
+  </form>
+</div>
+
+<aside class="stack">
+  <div class="card">
+    <h3>Status</h3>
+    <p>{{ st(post.status) }}</p>
+    {% if post.approved_by %}<p class="small muted">Approved by {{ post.approved_by.label }}, {{ post.approved_at | local }}</p>{% endif %}
+    {% if problems.get('') %}<div class="problems small"><ul>{% for p in problems[''] %}<li>{{ p }}</li>{% endfor %}</ul></div>{% endif %}
+
+    {% if post.status == 'in_review' and user.has_role('approver') %}
+      <form method="post" action="/posts/{{ post.id }}/approve">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="seen_hash" value="{{ seen_hash }}">
+        <p class="small">Approving publishes exactly what's shown, on every channel that's on.</p>
+        <button class="approve" type="submit" {{ 'disabled' if problems }}>Approve</button>
+      </form>
+    {% endif %}
+    {% if post.status in ('in_review', 'approved') and user.has_role('approver') and not any_published %}
+      <form method="post" action="/posts/{{ post.id }}/changes">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label for="comment">Send back with a note</label>
+        <textarea id="comment" name="comment" style="min-height:70px" placeholder="What should change?"></textarea>
+        <div class="row" style="margin-top:8px"><button type="submit">Request changes</button>
+        <button type="submit" name="reject" value="1" class="danger">Reject</button></div>
+      </form>
+    {% endif %}
+    {% if post.status in ('draft', 'rejected') %}
+      <form method="post" action="/posts/{{ post.id }}/claude" style="margin-top:10px">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button type="submit">Ask Claude to write it</button>
+      </form>
+    {% endif %}
+  </div>
+
+  {% if post.status in ('approved', 'done') %}
+  <div class="card">
+    <h3>Publishing</h3>
+    {% for v in post.enabled_versions %}
+      {% set c = CHANNELS[v.channel] %}
+      <div style="border-top:1px solid var(--line);padding:8px 0">
+        <div class="row spread"><strong>{{ c.label }}</strong>
+          <span class="tag {{ {'published': 'ok', 'failed': 'stop', 'skipped': ''}.get(v.publish_state, 'warn') }}">{{ v.publish_state }}</span></div>
+        <div class="small muted">{{ v.scheduled_at | local }}</div>
+        {% if v.external_url %}<div class="small"><a href="{{ v.external_url }}" rel="noopener" target="_blank">View post</a></div>{% endif %}
+        {% if v.last_error %}<div class="small" style="color:var(--stop)">{{ v.last_error }}</div>{% endif %}
+        {% if v.publish_state == 'pending' and c.mode != 'direct' %}
+          <form method="post" action="/versions/{{ v.id }}/posted" class="row" style="margin-top:6px">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="url" name="url" placeholder="Post link (optional)" style="flex:1;min-width:140px">
+            <button type="submit">Mark scheduled</button>
+          </form>
+        {% elif v.publish_state == 'published' and not v.external_url %}
+          <form method="post" action="/versions/{{ v.id }}/url" class="row" style="margin-top:6px">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="url" name="url" placeholder="Paste the live post link" style="flex:1;min-width:140px">
+            <button type="submit">Save link</button>
+          </form>
+        {% endif %}
+        {% if v.publish_state == 'failed' and user.has_role('editor') %}
+          <form method="post" action="/versions/{{ v.id }}/retry"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit">Retry</button></form>
+        {% endif %}
+        {% if v.publish_state in ('pending', 'failed') and user.has_role('editor') %}
+          <form method="post" action="/versions/{{ v.id }}/skip" data-confirm="Skip {{ c.label }} for this post?"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit" class="link small">Skip this channel</button></form>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h3>History</h3>
+    <ul class="history">
+    {% for h in history %}<li><span class="muted">{{ h.at | local('%b %-d %-I:%M %p') }}</span> {{ h.actor_label }}: {{ h.action | replace('_', ' ') }}{% if h.detail.channel %} ({{ h.detail.channel }}){% endif %}{% if h.detail.reason %}, {{ h.detail.reason }}{% endif %}</li>{% endfor %}
+    </ul>
+  </div>
+</aside>
+</div>
+{% endblock %}

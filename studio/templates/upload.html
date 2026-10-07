@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Upload · CGW Studio{% endblock %}
+{% block content %}
+<h1>Upload</h1>
+<form class="card" method="post" action="/upload" enctype="multipart/form-data" style="max-width:640px">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label for="files">Photos and videos</label>
+  <input type="file" id="files" name="files" accept="image/*,video/*" multiple required>
+  <label for="note">One line about it</label>
+  <input type="text" id="note" name="note" placeholder="Sam's walnut ukulele, first laser-engraved rosette">
+  <p class="small muted">Who made it, what it is, anything worth mentioning. Claude writes the captions from this and the media.</p>
+  <label for="pillar">Kind of post (optional)</label>
+  <select id="pillar" name="pillar"><option value="">Let Claude suggest</option>
+    {% for key, label in PILLARS %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
+  <label for="mode">These files are</label>
+  <select id="mode" name="mode">
+    <option value="together">One post (a carousel or one video)</option>
+    <option value="separate">Separate posts, one per file</option>
+    <option value="library">Just for the library, no post yet</option>
+  </select>
+  <p><button class="primary" type="submit">Upload</button></p>
+</form>
+{% endblock %}

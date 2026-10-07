@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Activity · CGW Studio{% endblock %}
+{% block content %}
+<h1>Activity</h1>
+<div class="table-wrap"><table>
+  <thead><tr><th>When</th><th>Who</th><th>What</th><th>Details</th></tr></thead>
+  <tbody>{% for r in rows %}<tr>
+    <td class="small">{{ r.at | local('%b %-d %-I:%M %p') }}</td>
+    <td>{{ r.actor_label }}</td>
+    <td>{{ r.action | replace('_', ' ') }}{% if r.entity_type == 'post' and r.entity_id %} · <a href="/posts/{{ r.entity_id }}">post {{ r.entity_id }}</a>{% endif %}</td>
+    <td class="small muted mono">{{ r.detail | tojson if r.detail else '' }}</td>
+  </tr>{% endfor %}</tbody>
+</table></div>
+{% endblock %}

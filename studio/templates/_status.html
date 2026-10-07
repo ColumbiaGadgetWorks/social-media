@@ -1,0 +1,6 @@
+{% macro status(s) -%}
+<span class="tag {{ {'needs_claude': 'pink', 'draft': '', 'in_review': 'warn', 'approved': 'ok', 'done': 'ok', 'rejected': 'stop'}[s] }}">{{ STATUS_LABELS[s] }}</span>
+{%- endmacro %}
+{% macro post_thumbs(post, n=4) -%}
+<div class="thumbs">{% for m in post.media[:n] %}{% if m.thumb_path %}<img src="/files/{{ m.id }}/thumb" alt="{{ m.alt_text }}" loading="lazy">{% else %}<div class="thumb"></div>{% endif %}{% endfor %}</div>
+{%- endmacro %}

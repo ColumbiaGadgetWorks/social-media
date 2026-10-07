@@ -1,0 +1,13 @@
+services:
+  cgw-studio:
+    build: .
+    image: cgw-studio:latest
+    container_name: cgw-studio
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8080:8080"  # LAN only: your reverse proxy and Claude Code (MCP) connect here
+    volumes:
+      - /mnt/user/appdata/cgw-studio:/data  # database and generated secret key
+      - /mnt/user/cgw-media:/media          # original uploads and previews
+    mem_limit: 1g

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Media · CGW Studio{% endblock %}
+{% block content %}
+<h1>Media library</h1>
+<form method="get" class="row" style="margin-bottom:14px">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search notes, descriptions, file names" style="flex:1;min-width:200px" aria-label="Search">
+  <select name="kind" aria-label="Type"><option value="">All</option><option value="image" {{ 'selected' if kind == 'image' }}>Photos</option><option value="video" {{ 'selected' if kind == 'video' }}>Videos</option></select>
+  <button type="submit">Search</button>
+</form>
+<form method="post" action="/media/new-post">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
+  {% for m in items %}
+    <div class="media-tile">
+      <a href="/media/{{ m.id }}">{% if m.thumb_path %}<img class="thumb" style="width:100%;height:150px" src="/files/{{ m.id }}/thumb" alt="{{ m.alt_text }}" loading="lazy">{% else %}<div class="thumb" style="width:100%;height:150px"></div>{% endif %}</a>
+      <span class="tag kind">{{ m.kind }}{% if m.processing_status != 'ready' %} · {{ m.processing_status }}{% endif %}</span>
+      <input type="checkbox" name="media_ids" value="{{ m.id }}" aria-label="Select {{ m.original_name }}">
+      <div class="small muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ m.note or m.original_name }}</div>
+    </div>
+  {% else %}<p class="muted">No media yet. <a href="/upload">Upload some.</a></p>{% endfor %}
+  </div>
+  {% if items %}
+  <div class="sticky-actions row">
+    <input type="text" name="note" placeholder="Brief for the new post" style="flex:1;min-width:200px" aria-label="Brief">
+    <label class="row" style="margin:0;font-weight:500"><input type="checkbox" name="for_claude" value="1" checked> Ask Claude to write it</label>
+    <button class="primary" type="submit">New post from selected</button>
+  </div>
+  {% endif %}
+</form>
+{% endblock %}

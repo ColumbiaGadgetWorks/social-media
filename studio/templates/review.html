@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "_status.html" import post_thumbs %}
+{% block title %}Review · CGW Studio{% endblock %}
+{% block content %}
+<h1>Waiting for approval</h1>
+{% if not posts %}<p class="muted">Nothing to review. Drafts from Claude sessions show up here.</p>{% endif %}
+<div class="stack">
+{% for p in posts %}
+  <div class="card">
+    <div class="row spread"><h3><a href="/posts/{{ p.id }}">{{ p.display_title }}</a></h3>
+      <span class="small muted">Submitted {{ p.submitted_at | local }}</span></div>
+    {{ post_thumbs(p) }}
+    <p class="small">{% for v in p.enabled_versions %}<span class="tag">{{ CHANNELS[v.channel].label }} · {{ v.scheduled_at | local('%b %-d %-I:%M %p') }}</span> {% endfor %}</p>
+    <a class="btn primary" href="/posts/{{ p.id }}">Review</a>
+  </div>
+{% endfor %}
+</div>
+{% endblock %}

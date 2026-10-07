@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Dashboard</h1>
+<div class="grid">
+  <div class="card">
+    <span class="tag pink">Needs Claude</span>
+    <div class="stat">{{ claude.count }}</div>
+    {% if claude.count %}
+      <p class="small muted">Oldest waiting {{ claude.oldest_days }} day(s). About {{ claude.minutes }} min of Claude time.</p>
+      <p class="small">In Claude Code, run <span class="mono">/cgw-session</span></p>
+    {% else %}<p class="small muted">Nothing waiting. Upload photos or videos to start.</p>{% endif %}
+  </div>
+  <div class="card">
+    <span class="tag warn">In review</span>
+    <div class="stat">{{ counts.in_review }}</div>
+    <p class="small"><a href="/review">Review and approve</a></p>
+  </div>
+  <div class="card">
+    <span class="tag ok">Approved</span>
+    <div class="stat">{{ counts.approved }}</div>
+    <p class="small muted">Scheduled or waiting for batch day</p>
+  </div>
+  <div class="card">
+    <span class="tag">Batch day</span>
+    <div class="stat">{{ batches | sum(attribute='count') }}</div>
+    <p class="small muted">{% if cycle.is_batch_day %}Today is batch day.{% else %}Next batch day {{ cycle.next.strftime('%a %b %-d') }}.{% endif %}</p>
+    <p class="small"><a href="/batch">Open batch pages</a></p>
+  </div>
+</div>
+
+{% if failed %}
+<h2>Needs attention</h2>
+<div class="stack">
+{% for v in failed %}
+  <div class="card row spread">
+    <div><span class="tag stop">Failed</span> <strong>{{ CHANNELS[v.channel].label }}</strong>: <a href="/posts/{{ v.post_id }}">{{ v.post.display_title }}</a>
+    <div class="small muted">{{ v.last_error }}</div></div>
+  </div>
+{% endfor %}
+</div>
+{% endif %}
+
+<h2>Coming up</h2>
+{% if upcoming %}
+<div class="table-wrap"><table>
+  <thead><tr><th>When</th><th>Channel</th><th>Post</th><th>How</th></tr></thead>
+  <tbody>
+  {% for v in upcoming %}
+    <tr><td>{{ v.scheduled_at | local }}</td><td>{{ CHANNELS[v.channel].label }}</td>
+    <td><a href="/posts/{{ v.post_id }}">{{ v.post.display_title }}</a></td>
+    <td class="small muted">{{ {'direct': 'Automatic', 'batch': 'Batch day', 'on_day': 'By hand on the day'}[CHANNELS[v.channel].mode] }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}<p class="muted">No approved posts scheduled yet.</p>{% endif %}
+{% endblock %}

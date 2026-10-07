@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "_status.html" import status as st %}
+{% block title %}{{ asset.original_name }} · CGW Studio{% endblock %}
+{% block content %}
+<h1>{{ asset.original_name }}</h1>
+<div class="two">
+  <div class="stack">
+    <div class="card">
+      {% if asset.kind == 'image' and asset.preview_path %}
+        <img src="/files/{{ asset.id }}/preview" alt="{{ asset.alt_text }}" style="max-width:100%;border-radius:4px">
+      {% elif asset.kind == 'video' %}
+        <video src="/files/{{ asset.id }}/original" controls preload="metadata" style="max-width:100%;max-height:70vh;border-radius:4px" {% if asset.preview_path %}poster="/files/{{ asset.id }}/preview"{% endif %}></video>
+      {% endif %}
+      {% if asset.processing_status == 'failed' %}<div class="problems">Processing failed: {{ asset.processing_error }}</div>{% endif %}
+      {% if asset.processing_status == 'pending' %}<p class="muted small">Still processing. Reload in a moment.</p>{% endif %}
+      {% if asset.frames %}<h3 style="margin-top:12px">Frames Claude sees</h3><div class="thumbs">{% for f in asset.frames %}<img src="/files/{{ asset.id }}/frame{{ loop.index }}" alt="Frame {{ loop.index }}">{% endfor %}</div>{% endif %}
+    </div>
+    <form method="post" action="/media/{{ asset.id }}" class="card">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label for="note">Uploader's note</label><input type="text" id="note" name="note" value="{{ asset.note }}">
+      <label for="description">Description</label><textarea id="description" name="description">{{ asset.description }}</textarea>
+      <label for="alt_text">Alt text</label><textarea id="alt_text" name="alt_text" style="min-height:60px">{{ asset.alt_text }}</textarea>
+      <label for="tags">Tags (comma separated)</label><input type="text" id="tags" name="tags" value="{{ asset.tags | join(', ') }}">
+      <p><button type="submit">Save</button></p>
+    </form>
+  </div>
+  <aside class="card small">
+    <p><strong>Type:</strong> {{ asset.kind }} ({{ asset.mime }})</p>
+    <p><strong>Size:</strong> {{ asset.size_bytes | size }}{% if asset.width %}, {{ asset.width }}×{{ asset.height }}{% endif %}{% if asset.duration_s %}, {{ '%.1f' | format(asset.duration_s) }} s{% endif %}</p>
+    <p><strong>Uploaded:</strong> {{ asset.created_at | local }}{% if asset.uploader %} by {{ asset.uploader.label }}{% endif %}</p>
+    <p><a href="/files/{{ asset.id }}/original" download>Download original</a></p>
+    <h3>Used in</h3>
+    {% for p in used_in %}<p><a href="/posts/{{ p.id }}">{{ p.display_title }}</a> {{ st(p.status) }}</p>{% else %}<p class="muted">Not in any post yet.</p>{% endfor %}
+  </aside>
+</div>
+{% endblock %}

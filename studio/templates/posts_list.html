@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "_status.html" import status as st, post_thumbs %}
+{% block title %}Posts · CGW Studio{% endblock %}
+{% block content %}
+<h1>Posts</h1>
+<p class="row small">
+  <a href="/posts" {% if not status %}style="font-weight:700"{% endif %}>All</a>
+  {% for key, label in STATUS_LABELS.items() %}<a href="/posts?status={{ key }}" {% if status == key %}style="font-weight:700"{% endif %}>{{ label }}</a>{% endfor %}
+</p>
+{% if posts %}
+<div class="table-wrap"><table>
+  <thead><tr><th>Media</th><th>Post</th><th>Status</th><th>Channels</th><th>Updated</th></tr></thead>
+  <tbody>{% for p in posts %}
+  <tr>
+    <td style="width:140px">{{ post_thumbs(p, 1) }}</td>
+    <td><a href="/posts/{{ p.id }}">{{ p.display_title }}</a>{% if p.pillar %}<div class="small muted">{{ PILLAR_LABELS.get(p.pillar, p.pillar) }}</div>{% endif %}</td>
+    <td>{{ st(p.status) }}</td>
+    <td class="small">{{ p.enabled_versions | map(attribute='channel') | map('replace', '_', ' ') | join(', ') }}</td>
+    <td class="small muted">{{ p.updated_at | local }}</td>
+  </tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<p class="muted">No posts here yet.</p>{% endif %}
+{% endblock %}

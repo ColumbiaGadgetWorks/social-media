@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ channel.label }} batch · CGW Studio{% endblock %}
+{% block content %}
+<div class="row spread"><h1>{{ channel.label }} batch</h1>
+  {% if items %}<a class="btn primary" href="/batch/{{ channel.key }}/download">Download all (zip)</a>{% endif %}</div>
+<p class="muted">{% if channel.mode == 'on_day' %}{{ channel.label }} can't schedule ahead. Post each one on its day; you'll get an email that morning.{% else %}Schedule each post in {{ channel.label }}'s own scheduler at the time shown, then mark it scheduled.{% if channel.horizon_days < 14 %} {{ channel.label }} accepts posts only {{ channel.horizon_days }} days ahead; later ones wait for the next batch.{% endif %}{% endif %}</p>
+{% if not items %}<p class="muted">Nothing approved for {{ channel.label }} in the next two weeks.</p>{% endif %}
+<div class="stack">
+{% for item in items %}
+  {% set v = item.version %}
+  <div class="card">
+    <div class="row spread">
+      <h3>{{ '%02d' | format(item.number) }} · {{ v.scheduled_at | local }}</h3>
+      <div class="row">
+        {% if item.overdue %}<span class="tag stop">Overdue</span>{% endif %}
+        {% if not item.within_horizon %}<span class="tag">Next batch</span>{% endif %}
+        {% if not item.approved %}<span class="tag stop">Blocked: {{ item.reason }}</span>{% endif %}
+      </div>
+    </div>
+    <p class="small"><a href="/posts/{{ item.post.id }}">{{ item.post.display_title }}</a> · files start with <span class="mono">{{ item.stem }}</span></p>
+    <div class="thumbs">{% for m in item.post.media %}<a href="/files/{{ m.id }}/export" download="{{ item.stem }}{{ 'abcdefghij'[loop.index0] if item.post.media|length > 1 }}"><img src="/files/{{ m.id }}/thumb" alt="{{ m.alt_text }}"></a>{% endfor %}</div>
+    {% if v.title %}<label>Title <button type="button" class="link small" data-copy="title-{{ v.id }}">Copy</button></label><div class="caption" id="title-{{ v.id }}">{{ v.title }}</div>{% endif %}
+    <label>Caption <button type="button" class="link small" data-copy="cap-{{ v.id }}">Copy</button></label>
+    <div class="caption" id="cap-{{ v.id }}">{{ v.full_text }}</div>
+    {% if item.approved %}
+    <form method="post" action="/versions/{{ v.id }}/posted" class="row" style="margin-top:10px">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="next" value="/batch/{{ channel.key }}">
+      <input type="url" name="url" placeholder="Post link, if you have it" style="flex:1;min-width:180px">
+      <button type="submit" class="primary">{{ 'Mark posted' if channel.mode == 'on_day' else 'Mark scheduled' }}</button>
+    </form>
+    {% endif %}
+  </div>
+{% endfor %}
+</div>
+{% endblock %}

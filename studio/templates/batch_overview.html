@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Batch day · CGW Studio{% endblock %}
+{% block content %}
+<h1>Batch day</h1>
+<p class="muted">Every 2 weeks, schedule approved posts in each platform's own scheduler. This cycle started {{ cycle.start.strftime('%a %b %-d') }}; the next batch day is {{ cycle.next.strftime('%a %b %-d') }}.</p>
+<div class="grid">
+{% for r in rows %}
+  <a class="card" href="/batch/{{ r.channel.key }}" style="text-decoration:none;color:inherit">
+    <h3>{{ r.channel.label }}</h3>
+    <div class="stat">{{ r.count }}</div>
+    <p class="small muted">{% if r.channel.mode == 'on_day' %}Posted by hand on the day{% else %}Up to {{ r.channel.horizon_days }} days ahead{% endif %}{% if r.overdue %} · <span style="color:var(--stop)">{{ r.overdue }} overdue</span>{% endif %}</p>
+  </a>
+{% endfor %}
+</div>
+<p class="small muted" style="margin-top:16px">Instagram, Facebook and Threads are on this list until the Meta connection is set up (Phase 2). Bluesky publishes automatically.</p>
+{% endblock %}

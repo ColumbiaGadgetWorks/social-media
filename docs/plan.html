@@ -140,7 +140,7 @@ td .tag { margin-right: 4px; }
 </style>
 
 <header class="top">
-  <div class="eyebrow">Columbia Gadget Works · Build plan v0.5 · $0 · ~0.5 GB RAM</div>
+  <div class="eyebrow">Columbia Gadget Works · Build plan v0.6 · Phase 1 built · $0 · ~0.1 GB idle</div>
   <h1>CGW Content Studio</h1>
   <p class="lede">A self-hosted app for turning members' photos and videos, classes, events and shop humor into polished posts on nine channels, plus a separate announcement-only email list. Claude does the writing through your Pro plan, in sessions the Studio reminds you to run. A person approves every post before it goes anywhere.</p>
   <div class="meta"><span>Runs on: Unraid · one Docker container</span><span>AI: Claude Pro, via MCP on the LAN</span><span>Website: columbiagadgetworks/website (Hugo, Cloudflare)</span><span>Events from: Google Calendar</span><span>Contacts: Dolibarr (latest)</span><span>Revised Oct 7, 2026</span></div>
@@ -168,7 +168,7 @@ td .tag { margin-right: 4px; }
     <li><a href="#extras">Other ideas</a></li>
     <li><a href="#future">Future ideas</a></li>
     <li><a href="#roadmap">Roadmap</a></li>
-    <li><a href="#questions">Open questions</a></li>
+    <li><a href="#questions">Status</a></li>
   </ol>
 </nav>
 
@@ -311,7 +311,7 @@ claude "/cgw-session"</pre>
       <tr><td>Bluesky</td><td><p>Text (300 chars), up to 4 images, short video</p></td><td><p><span class="tag t-yes">Direct</span> AT Protocol app password</p></td><td><p>The easiest API of the lot. A good first channel to build.</p></td></tr>
       <tr><td>YouTube Shorts</td><td><p>Vertical video, up to 3 minutes</p></td><td><p><span class="tag t-maybe">Assisted → Direct</span></p></td><td><p>The API uploads private until Google audits the project. The audit is free but takes time. Until then, use batch days in YouTube Studio: upload several at once and schedule each one months ahead.</p></td></tr>
       <tr><td>TikTok (business)</td><td><p>Video, photo carousel</p></td><td><p><span class="tag t-maybe">Assisted</span></p></td><td><p>Unaudited apps can only post privately, and TikTok rejects many audit applications. Use batch days every 2 weeks: TikTok Studio on desktop schedules videos up to 10 days ahead.</p></td></tr>
-      <tr><td>Google Business Profile</td><td><p>Update, Event or Offer post with one photo. No video.</p></td><td><p><span class="tag t-maybe">Assisted → Direct</span></p></td><td><p>The API needs a free access request to Google. Until it's granted, use batch days, if the Business Profile editor offers scheduling for your account, or post on the day. Event posts for classes help local search.</p></td></tr>
+      <tr><td>Google Business Profile</td><td><p>Update, Event or Offer post with one photo. No video.</p></td><td><p><span class="tag t-maybe">By hand, on the day</span></p></td><td><p>About 1 post every 2 weeks. The profile can't schedule, so the Studio emails you that morning. The API needs a free access request to Google; applying for it is still in Phase 2.</p></td></tr>
       <tr><td>Website</td><td><p>News items, project gallery, event list</p></td><td><p><span class="tag t-yes">Direct</span> RSS / JSON feed</p></td><td><p>Approved website posts are committed to the Hugo repo, and Cloudflare rebuilds the site. See Website (Hugo).</p></td></tr>
       <tr><td>Email blasts</td><td><p>Announcements only</p></td><td><p><span class="tag t-yes">Direct</span> SMTP2GO</p></td><td><p>1–2 a month to about 50 people, well inside SMTP2GO's free tier.</p></td></tr>
       <tr><td>Google Ad Grants</td><td><p>Search ads: headlines, descriptions, keywords</p></td><td><p><span class="tag t-maybe">Assisted</span></p></td><td><p>Not a feed. Once a month the Studio drafts ad copy and keyword ideas for upcoming classes, linked to the website class pages, and exports a Google Ads Editor CSV after approval.</p></td></tr>
@@ -347,7 +347,7 @@ claude "/cgw-session"</pre>
       <tr><td>YouTube Shorts</td><td><p>YouTube Studio: upload several at once and give each a scheduled publish time</p></td><td><p>The full 2 weeks</p></td></tr>
       <tr><td>LinkedIn page</td><td><p>Built-in post scheduler on the page admin view</p></td><td><p>The full 2 weeks</p></td></tr>
       <tr><td>X</td><td><p>Built-in scheduler in the web composer</p></td><td><p>The full 2 weeks</p></td></tr>
-      <tr><td>Google Business Profile</td><td><p>Some accounts can schedule posts from the editor and some can't. Check yours.</p></td><td><p>The full 2 weeks if it can schedule. If not, you post on the day from an email reminder.</p></td></tr>
+      <tr><td>Google Business Profile</td><td><p>No scheduling on CGW's profile.</p></td><td><p>About 1 post every 2 weeks, chosen by Claude for local search value. Listed on the batch page, and you get an email on the morning it's due to post it by hand.</p></td></tr>
     </tbody>
   </table></div>
   <p>Every 2 weeks, one email: "Batch day: TikTok 4, Shorts 3, LinkedIn 2, X 4, GBP 2. About 25 minutes, or about 8 with the extension." Each platform's horizon is a setting, so moving TikTok to weekly later is a settings change.</p>
@@ -366,7 +366,7 @@ claude "/cgw-session"</pre>
     <li>Clicking a post attaches the media file, fills the title, caption, hashtags and schedule date and time, and highlights anything it couldn't fill. <strong>You</strong> check it and press Schedule, and the extension marks the post as scheduled in the Studio.</li>
     <li>Because a person does every submit at normal speed, it's closer to a password manager filling a form than to a bot. It still depends on page layouts, so expect to fix it a few times a year.</li>
     <li><strong>Layout changes:</strong> each platform's selectors live in one small file per site. A "Fill" that fails highlights the missing field instead of guessing. You can then fill that field by hand from the side panel and run <code>/cgw-fix-extension</code> in Claude Code later.</li>
-    <li><strong>Build order:</strong> YouTube Studio and TikTok Studio first, since they're the most work by hand. X, LinkedIn and Google Business Profile follow.</li>
+    <li><strong>Build order:</strong> YouTube Studio and TikTok Studio first, since they're the most work by hand. X and LinkedIn follow. Google Business Profile is posted on the day, so the extension helps there too.</li>
   </ul>
 
   <h3>C · Unattended robot (long-term idea): how it would work, and why it's on hold</h3>
@@ -385,7 +385,7 @@ claude "/cgw-session"</pre>
   <h3>Memory budget</h3>
   <p>Only the web app runs all the time. ffmpeg and Whisper start for a job and exit when it's done, and only one heavy job runs at a time.</p>
   <div class="ram" role="img" aria-label="Memory budget bars">
-    <div class="r"><span>Studio app, idle (web, SQLite, scheduler)</span><span class="bar"><i style="width:25%"></i></span><span class="n">~250 MB</span></div>
+    <div class="r"><span>Studio app, idle (web, SQLite, scheduler), measured</span><span class="bar"><i style="width:11%"></i></span><span class="n">~105 MB</span></div>
     <div class="r"><span>+ image job (Pillow)</span><span class="bar"><i class="peak" style="width:12%"></i></span><span class="n">+~100 MB</span></div>
     <div class="r"><span>+ video render (ffmpeg, 1080×1920)</span><span class="bar"><i class="peak" style="width:40%"></i></span><span class="n">+~400 MB</span></div>
     <div class="r"><span>+ subtitles (whisper.cpp, base model)</span><span class="bar"><i class="peak" style="width:30%"></i></span><span class="n">+~300 MB</span></div>
@@ -434,7 +434,7 @@ flowchart LR
     <tbody>
       <tr><td>Backend</td><td><p>Python 3.12, FastAPI, the official MCP Python SDK</p></td><td><p>Best media libraries, and Claude Code is good at writing and maintaining it</p></td></tr>
       <tr><td>Database</td><td><p>SQLite in WAL mode, nightly backup to the array</p></td><td><p>Handles a handful of users easily with zero extra RAM. Can move to Postgres later if ever needed.</p></td></tr>
-      <tr><td>Jobs</td><td><p>Huey with SQLite storage, inside the same container, one worker</p></td><td><p>No Redis. Renders queue one at a time.</p></td></tr>
+      <tr><td>Jobs</td><td><p>A built-in background loop in the same process, one heavy job at a time</p></td><td><p>No Redis or job server. Renders queue one at a time.</p></td></tr>
       <tr><td>Front end</td><td><p>Server-rendered pages with HTMX, plus a small cropper and trimmer</p></td><td><p>No front-end build step. Installs on phones as a PWA.</p></td></tr>
       <tr><td>Media</td><td><p>ffmpeg, Pillow, whisper.cpp (base.en model)</p></td><td><p>All local. Member audio never leaves the server except as the transcript Claude reads.</p></td></tr>
     </tbody>
@@ -645,7 +645,7 @@ flowchart LR
 <section id="roadmap">
   <div class="eyebrow">19 · Build order</div>
   <h2>Roadmap</h2>
-  <div class="phase"><div class="when">Phase 1<small>~3 weekends</small></div><ul>
+  <div class="phase"><div class="when">Phase 1<small>Built, Oct 2026</small></div><ul>
     <li>Container, proxy and local auth, roles, audit log, SQLite</li>
     <li>Upload, media library, thumbnails, tags</li>
     <li>Posts with per-channel versions, approval state machine</li>
@@ -673,16 +673,14 @@ flowchart LR
 
 <section id="questions">
   <div class="eyebrow">20 · Need your input</div>
-  <h2>Open questions</h2>
+  <h2>Status & settled questions</h2>
   <ol class="qs">
-    <li>The ICS calendar URL. <span>Needed at the start of Phase 2. Share it privately; it goes into the server's <code>.env</code> file, never into the repo.</span></li>
-    <li>Is the Instagram account a Business or Creator account linked to the Facebook page? <span>Meta's API requires that link. Your Meta login also needs admin rights on the page to create the developer app.</span></li>
-    <li>Is the Google Business Profile verified, and can it schedule posts? <span>Open the post editor and look for a "Schedule" option. This decides whether GBP joins batch day or gets on-the-day reminders.</span></li>
-    <li>Repo access for building. <span>When we start Phase 1, this session needs <code>columbiagadgetworks/website</code> added to reach the Hugo templates (Phase 2).</span></li>
+    <li>Settled: Instagram is a Business account, the calendar is at <code>columbiagadgetworks.org/api/calendar.ics</code>, and Google Business Profile has no scheduling (1 post per 2 weeks, by hand on the day). <span>The Meta developer app setup in Phase 2 also needs the Instagram account linked to the Facebook page.</span></li>
+    <li>Phase 1 is built and in the repo. <span>Upload, media library, approval rule, MCP server with <code>/cgw-session</code>, Bluesky publishing, batch pages and zips, reminder emails, roles and the activity log. The app measured about 105 MB at idle.</span></li>
   </ol>
 </section>
 
 </main>
 </div>
 
-<footer>CGW Content Studio · build plan v0.5 · github.com/ColumbiaGadgetWorks/social-media · Platform limits and API rules change often; each "Direct" channel is checked with a test post before it's built.</footer>
+<footer>CGW Content Studio · build plan v0.6 · github.com/ColumbiaGadgetWorks/social-media · Platform limits and API rules change often; each "Direct" channel is checked with a test post before it's built.</footer>
