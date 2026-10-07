@@ -140,10 +140,10 @@ td .tag { margin-right: 4px; }
 </style>
 
 <header class="top">
-  <div class="eyebrow">Columbia Gadget Works · Build plan v0.3 · $0 · ~0.5 GB RAM</div>
+  <div class="eyebrow">Columbia Gadget Works · Build plan v0.4 · $0 · ~0.5 GB RAM</div>
   <h1>CGW Content Studio</h1>
   <p class="lede">A self-hosted app for turning members' photos and videos, classes, events and shop humor into polished posts on nine channels, plus a separate announcement-only email list. Claude does the writing through your Pro plan, in sessions the Studio reminds you to run. A person approves every post before it goes anywhere.</p>
-  <div class="meta"><span>Runs on: Unraid · one Docker container</span><span>AI: Claude Pro, via MCP</span><span>Events from: Google Calendar</span><span>Contacts: Dolibarr (latest)</span><span>Revised Oct 7, 2026</span></div>
+  <div class="meta"><span>Runs on: Unraid · one Docker container</span><span>AI: Claude Pro, via MCP on the LAN</span><span>Website: Hugo on Cloudflare</span><span>Events from: Google Calendar</span><span>Contacts: Dolibarr (latest)</span><span>Revised Oct 7, 2026</span></div>
 </header>
 
 <div class="wrap">
@@ -153,6 +153,7 @@ td .tag { margin-right: 4px; }
     <li><a href="#approval">Approval rules</a></li>
     <li><a href="#claude">Claude connection</a></li>
     <li><a href="#channels">Channels</a></li>
+    <li><a href="#batch">Posting without APIs</a></li>
     <li><a href="#light">Cost & RAM</a></li>
     <li><a href="#architecture">Architecture</a></li>
     <li><a href="#workflow">Media workflow</a></li>
@@ -163,7 +164,9 @@ td .tag { margin-right: 4px; }
     <li><a href="#nudges">Reminder emails</a></li>
     <li><a href="#metrics">Metrics</a></li>
     <li><a href="#deploy">Deploy & auth</a></li>
+    <li><a href="#website">Website (Hugo)</a></li>
     <li><a href="#extras">Other ideas</a></li>
+    <li><a href="#future">Future features</a></li>
     <li><a href="#roadmap">Roadmap</a></li>
     <li><a href="#questions">Open questions</a></li>
   </ol>
@@ -178,10 +181,11 @@ td .tag { margin-right: 4px; }
     <div><span class="tag t-yes">Recommended</span><h4>One small Docker container, connected to Dolibarr</h4><p>A single Python app using SQLite and an in-process job queue: no Postgres, no Redis, no Postiz. It idles around 300 MB. Dolibarr remains the source of truth for contacts, unsubscribes and the email record.</p></div>
     <div><span class="tag t-yes">Recommended</span><h4>Claude Pro connects through MCP</h4><p>The Studio runs an MCP server. You open Claude Code (or claude.ai) with the Pro plan, run one command, and Claude works through the queue of uploads that need captions and planning, then submits drafts. No API key is used.</p></div>
     <div><span class="tag t-yes">Recommended</span><h4>The Studio tells you when Claude is needed</h4><p>It tracks the work only Claude can do and emails you when a session is due. The email lists what's waiting, roughly how long it will take, and the exact command to run.</p></div>
-    <div><span class="tag t-yes">Recommended</span><h4>Built-in publishers, phased by how easy each API is</h4><p>The Studio talks directly to each platform's free API. Channels whose APIs are gated or paid use "assisted posting" instead: a one-tap ready-to-post pack on your phone. That keeps the RAM use small.</p></div>
-    <div><span class="tag t-yes">Recommended</span><h4>Email is announcement-only, enforced in code</h4><p>Social posts can't be added to an email at all. Email uses a separate Announcement type for classes, events and important org news, with a frequency cap.</p></div>
-    <div><span class="tag t-yes">Recommended</span><h4>Google Calendar drives event content</h4><p>The Studio reads your class and event calendar. Each new event automatically queues a promo set and an email announcement draft for Claude to write and you to approve.</p></div>
-    <div><span class="tag t-no">Dropped</span><h4>Postiz, Metricool API, Claude API, GitHub as the content bridge</h4><p>Postiz needs several extra database and workflow containers. The Metricool API and Claude API cost money. GitHub is a poor fit for media and approvals, so it holds only the code and the Claude commands. Details are in the sections below.</p></div>
+    <div><span class="tag t-yes">Recommended</span><h4>Free APIs where they exist, batch days where they don't</h4><p>Instagram, Facebook, Threads, Bluesky, the website and email publish automatically. For TikTok, YouTube, Google Business Profile, LinkedIn and X, you schedule about 10 posts at a time in each platform's own scheduler, with the Studio preparing everything, for roughly 20 minutes every week or two.</p></div>
+    <div><span class="tag t-maybe">Optional, phase 4</span><h4>A form-filling helper, and a robot only as an experiment</h4><p>A browser helper can fill in each upload form while you click Schedule. A fully unattended browser robot is possible, but it breaks those platforms' terms and risks CGW's real accounts. See Posting without APIs.</p></div>
+    <div><span class="tag t-yes">Recommended</span><h4>Email is announcement-only, enforced in code</h4><p>Social posts can't be added to an email at all. Email uses a separate Announcement type for classes, events and important org news, sent 1–2 times a month.</p></div>
+    <div><span class="tag t-yes">Recommended</span><h4>Google Calendar drives event content</h4><p>The Studio reads your one shared ICS calendar. Each new event automatically queues a promo set for Claude to write and you to approve, and adds the event to the next monthly email.</p></div>
+    <div><span class="tag t-no">Dropped</span><h4>Postiz, Metricool API, Claude API, GitHub as the content bridge</h4><p>Postiz needs several extra database and workflow containers. The Metricool API and Claude API cost money. GitHub is a poor fit for media and approvals, so it holds the code, the Claude commands and the Hugo website, nothing else.</p></div>
   </div>
 </section>
 
@@ -191,7 +195,7 @@ td .tag { margin-right: 4px; }
   <div class="rule">
     <span class="eyebrow">Rule 1, enforced in the database</span>
     <p>Nothing leaves the Studio until a signed-in person with the Approver role has approved that exact version.</p>
-    <p>That covers every channel: social posts, the ready-to-post pack, the website feed, Google Business Profile, ad copy and email. Claude and the MCP connection can create and edit drafts. They can never approve.</p>
+    <p>That covers every channel: API posts, batch-day packs, the form-filling helper, the website, ad copy and email. Claude and the MCP connection can create and edit drafts. They can never approve.</p>
   </div>
   <div class="rule">
     <span class="eyebrow">Rule 2, enforced in the data model</span>
@@ -204,7 +208,8 @@ td .tag { margin-right: 4px; }
     <li><strong>Approval covers one exact version.</strong> The approval stores a hash of the caption, media files, channel settings and time slot. Any later edit sends the post back to review.</li>
     <li><strong>Every publisher checks again before it sends.</strong> A failed check blocks the send and is logged.</li>
     <li><strong>Approvers see the final output for each channel.</strong> That means the rendered video with music, each platform's crop, the full caption for each platform and the scheduled time.</li>
-    <li><strong>Email gets extra checks.</strong> The approval screen shows the recipient count and the list filter and sends a test copy to the approver. A second approver is optional.</li>
+    <li><strong>Email gets extra checks.</strong> The approval screen shows the recipient count and the list filter and sends a test copy to the approver.</li>
+    <li><strong>One approver for now: you.</strong> Roles let you add more approvers later without code changes.</li>
     <li><strong>Every change is logged.</strong> Who generated, edited, approved, rejected and published each post, and when.</li>
   </ul>
   <div class="diagram">
@@ -217,7 +222,7 @@ stateDiagram-v2
   InReview --> Approved: Approver clicks Approve (human only)
   Approved --> Draft: any edit (approval cleared)
   Approved --> Scheduled: per-channel time slots
-  Scheduled --> Published: API confirmed, or marked posted from the pack
+  Scheduled --> Published: API confirmed, or scheduled in a batch session and checked
   InReview --> Rejected
   Published --> [*]
 </pre>
@@ -240,10 +245,7 @@ stateDiagram-v2
   </table></div>
 
   <h3>Two ways to connect</h3>
-  <div class="verdict">
-    <div><span class="tag t-yes">Phase 1</span><h4>Claude Code on a staff computer</h4><p>Connect once with a personal Studio token. The server can stay on your LAN or VPN, with nothing exposed to the internet. The repo includes ready-made slash commands, so a session is one command.</p></div>
-    <div><span class="tag t-info">Phase 3</span><h4>claude.ai or the Claude mobile app</h4><p>Pro supports custom remote MCP connectors. The <code>/mcp</code> path has to be reachable from the internet, and the Studio adds an OAuth login. This lets you run a session from your phone after hack night.</p></div>
-  </div>
+  <p><strong>Your setup:</strong> Claude Code on your computer, on the same local network as the Studio. You connect once with a personal Studio token, and <code>/mcp</code> is reachable only on the LAN, never through the internet-facing proxy. Connecting claude.ai or the phone app is on the future list.</p>
 <pre class="code"># one-time, on the computer you run Claude Code from
 claude mcp add --transport http cgw-studio https://studio.cgw.lan/mcp \
   --header "Authorization: Bearer &lt;your-studio-token&gt;"
@@ -268,7 +270,7 @@ claude "/cgw-session"</pre>
     <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
     <tbody>
       <tr><td>get_work_queue</td><td><p>Lists what needs Claude, with priorities and due dates</p></td></tr>
-      <tr><td>get_work_item</td><td><p>Returns a compact bundle for one item: 768 px previews, 4–6 key frames per video, the transcript, the uploader's note, the people and consent status, and related events</p></td></tr>
+      <tr><td>get_work_item</td><td><p>Returns a compact bundle for one item: 768 px previews, 4–6 key frames per video, the transcript, the uploader's note, tagged people, and related events</p></td></tr>
       <tr><td>search_media / get_calendar / get_metrics</td><td><p>Read-only context</p></td></tr>
       <tr><td>submit_drafts</td><td><p>Saves captions and channel versions in bulk. Results always land as Draft.</p></td></tr>
       <tr><td>request_render</td><td><p>Asks the Studio to cut, crop, subtitle or add music to a video</p></td></tr>
@@ -289,22 +291,22 @@ claude "/cgw-session"</pre>
 <section id="channels">
   <div class="eyebrow">04 · Where posts go</div>
   <h2>Channels</h2>
-  <p><span class="tag t-yes">Direct</span> the Studio publishes through the platform's free API. <span class="tag t-maybe">Assisted</span> the Studio prepares everything and sends a ready-to-post pack to your phone, and you post it in the platform's app and tap "Mark posted". Assisted channels can move to Direct once their API approval comes through.</p>
+  <p><span class="tag t-yes">Direct</span> the Studio publishes through the platform's free API. <span class="tag t-maybe">Assisted</span> the Studio prepares a batch and you schedule it in the platform's own scheduler (see Posting without APIs). Assisted channels can move to Direct once their API approval comes through.</p>
   <div class="tbl"><table>
     <thead><tr><th>Channel</th><th>Content it takes</th><th>How</th><th>Notes</th></tr></thead>
     <tbody>
       <tr><td>Instagram</td><td><p>Photo, carousel (up to 10), reel, story</p></td><td><p><span class="tag t-yes">Direct</span> Meta Graph API</p></td><td><p>One free Meta developer app covers Instagram, Facebook and Threads. Instagram fetches media from a public URL, so approved media must be reachable from the internet.</p></td></tr>
       <tr><td>Facebook page</td><td><p>Text, link, photos, video, reel</p></td><td><p><span class="tag t-yes">Direct</span> Meta Graph API</p></td><td><p>Gets the full Givebutter link in captions.</p></td></tr>
       <tr><td>Bluesky</td><td><p>Text (300 chars), up to 4 images, short video</p></td><td><p><span class="tag t-yes">Direct</span> AT Protocol app password</p></td><td><p>The easiest API of the lot. A good first channel to build.</p></td></tr>
-      <tr><td>YouTube Shorts</td><td><p>Vertical video, up to 3 minutes</p></td><td><p><span class="tag t-maybe">Assisted → Direct</span></p></td><td><p>The API uploads private until Google audits the project. The audit is free but takes time. Until then, upload as private and make it public with one tap in YouTube Studio, or use the pack.</p></td></tr>
-      <tr><td>TikTok (business)</td><td><p>Video, photo carousel</p></td><td><p><span class="tag t-maybe">Assisted</span></p></td><td><p>Unaudited apps can only post privately, and TikTok rejects many audit applications. Use the pack. Adding TikTok's trending sounds in the app is better for reach anyway.</p></td></tr>
-      <tr><td>Google Business Profile</td><td><p>Update, Event or Offer post with one photo. No video.</p></td><td><p><span class="tag t-maybe">Assisted → Direct</span></p></td><td><p>The API needs a free access request to Google. Event posts for classes help local search.</p></td></tr>
-      <tr><td>Website</td><td><p>News items, project gallery, event list</p></td><td><p><span class="tag t-yes">Direct</span> RSS / JSON feed</p></td><td><p>Posts only appear if marked "website" at approval. The website's event list can embed Google Calendar directly.</p></td></tr>
-      <tr><td>Email blasts</td><td><p>Announcements only</p></td><td><p><span class="tag t-yes">Direct</span> SMTP2GO</p></td><td><p>See Email announcements. 50 contacts fit comfortably in SMTP2GO's free tier.</p></td></tr>
+      <tr><td>YouTube Shorts</td><td><p>Vertical video, up to 3 minutes</p></td><td><p><span class="tag t-maybe">Assisted → Direct</span></p></td><td><p>The API uploads private until Google audits the project. The audit is free but takes time. Until then, use batch days in YouTube Studio: upload several at once and schedule each one months ahead.</p></td></tr>
+      <tr><td>TikTok (business)</td><td><p>Video, photo carousel</p></td><td><p><span class="tag t-maybe">Assisted</span></p></td><td><p>Unaudited apps can only post privately, and TikTok rejects many audit applications. Use weekly batch days: TikTok Studio on desktop schedules videos up to 10 days ahead.</p></td></tr>
+      <tr><td>Google Business Profile</td><td><p>Update, Event or Offer post with one photo. No video.</p></td><td><p><span class="tag t-maybe">Assisted → Direct</span></p></td><td><p>The API needs a free access request to Google. Until it's granted, use batch days, if the Business Profile editor offers scheduling for your account, or post on the day. Event posts for classes help local search.</p></td></tr>
+      <tr><td>Website</td><td><p>News items, project gallery, event list</p></td><td><p><span class="tag t-yes">Direct</span> RSS / JSON feed</p></td><td><p>Approved website posts are committed to the Hugo repo, and Cloudflare rebuilds the site. See Website (Hugo).</p></td></tr>
+      <tr><td>Email blasts</td><td><p>Announcements only</p></td><td><p><span class="tag t-yes">Direct</span> SMTP2GO</p></td><td><p>1–2 a month to about 50 people, well inside SMTP2GO's free tier.</p></td></tr>
       <tr><td>Google Ad Grants</td><td><p>Search ads: headlines, descriptions, keywords</p></td><td><p><span class="tag t-maybe">Assisted</span></p></td><td><p>Not a feed. Once a month the Studio drafts ad copy and keyword ideas for upcoming classes, linked to the website class pages, and exports a Google Ads Editor CSV after approval.</p></td></tr>
       <tr><td>Threads</td><td><p>Text, image, video, carousel</p></td><td><p><span class="tag t-yes">Direct</span> Meta Threads API</p></td><td><p>Same Meta developer account as Instagram. Nice-to-have, but nearly free to add.</p></td></tr>
-      <tr><td>LinkedIn page</td><td><p>Text, image, video, document</p></td><td><p><span class="tag t-maybe">Assisted</span></p></td><td><p>Posting as a company page needs LinkedIn's Community Management API approval. Use the pack for occasional sponsor and impact posts.</p></td></tr>
-      <tr><td>X / Twitter</td><td><p>Text, images, video</p></td><td><p><span class="tag t-maybe">Assisted</span></p></td><td><p>X closed its free API tier in 2026. Posting is now pay-per-use, and a post with a link costs about $0.20. Use the pack to stay at $0.</p></td></tr>
+      <tr><td>LinkedIn page</td><td><p>Text, image, video, document</p></td><td><p><span class="tag t-maybe">Assisted</span></p></td><td><p>Posting as a company page needs LinkedIn's Community Management API approval. Use batch days with LinkedIn's built-in post scheduler.</p></td></tr>
+      <tr><td>X / Twitter</td><td><p>Text, images, video</p></td><td><p><span class="tag t-maybe">Assisted</span></p></td><td><p>X closed its free API tier in 2026. Posting is now pay-per-use, and a post with a link costs about $0.20. Use batch days with X's built-in scheduler to stay at $0.</p></td></tr>
     </tbody>
   </table></div>
   <h3>One post, many versions</h3>
@@ -313,12 +315,58 @@ claude "/cgw-session"</pre>
     <li>Claude writes each version to the platform's limits and customs: "link in bio" on Instagram, the full link on Facebook, 300 characters on Bluesky, a short title and #Shorts on YouTube, keywords on Google Business Profile.</li>
     <li>The approver sees every version side by side and can untick any channel before approving.</li>
   </ul>
-  <h3>The ready-to-post pack</h3>
-  <p>For assisted channels, the Studio sends a push notification (through a free self-hosted ntfy server, or by email) at the scheduled time. The link opens a phone page with the final media, a "Save to phone" button, a copy button for the caption, and a button that opens the app. After posting, tap "Mark posted" and paste the post's URL so its metrics can be tracked.</p>
+  </section>
+
+<section id="batch">
+  <div class="eyebrow">05 · TikTok, Shorts, GBP, LinkedIn, X</div>
+  <h2>Posting without APIs</h2>
+  <p>There are three ways to handle the channels without a free API. Option A works on day one and stays as the fallback. Option B makes it faster. Option C is possible, but I'd only run it as an experiment.</p>
+
+  <div class="verdict">
+    <div><span class="tag t-yes">A · Recommended</span><h4>Batch days in each platform's own scheduler</h4><p>About every 1–2 weeks, the Studio prepares the next batch for each platform and you schedule it in one sitting. Budget about 1–2 minutes per post. It's fully within each platform's rules and nothing can get the account flagged.</p></div>
+    <div><span class="tag t-maybe">B · Phase 4</span><h4>Form-filling helper in your browser</h4><p>A small browser extension shows the batch beside the platform's upload page. One click attaches the video and fills in the caption, title and schedule time. You check it and click Schedule yourself. This cuts each post to about 20 seconds.</p></div>
+    <div><span class="tag t-no">C · Experiment only</span><h4>Unattended browser robot</h4><p>A headless browser logs in as CGW, uploads on a schedule and reports back. It works, but it breaks these platforms' terms, trips bot detection and breaks when a page layout changes.</p></div>
+  </div>
+
+  <h3>A · Batch days</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>Platform</th><th>Native scheduler</th><th>Batch rhythm</th></tr></thead>
+    <tbody>
+      <tr><td>TikTok</td><td><p>TikTok Studio on desktop schedules videos up to 10 days ahead. Photo carousels can't be scheduled there.</p></td><td><p>Weekly, about 3–5 videos</p></td></tr>
+      <tr><td>YouTube Shorts</td><td><p>YouTube Studio: upload several at once and give each a scheduled publish time. It can schedule months ahead.</p></td><td><p>Every 2–4 weeks, up to about 10</p></td></tr>
+      <tr><td>LinkedIn page</td><td><p>Built-in post scheduler on the page admin view</p></td><td><p>Every 2–4 weeks</p></td></tr>
+      <tr><td>X</td><td><p>Built-in scheduler in the web composer</p></td><td><p>Every 2 weeks</p></td></tr>
+      <tr><td>Google Business Profile</td><td><p>Some accounts can schedule posts from the editor and some can't. Check yours. Otherwise, post on the day from the email reminder.</p></td><td><p>Every 2 weeks, mostly class and event posts</p></td></tr>
+    </tbody>
+  </table></div>
+  <p>The Studio's <strong>batch page</strong> for each platform:</p>
+  <ul>
+    <li>Lists the next approved posts for that platform in order, each with its scheduled time already in that platform's time zone and format.</li>
+    <li>Gives you one zip, with files named in posting order, for example <code>03_2026-10-16_1800_laser-spotlight.mp4</code>, plus a text file of the captions. Each card also has copy buttons for the title, caption and hashtags.</li>
+    <li>Has a checkbox on each card: "Scheduled in TikTok". The next morning the Studio asks for the live post URLs, or picks them up automatically where it can, so metrics can be tracked.</li>
+    <li>Only shows approved posts. If something is edited after you've scheduled it, the Studio emails you to update or delete the scheduled post on that platform.</li>
+  </ul>
+  <p>The reminder email arrives on batch day: "TikTok batch ready: 4 videos, about 8 minutes."</p>
+
+  <h3>B · Form-filling helper</h3>
+  <ul>
+    <li>A small Chrome or Firefox extension, built in this repo, that only runs on the platforms' upload pages. It signs in to the Studio with your token and shows the current batch in a side panel.</li>
+    <li>Clicking a post attaches the media file, fills the title, caption, hashtags and schedule date and time, and highlights anything it couldn't fill. <strong>You</strong> check it and press Schedule, and the extension marks the post as scheduled in the Studio.</li>
+    <li>Because a person does every submit at normal speed, it's closer to a password manager filling a form than to a bot. It still depends on page layouts, so expect to fix it a few times a year. Claude Code can update the selectors when a platform changes its page.</li>
+  </ul>
+
+  <h3>C · Unattended robot: how it would work, and why I'd hold off</h3>
+  <ul>
+    <li><strong>How it would work:</strong> a Playwright and Chromium container started only for batch runs (roughly 0.5–1 GB of RAM while running, nothing between runs). It uses saved login sessions that you set up once through a remote-desktop view in your browser. For each post it uploads, fills in the form, schedules, takes before and after screenshots and reads back the post URL. Then it emails a pass or fail report with the screenshots.</li>
+    <li><strong>Terms of service:</strong> TikTok, YouTube, LinkedIn and X all prohibit automated access outside their official APIs. The likely penalty is a locked or banned account, and these are CGW's only accounts, with all their followers.</li>
+    <li><strong>Breakage:</strong> CAPTCHAs, surprise 2FA prompts, "new device" checks and layout changes will make runs fail regularly, so you'd still check every report.</li>
+    <li><strong>If you want to try it:</strong> run it in Phase 4 on one low-stakes channel, keep batch days as the fallback, and never let it handle anything except approved posts. The robot would just be another publisher, so approval works exactly the same.</li>
+  </ul>
+  <p><strong>The real fix is the official route.</strong> Apply for the YouTube API audit, Google Business Profile API access and TikTok's audit early in Phase 2. They're free. Each channel that gets approved moves to automatic posting and drops off the batch list.</p>
 </section>
 
 <section id="light">
-  <div class="eyebrow">05 · $0 and small</div>
+  <div class="eyebrow">06 · $0 and small</div>
   <h2>Cost & RAM</h2>
   <h3>Memory budget</h3>
   <p>Only the web app runs all the time. ffmpeg and Whisper start for a job and exit when it's done, and only one heavy job runs at a time.</p>
@@ -335,17 +383,17 @@ claude "/cgw-session"</pre>
     <thead><tr><th>Need</th><th>Free option</th><th>Watch for</th></tr></thead>
     <tbody>
       <tr><td>AI</td><td><p>Claude Pro plan you already have, through MCP</p></td><td><p>Pro usage limits. Sessions are kept small, as described above.</p></td></tr>
-      <tr><td>Publishing</td><td><p>Free platform APIs, plus assisted posting</p></td><td><p>X would cost money on the API, so it stays assisted.</p></td></tr>
-      <tr><td>Email</td><td><p>SMTP2GO free tier</p></td><td><p>50 people × 2–4 announcements a month is well under the limit.</p></td></tr>
+      <tr><td>Publishing</td><td><p>Free platform APIs, plus batch days</p></td><td><p>X would cost money on the API, so it stays on batch days.</p></td></tr>
+      <tr><td>Website</td><td><p>Hugo on Cloudflare (free tier) plus GitHub</p></td><td><p>Cloudflare's free tier limits builds per month. A few website posts a week is far below it.</p></td></tr>
+      <tr><td>Email</td><td><p>SMTP2GO free tier</p></td><td><p>50 people × 1–2 emails a month, plus reminders to you, is far under the limit.</p></td></tr>
       <tr><td>Metrics</td><td><p>Meta, YouTube and Bluesky APIs, plus Metricool free</p></td><td><p>Metricool free keeps about 30 days, so the Studio keeps its own history.</p></td></tr>
-      <tr><td>Phone alerts</td><td><p>ntfy (self-hosted, about 20 MB) or email</p></td><td><p>None.</p></td></tr>
       <tr><td>Music</td><td><p>Pixabay Music, Free Music Archive (CC-BY), stored locally</p></td><td><p>Credit lines are added to captions automatically where a track's license requires it.</p></td></tr>
     </tbody>
   </table></div>
 </section>
 
 <section id="architecture">
-  <div class="eyebrow">06 · How the pieces fit</div>
+  <div class="eyebrow">07 · How the pieces fit</div>
   <h2>Architecture</h2>
   <div class="diagram">
 <pre class="mermaid">
@@ -357,13 +405,14 @@ flowchart LR
     App --> Media[("/mnt/user/cgw-media")]
   end
   Staff["Staff & members<br/>phone / desktop"] --> Proxy
-  CC["Claude Code or claude.ai<br/>(Pro plan, run by a person)"] -- MCP --> App
+  CC["Claude Code on your PC<br/>(Pro plan, LAN only)"] -- MCP --> App
   GCal["Google Calendar"] -- iCal feed --> App
-  App -- approved --> Direct["Instagram · Facebook · Threads<br/>Bluesky · website feed"]
-  App -- approved pack --> Phone["Your phone<br/>TikTok · Shorts · GBP · LinkedIn · X"]
+  App -- approved --> Direct["Instagram · Facebook<br/>Threads · Bluesky"]
+  App -- commit approved posts --> Repo["Hugo repo on GitHub"] --> CF["Cloudflare build<br/>columbiagadgetworks.org"]
+  App -- batch page + zip --> You["You, on batch day<br/>TikTok · Shorts · GBP · LinkedIn · X"]
   App -- approved announcements --> SMTP2GO
   App <-- contacts · opt-outs · email log --> Dolibarr
-  App -- reminders --> Inbox["Your email / ntfy"]
+  App -- reminders --> Inbox["Your email"]
 </pre>
   </div>
   <div class="tbl"><table>
@@ -379,22 +428,22 @@ flowchart LR
 </section>
 
 <section id="workflow">
-  <div class="eyebrow">07 · Getting media in</div>
+  <div class="eyebrow">08 · Getting media in</div>
   <h2>Media workflow</h2>
   <ol class="steps">
     <li><div><strong>Drop it in</strong><span>Upload several files at once from your phone or desktop, or drop them in a shared Unraid folder. Add one line, for example "Sam's walnut ukulele, first laser-engraved rosette."</span></div></li>
-    <li><div><strong>Consent check</strong><span>Tag the people shown. The Studio checks the photo-release field on each person's Dolibarr contact. Anyone without a release, and any minor, blocks approval until that's resolved.</span></div></li>
+    <li><div><strong>Tag it (optional)</strong><span>Project, event, tool, and the people shown. Tagging people helps search and spotlights. Photo-release tracking is on the future list.</span></div></li>
     <li><div><strong>Prepared automatically, no AI</strong><span>Transcode, thumbnails, key frames, transcript and platform crops. The item goes into the "needs Claude" queue.</span></div></li>
     <li><div><strong>Claude session</strong><span>At the next <code>/cgw-session</code>, Claude looks at the media and writes the description, alt text, pillar, 3 caption styles and a version for each channel, and requests the video cut it wants.</span></div></li>
     <li><div><strong>You edit</strong><span>Swap music, trim, adjust subtitles, rewrite captions, untick channels, change the time slot.</span></div></li>
     <li><div><strong>Approve</strong><span>The Approver reviews every channel version of the final render.</span></div></li>
-    <li><div><strong>Out the door</strong><span>Direct channels publish at their slot. Assisted channels send the pack to your phone at their slot.</span></div></li>
+    <li><div><strong>Out the door</strong><span>Direct channels publish at their time slot. Assisted channels join the next batch for their platform.</span></div></li>
   </ol>
   <p>The media library is searchable by person, tool, project, event or description. It shows where each file has already been used and keeps an "unused gems" list that the planner draws from first.</p>
 </section>
 
 <section id="editing">
-  <div class="eyebrow">08 · Polished, not cringe</div>
+  <div class="eyebrow">09 · Polished, not cringe</div>
   <h2>Editing style</h2>
   <div class="tbl"><table>
     <thead><tr><th>Tool</th><th>What it does</th><th>Guardrail</th></tr></thead>
@@ -418,7 +467,7 @@ flowchart LR
 </section>
 
 <section id="ideas">
-  <div class="eyebrow">09 · What to post</div>
+  <div class="eyebrow">10 · What to post</div>
   <h2>Content pillars</h2>
   <p>These keep the old 3-posts-a-week rhythm (Day 1 Membership, Day 3 Awareness, Day 5 Flex) and the two-month audience rotation.</p>
   <div class="pillars">
@@ -428,7 +477,7 @@ flowchart LR
     <div class="pillar"><h4>Tool spotlight</h4><p>What it does, what members made with it, which class unlocks it.</p><span class="mono">Membership</span></div>
     <div class="pillar"><h4>Repair & reuse</h4><p>Before/after fixes and the right-to-repair angle.</p><span class="mono">Awareness</span></div>
     <div class="pillar"><h4>Shop humor</h4><p>Parts-bin mysteries, failed-print hall of fame, "the laser has opinions."</p><span class="mono">Social only · never email</span></div>
-    <div class="pillar"><h4>People</h4><p>Member, volunteer and instructor spotlights. Release required.</p><span class="mono">Flex · monthly</span></div>
+    <div class="pillar"><h4>People</h4><p>Member, volunteer and instructor spotlights. Ask the person first.</p><span class="mono">Flex · monthly</span></div>
     <div class="pillar"><h4>Quick how-tos & safety</h4><p>30-second tips that people save and share.</p><span class="mono">Awareness</span></div>
     <div class="pillar"><h4>Impact & giving</h4><p>Monthly numbers, donor thanks, Giving Tuesday (Dec 1, 2026), year-end ask.</p><span class="mono">Fundraising · Email-eligible if important</span></div>
     <div class="pillar"><h4>Community & partners</h4><p>Schools, libraries, maker faires, other businesses on The Loop.</p><span class="mono">Awareness</span></div>
@@ -437,20 +486,20 @@ flowchart LR
 </section>
 
 <section id="calendar">
-  <div class="eyebrow">10 · Classes & events</div>
+  <div class="eyebrow">11 · Classes & events</div>
   <h2>Google Calendar</h2>
   <ul>
-    <li><strong>Reading the calendar.</strong> The Studio checks the calendar's private iCal address every 15 minutes. No Google login or OAuth is needed, and it's read-only. You can switch to the Calendar API later if you want write-back.</li>
+    <li><strong>Reading the calendar.</strong> One shared ICS calendar, which you'll provide at setup. The Studio checks it every 15 minutes. No Google login is needed, and it's read-only. The address is stored as a secret.</li>
     <li><strong>A light convention for event descriptions.</strong> Optional lines like <code>Signup: https://…</code>, <code>Price: $25</code>, <code>Promote: no</code> and <code>Email: yes</code>. Claude reads the rest of the description as normal text.</li>
-    <li><strong>New event:</strong> the Studio creates a promo set (announce at −14 days, reminder at −2, day-of story, recap prompt at +1) and, if the event is email-eligible, an Announcement draft. All of these wait in the "needs Claude" queue.</li>
+    <li><strong>New event:</strong> the Studio creates a promo set (announce at −14 days, reminder at −2, day-of story, recap prompt at +1) and adds the event to the next monthly email, unless it says <code>Email: no</code>. All of these wait in the "needs Claude" queue.</li>
     <li><strong>Changed event:</strong> if a date, time or price changes, any approved post about it goes back to review and the approver is told why.</li>
-    <li><strong>Cancelled event:</strong> scheduled posts about it are pulled and the approver is notified. A cancellation announcement is drafted if the event had already been announced by email.</li>
-    <li><strong>Website:</strong> the site can embed the Google Calendar directly. The Studio's feed covers news and projects.</li>
+    <li><strong>Cancelled event:</strong> scheduled posts about it are pulled and you're notified, including any already scheduled on batch-day platforms, which you'll need to delete there. A short cancellation email is drafted only if the event was already emailed and is close enough to matter.</li>
+    <li><strong>Website:</strong> the Studio writes upcoming events into the Hugo repo, so the site's event list and class pages rebuild whenever the calendar changes. See Website (Hugo).</li>
   </ul>
 </section>
 
 <section id="email">
-  <div class="eyebrow">11 · Announcements only</div>
+  <div class="eyebrow">12 · Announcements only</div>
   <h2>Email announcements</h2>
   <div class="rule">
     <span class="eyebrow">What can be emailed</span>
@@ -458,10 +507,10 @@ flowchart LR
     <p>A Membership or Awareness social post can't be added to an email. Shop humor is tagged "social only."</p>
   </div>
   <ul>
-    <li><strong>A separate record type.</strong> An Announcement is created from a calendar event or with "New important announcement" (editors and admins only). It has its own professional template: logo, heading, date and location block, sign-up button and footer.</li>
-    <li><strong>Frequency cap.</strong> By default at most 1 email per week and 4 per month. Several events in the same week are combined into a single "Coming up at CGW" digest. Going over the cap needs an admin override, which is logged.</li>
+    <li><strong>A separate record type.</strong> Announcement items come from calendar events or "New important announcement" (editors and admins only), and they're combined into the monthly email. It has its own professional template: logo, heading, date and location block, sign-up button and footer.</li>
+    <li><strong>Cadence: 1–2 emails a month.</strong> The default is one <strong>"Coming up at CGW"</strong> email at the start of each month, listing that month's classes and events plus any important org news. A second email is allowed only for something time-sensitive, like a new class series or a major fundraiser. A third in one month is blocked unless you override it, and the override is logged.</li>
     <li><strong>Audience.</strong> Recipients are Dolibarr contacts in an "Email announcements" category, about 50 people today. Anyone with <code>no_email</code> set or on the suppression list is always excluded.</li>
-    <li><strong>Approval.</strong> The approver sees the rendered email, the recipient count and a test send. A second approver is optional.</li>
+    <li><strong>Approval.</strong> You see the rendered email, the recipient count and a test copy in your own inbox.</li>
     <li><strong>Sending.</strong> Through the SMTP2GO API, with a <code>List-Unsubscribe</code> header and one-click unsubscribe (RFC 8058).</li>
     <li><strong>Record.</strong> Each send is logged on the contact in Dolibarr as an agenda event, so the email history stays in Dolibarr.</li>
   </ul>
@@ -474,28 +523,29 @@ flowchart LR
 </section>
 
 <section id="nudges">
-  <div class="eyebrow">12 · Telling you what to do</div>
+  <div class="eyebrow">13 · Telling you what to do</div>
   <h2>Reminder emails</h2>
-  <p>Reminders fall into two groups: the Studio asking for a Claude session, and the Studio asking for a person's approval. Each user sets how often they want them, and they can be assigned to different team members.</p>
+  <p>Reminders fall into two groups: the Studio asking for a Claude session, and the Studio asking for a person's approval. All reminders arrive by email, and they all go to you for now.</p>
   <div class="tbl"><table>
     <thead><tr><th>Trigger</th><th>Reminder</th></tr></thead>
     <tbody>
       <tr><td>Claude session due</td><td><p>10 or more items waiting, or the oldest has waited 3 days, or an event promo is due within 5 days. "<strong>Claude session needed: 8 items, about 15 min.</strong> 5 uploads, 2 schedule gaps, 1 event (Intro to Laser, Oct 24). Run <code>/cgw-session</code>."</p></td></tr>
       <tr><td>Schedule running dry</td><td><p>Less than 7 days of approved posts left. Includes which pillars are missing and how much unused media is available.</p></td></tr>
       <tr><td>Approvals waiting</td><td><p>A daily digest after a Claude session submits drafts, linking to the review screen.</p></td></tr>
-      <tr><td>Monthly</td><td><p>"Time for <code>/cgw-review</code>": the metrics review, next audience block, campaign ideas and Ad Grants copy.</p></td></tr>
+      <tr><td>Monthly</td><td><p>"Time for <code>/cgw-review</code>": the metrics review, next audience block, campaign ideas and Ad Grants copy. A few days before the 1st: "The monthly email draft is ready to approve."</p></td></tr>
+      <tr><td>Batch day</td><td><p>"TikTok batch ready: 4 videos, about 8 minutes", with a link to the batch page. One email covers all the platforms that are due.</p></td></tr>
       <tr><td>Calendar change</td><td><p>An approved post or announcement is now out of date and needs another look.</p></td></tr>
-      <tr><td>Assisted post due</td><td><p>A push notification to your phone with the ready-to-post pack.</p></td></tr>
+      <tr><td>Batch follow-up</td><td><p>The next morning: confirm the posts went live, and paste any post URLs the Studio couldn't find.</p></td></tr>
       <tr><td>Something broke</td><td><p>A platform token expired, a publish failed, or the SMTP2GO or Dolibarr connection is down.</p></td></tr>
     </tbody>
   </table></div>
 </section>
 
 <section id="metrics">
-  <div class="eyebrow">13 · What's working</div>
+  <div class="eyebrow">14 · What's working</div>
   <h2>Metrics</h2>
   <ul>
-    <li>Every night the Studio pulls metrics from Meta (Instagram, Facebook, Threads), YouTube and Bluesky, and keeps the history permanently. Assisted posts are tracked by the URL entered at "Mark posted."</li>
+    <li>Every night the Studio pulls metrics from Meta (Instagram, Facebook, Threads), YouTube and Bluesky, and keeps the history permanently. Batch-day posts are tracked by the post URL, which the Studio finds or you paste the next morning.</li>
     <li>Every post is tagged by pillar, format, audience, hook and CTA, which makes "what works" a query.</li>
     <li>UTM tags on every Givebutter and website link show which posts lead to memberships and donations. Hack-night attendance can be logged weekly.</li>
     <li>Metricool free stays as an extra dashboard and for tracking other makerspaces.</li>
@@ -504,10 +554,10 @@ flowchart LR
 </section>
 
 <section id="deploy">
-  <div class="eyebrow">14 · Running it</div>
+  <div class="eyebrow">15 · Running it</div>
   <h2>Deploy & auth</h2>
   <ul>
-    <li><strong>One container,</strong> <code>cgw-studio</code>, with a 1 GB memory cap. Optionally add <code>ntfy</code> (about 20 MB) for phone push.</li>
+    <li><strong>One container,</strong> <code>cgw-studio</code>, with a 1 GB memory cap. The browser robot in Option C would be a separate container that only runs during batch jobs.</li>
     <li>Volumes: <code>/mnt/user/appdata/cgw-studio</code> for the SQLite database and config, and <code>/mnt/user/cgw-media</code> for media. The nightly backup is a SQLite snapshot plus the media share.</li>
     <li>It ships as a docker-compose file and an Unraid Community Apps template.</li>
   </ul>
@@ -519,21 +569,43 @@ flowchart LR
   <h3>What has to be public</h3>
   <ul>
     <li><code>/m/&lt;id&gt;</code>: approved media only. Instagram and Threads fetch media from a URL, so this path must be reachable from the internet.</li>
-    <li><code>/feed/*</code>: the website feeds. <code>/u/&lt;token&gt;</code>: unsubscribe. <code>/hooks/smtp2go</code>: signature-verified webhooks.</li>
-    <li><code>/mcp</code>: only if you use claude.ai or mobile (Phase 3), protected with OAuth. With Claude Code only, it can stay LAN-only.</li>
+    <li><code>/u/&lt;token&gt;</code>: unsubscribe. <code>/hooks/smtp2go</code>: signature-verified webhooks. The website doesn't need a public feed, because content goes through git.</li>
+    <li><code>/mcp</code> is <strong>not</strong> public. The proxy blocks it from outside, and the Studio also rejects MCP requests that don't come from LAN addresses.</li>
+    <li>Everything else, including the web app, goes through your internet-facing proxy auth plus the Studio login, so you can approve posts from your phone anywhere.</li>
   </ul>
-  <p>Secrets live in an <code>.env</code> file on the server and never in the repo: Meta app secret, Bluesky app password, SMTP2GO key, Dolibarr API key, and the Google Calendar private iCal URL.</p>
+  <p>Secrets live in an <code>.env</code> file on the server and never in the repo: Meta app secret, Bluesky app password, SMTP2GO key, Dolibarr API key, a GitHub token limited to the website repo, and the ICS calendar URL.</p>
+</section>
+
+<section id="website">
+  <div class="eyebrow">16 · columbiagadgetworks.org</div>
+  <h2>Website (Hugo)</h2>
+  <p>Hugo builds the site from files, so the simplest way for the Studio to publish is to commit files to the site's repo. Cloudflare rebuilds the site on every push. The website doesn't need a database or an API.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>What</th><th>Where the Studio writes it</th><th>How the site uses it</th></tr></thead>
+    <tbody>
+      <tr><td>News & projects</td><td><p><code>content/news/2026-10-14-laser-spotlight/index.md</code> with the images in the same folder</p></td><td><p>A normal Hugo section: a list page, single pages, and Hugo's built-in RSS feed for free</p></td></tr>
+      <tr><td>Events & classes</td><td><p><code>data/events.json</code>, rewritten whenever the ICS calendar changes</p></td><td><p>An upcoming-events list on the homepage and a page for each class (good Ad Grants landing pages)</p></td></tr>
+      <tr><td>Class descriptions</td><td><p><code>content/classes/intro-to-laser.md</code>, written by Claude and approved by you</p></td><td><p>The evergreen page that each calendar event links to</p></td></tr>
+      <tr><td>Impact numbers</td><td><p><code>data/impact.json</code></p></td><td><p>A "this month at CGW" strip</p></td></tr>
+    </tbody>
+  </table></div>
+  <ul>
+    <li><strong>Every commit is an approved post.</strong> The Studio's GitHub token can only write to the website repo, and the commit message names the post and who approved it.</li>
+    <li><strong>Commits go to <code>main</code> directly,</strong> or to a <code>studio</code> branch if you'd rather check the Cloudflare preview first.</li>
+    <li><strong>Images</strong> are resized to web sizes (WebP plus a fallback) before the commit, so the repo stays small. Videos aren't committed. The site embeds the YouTube Short once it's live, or shows a poster image linking to Instagram.</li>
+    <li><strong>The site's own templates,</strong> such as the news list, event list and class pages, are a one-time Hugo job that Claude Code can do in the website repo.</li>
+  </ul>
 </section>
 
 <section id="extras">
-  <div class="eyebrow">15 · Free wins</div>
+  <div class="eyebrow">17 · Free wins</div>
   <h2>Other ideas</h2>
   <div class="tbl"><table>
     <thead><tr><th>Idea</th><th>Why it's worth it</th></tr></thead>
     <tbody>
-      <tr><td>"Show us what you made" QR</td><td><p>A poster by the door and on big tools links to a phone upload page with consent built in. This could become the main source of member-project content.</p></td></tr>
+      <tr><td>"Show us what you made" QR</td><td><p>A poster by the door and on the big tools links to a phone upload page. This could become the main source of member-project content.</p></td></tr>
       <tr><td>Hack-night batch mode</td><td><p>One person walks the shop for 10 minutes, uploads everything with short voice notes, and the Studio transcribes the notes as descriptions. One Claude session the next day turns the batch into a week of posts.</p></td></tr>
-      <tr><td>Ad Grants landing pages</td><td><p>Ad Grants requires useful landing pages. The website's class pages, built from Google Calendar plus a reusable class description, can serve that purpose.</p></td></tr>
+      <tr><td>Ad Grants landing pages</td><td><p>Ad Grants requires useful landing pages. The Hugo class pages, built from the calendar plus an evergreen description, serve that purpose.</p></td></tr>
       <tr><td>Automatic alt text</td><td><p>Written in each Claude session. It helps screen-reader users and search.</p></td></tr>
       <tr><td>Monthly impact numbers</td><td><p>Hack-night counts, classes taught and new members feed a "this month at CGW" post. These are the important organizational news that's allowed into email, and grant reports can reuse them.</p></td></tr>
       <tr><td>Grant-ready archive</td><td><p>Tag media by program, such as youth classes or repair cafés. When a grant asks for evidence, pull a folder of approved photos and the metrics that go with them.</p></td></tr>
@@ -542,52 +614,62 @@ flowchart LR
   </table></div>
 </section>
 
+<section id="future">
+  <div class="eyebrow">18 · Later</div>
+  <h2>Future features</h2>
+  <ul>
+    <li><strong>Photo-release tracking</strong> on Dolibarr contacts, blocking approval when someone without a release (or a minor) is tagged.</li>
+    <li><strong>claude.ai and phone sessions</strong> through a public, OAuth-protected MCP connector.</li>
+    <li><strong>More approvers</strong> and an optional second approval for email.</li>
+    <li><strong>Phone push alerts</strong> (ntfy) as well as email.</li>
+    <li><strong>Unattended browser robot</strong> (Option C), only if the official API routes stay closed and you accept the account risk.</li>
+    <li><strong>Discord submissions</strong> from a members' show-and-tell channel.</li>
+  </ul>
+</section>
+
 <section id="roadmap">
-  <div class="eyebrow">16 · Build order</div>
+  <div class="eyebrow">19 · Build order</div>
   <h2>Roadmap</h2>
   <div class="phase"><div class="when">Phase 1<small>~3 weekends</small></div><ul>
     <li>Container, proxy and local auth, roles, audit log, SQLite</li>
-    <li>Upload, media library, thumbnails, consent tags</li>
+    <li>Upload, media library, thumbnails, tags</li>
     <li>Posts with per-channel versions, approval state machine</li>
-    <li>MCP server with the queue and draft tools, <code>/cgw-session</code> and <code>/cgw-inbox</code> commands, "Claude session needed" reminder email</li>
-    <li>Publishing to Bluesky, plus the ready-to-post pack for every other channel, so the Studio is useful from week one</li>
+    <li>LAN-only MCP server, <code>/cgw-session</code> and <code>/cgw-inbox</code>, "Claude session needed" reminder email</li>
+    <li>Bluesky publishing, plus batch pages and zips for every other channel, so the Studio is useful from week one</li>
   </ul></div>
   <div class="phase"><div class="when">Phase 2<small>~3 weekends</small></div><ul>
     <li>Meta developer app: direct publishing to Instagram, Facebook and Threads, plus nightly metrics</li>
-    <li>Google Calendar sync, event promo sets, <code>/cgw-event</code></li>
-    <li>Website RSS/JSON feed</li>
+    <li>ICS calendar sync, event promo sets, <code>/cgw-event</code></li>
+    <li>Hugo publishing: news commits, <code>data/events.json</code>, class pages, and the site templates in the website repo</li>
     <li>Gap detection, <code>/cgw-plan</code>, hook bank import</li>
-    <li>Apply for the YouTube API audit and Google Business Profile API access, since both take weeks</li>
+    <li>Apply for the YouTube audit, Google Business Profile API access and TikTok audit</li>
   </ul></div>
   <div class="phase"><div class="when">Phase 3<small>~3 weekends</small></div><ul>
     <li>Video pipeline: whisper.cpp subtitles, cuts, crops, music, brand templates</li>
-    <li>Email Announcements: Dolibarr category, template, frequency cap, one-click unsubscribe, logging to Dolibarr</li>
-    <li>claude.ai and mobile connector (OAuth on <code>/mcp</code>)</li>
+    <li>Monthly "Coming up at CGW" email: Dolibarr category, template, 1–2 a month cap, one-click unsubscribe, logging to Dolibarr</li>
+    <li>Metrics dashboard and <code>/cgw-review</code></li>
   </ul></div>
   <div class="phase"><div class="when">Phase 4<small>ongoing</small></div><ul>
-    <li>Switch YouTube Shorts and Google Business Profile to direct publishing once access is granted</li>
-    <li>Metrics dashboard, <code>/cgw-review</code>, Ad Grants copy export</li>
-    <li>Photo-release consent field on Dolibarr contacts, QR upload page</li>
+    <li>Form-filling browser helper (Option B) for TikTok Studio and YouTube Studio first</li>
+    <li>Switch each channel to direct publishing as its API access is granted</li>
+    <li>Ad Grants copy export, QR upload page</li>
+    <li>Optional: browser-robot experiment on one low-stakes channel</li>
   </ul></div>
 </section>
 
 <section id="questions">
-  <div class="eyebrow">17 · Need your input</div>
+  <div class="eyebrow">20 · Need your input</div>
   <h2>Open questions</h2>
   <ol class="qs">
-    <li>Where will Claude sessions run? <span>Claude Code on someone's computer (Phase 1, can stay LAN-only), or claude.ai and the phone app too (needs <code>/mcp</code> reachable from the internet with OAuth)? Is the Pro plan one person's, or shared?</span></li>
-    <li>Is the Unraid server reachable from the internet through your reverse proxy? <span>Instagram and Threads must fetch approved media from a public URL. If the server is LAN-only, a Cloudflare Tunnel limited to <code>/m/</code> and <code>/feed/</code> is a free option.</span></li>
-    <li>What runs the website? <span>WordPress, Squarespace, a static site or something else. This determines how the feed and class pages connect.</span></li>
-    <li>Google Calendar setup: <span>One calendar or several (classes vs. events)? Are you OK adding the optional <code>Signup:</code> / <code>Email: yes</code> lines to event descriptions?</span></li>
-    <li>Email cap: <span>Is "at most 1 a week, 4 a month, combined into a digest" right for the 50 people? Should every class get an email, or only some of them?</span></li>
-    <li>Who approves? <span>One person or a small group? Should email need two approvers?</span></li>
-    <li>Photo releases: <span>Do you collect them today, and should they be stored as a field on Dolibarr contacts?</span></li>
-    <li>TikTok and YouTube: <span>Are you OK with the assisted phone step for these, at least until the API audits are done?</span></li>
-    <li>Phone alerts: <span>Email only, or should we add ntfy for push notifications when an assisted post is due?</span></li>
+    <li>Where is the Hugo site's repo? <span>Is it under the ColumbiaGadgetWorks GitHub org? Should Studio commits go straight to <code>main</code>, or to a branch you merge after checking the Cloudflare preview?</span></li>
+    <li>Batch days: <span>Is weekly for TikTok and every two weeks for YouTube, LinkedIn, X and Google Business Profile OK? And which weekday suits you?</span></li>
+    <li>The browser robot: <span>Do you want the Phase 4 experiment at all, knowing the account risk, or should we stop at the form-filling helper?</span></li>
+    <li>Monthly email: <span>Which day of the month should it go out? Does it need a name, like "Coming up at CGW"?</span></li>
+    <li>Do all of these accounts exist yet? <span>TikTok business, a YouTube channel, a Google Business Profile, a LinkedIn page, Threads and Bluesky. Some may need creating before Phase 1 testing.</span></li>
   </ol>
 </section>
 
 </main>
 </div>
 
-<footer>CGW Content Studio · build plan v0.3 · github.com/ColumbiaGadgetWorks/social-media · Platform limits and API rules change often; each "Direct" channel is checked with a test post before it's built.</footer>
+<footer>CGW Content Studio · build plan v0.4 · github.com/ColumbiaGadgetWorks/social-media · Platform limits and API rules change often; each "Direct" channel is checked with a test post before it's built.</footer>
