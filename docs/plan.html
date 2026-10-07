@@ -1,0 +1,498 @@
+<title>CGW Content Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: workshop build sheet. One reading column, sticky parts-list TOC on wide screens, mono "tags" for state. */
+:root {
+  --bg: #f6f4f3;
+  --surface: #ffffff;
+  --fg: #23201f;
+  --muted: #6b6362;
+  --line: #ddd5d4;
+  --accent: #a4596f;        /* CGW dusty pink, deepened for contrast */
+  --accent-soft: #f3e4e8;
+  --steel: #3f5a6b;
+  --steel-soft: #e3ebf0;
+  --ok: #2f7a4d; --ok-soft: #e2f1e8;
+  --warn: #9a6a12; --warn-soft: #f8edd6;
+  --stop: #a63a2b; --stop-soft: #f8e2de;
+  --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #171516; --surface: #211e1f; --fg: #ece6e5; --muted: #a59c9b; --line: #3a3435;
+  --accent: #e39ab0; --accent-soft: #3b2a30; --steel: #9cc0d4; --steel-soft: #23313a;
+  --ok: #7ccf9c; --ok-soft: #1f3328; --warn: #e6bb6a; --warn-soft: #3a2f1a; --stop: #f09484; --stop-soft: #3d2420;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #171516; --surface: #211e1f; --fg: #ece6e5; --muted: #a59c9b; --line: #3a3435;
+  --accent: #e39ab0; --accent-soft: #3b2a30; --steel: #9cc0d4; --steel-soft: #23313a;
+  --ok: #7ccf9c; --ok-soft: #1f3328; --warn: #e6bb6a; --warn-soft: #3a2f1a; --stop: #f09484; --stop-soft: #3d2420;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 16px/1.6 var(--body); padding-inline: 16px; padding-block: 0 64px; }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 48px; }
+@media (max-width: 860px) { .wrap { grid-template-columns: minmax(0,1fr); gap: 0; } nav.toc { display: none; } }
+
+header.top { max-width: 1120px; margin: 0 auto; padding-block: 48px 32px; border-bottom: 2px solid var(--fg); margin-bottom: 40px; }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+h1 { font: 800 clamp(44px, 8vw, 84px)/.92 var(--display); letter-spacing: .01em; text-transform: uppercase; margin: 12px 0 16px; text-wrap: balance; }
+.lede { font-size: 19px; max-width: 64ch; color: var(--fg); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 20px; font: 13px/1.4 var(--mono); color: var(--muted); }
+
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; font: 13px/1.5 var(--mono); }
+nav.toc ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; counter-reset: s; }
+nav.toc li { counter-increment: s; }
+nav.toc a { color: var(--muted); text-decoration: none; display: block; padding: 2px 0 2px 10px; border-left: 2px solid var(--line); }
+nav.toc a::before { content: counter(s, decimal-leading-zero) "  "; color: var(--accent); }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-left-color: var(--accent); outline: none; }
+
+main { min-width: 0; }
+section { padding-block: 8px 40px; border-bottom: 1px solid var(--line); margin-bottom: 40px; }
+section:last-child { border-bottom: 0; }
+h2 { font: 800 clamp(30px, 4.5vw, 40px)/1 var(--display); text-transform: uppercase; letter-spacing: .015em; margin: 6px 0 18px; text-wrap: balance; }
+h3 { font: 600 18px/1.3 var(--body); margin: 28px 0 8px; }
+p, li { max-width: 68ch; }
+p { margin: 0 0 14px; }
+ul, ol { padding-left: 20px; margin: 0 0 14px; }
+li { margin-bottom: 6px; }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+strong { font-weight: 600; }
+code, .mono { font-family: var(--mono); font-size: .88em; }
+code { background: var(--steel-soft); color: var(--fg); padding: 1px 5px; border-radius: 3px; }
+
+.rule { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 20px; margin: 18px 0; }
+.rule .eyebrow { display: block; margin-bottom: 6px; }
+.rule p { margin: 0; font-size: 17px; }
+.rule p + p { margin-top: 8px; font-size: 15px; color: var(--muted); }
+
+.verdict { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin: 18px 0; }
+.verdict > div { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+.verdict h4 { margin: 0; font: 600 16px/1.3 var(--body); }
+.verdict p { margin: 0; font-size: 14.5px; color: var(--muted); }
+
+.tag { display: inline-block; font: 500 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 4px 7px; border-radius: 3px; white-space: nowrap; }
+.t-yes { background: var(--ok-soft); color: var(--ok); }
+.t-maybe { background: var(--warn-soft); color: var(--warn); }
+.t-no { background: var(--stop-soft); color: var(--stop); }
+.t-info { background: var(--steel-soft); color: var(--steel); }
+
+.tbl { overflow-x: auto; margin: 16px 0 20px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+th { font: 500 11.5px/1.3 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 600; white-space: nowrap; }
+td p { margin: 0; }
+
+.diagram { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px; margin: 16px 0 20px; overflow-x: auto; }
+pre.mermaid { margin: 0; background: transparent; font-family: var(--body); }
+
+.steps { list-style: none; padding: 0; counter-reset: st; display: grid; gap: 12px; }
+.steps > li { counter-increment: st; display: grid; grid-template-columns: 44px minmax(0,1fr); gap: 12px; max-width: none; margin: 0; }
+.steps > li::before { content: counter(st); font: 800 30px/1 var(--display); color: var(--accent); text-align: right; padding-top: 2px; }
+.steps > li > div { min-width: 0; }
+.steps strong { display: block; }
+.steps span { color: var(--muted); font-size: 15px; }
+
+.pillars { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 16px 0; }
+.pillar { min-width: 0; border-top: 3px solid var(--steel); background: var(--surface); padding: 14px 16px; border-radius: 0 0 6px 6px; }
+.pillar h4 { margin: 0 0 4px; font: 600 15.5px/1.3 var(--body); }
+.pillar p { margin: 0; font-size: 14px; color: var(--muted); }
+.pillar .mono { display: block; margin-top: 8px; color: var(--steel); font-size: 12px; }
+
+.mock { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; margin: 16px 0; font-size: 14.5px; }
+.mock .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; padding: 8px 0; border-bottom: 1px dashed var(--line); }
+.mock .row:last-child { border-bottom: 0; }
+.mock .who { font: 500 12px/1.4 var(--mono); color: var(--muted); min-width: 92px; }
+.mock .txt { flex: 1 1 260px; min-width: 0; }
+pre.code { background: var(--steel-soft); color: var(--fg); font: 13px/1.55 var(--mono); padding: 14px 16px; border-radius: 6px; overflow-x: auto; margin: 12px 0 18px; }
+
+.phase { display: grid; grid-template-columns: 120px minmax(0,1fr); gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.phase:last-child { border-bottom: 0; }
+.phase .when { font: 800 22px/1 var(--display); text-transform: uppercase; color: var(--accent); }
+.phase .when small { display: block; font: 12px/1.4 var(--mono); color: var(--muted); text-transform: none; margin-top: 6px; }
+.phase ul { margin: 0; }
+@media (max-width: 520px) { .phase { grid-template-columns: minmax(0,1fr); gap: 6px; } }
+
+.qs { display: grid; gap: 10px; counter-reset: q; padding: 0; list-style: none; }
+.qs li { counter-increment: q; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px 16px 12px 52px; position: relative; max-width: none; margin: 0; }
+.qs li::before { content: "Q" counter(q); position: absolute; left: 14px; top: 12px; font: 500 13px/1.6 var(--mono); color: var(--accent); }
+.qs li span { color: var(--muted); font-size: 14.5px; display: block; }
+
+footer { max-width: 1120px; margin: 0 auto; font: 12.5px/1.6 var(--mono); color: var(--muted); padding-top: 16px; border-top: 1px solid var(--line); }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+html { scroll-behavior: smooth; }
+</style>
+
+<header class="top">
+  <div class="eyebrow">Columbia Gadget Works · Build plan v0.1</div>
+  <h1>CGW Content Studio</h1>
+  <p class="lede">A self-hosted app for turning members' photos and videos, classes, events and shop humor into polished social posts and email blasts. AI drafts everything. A person approves every post before it goes anywhere.</p>
+  <div class="meta"><span>Runs on: Unraid · Docker</span><span>Publishes via: Metricool, SMTP2GO, RSS</span><span>Contacts live in: Dolibarr</span><span>Drafted Oct 7, 2026</span></div>
+</header>
+
+<div class="wrap">
+<nav class="toc" aria-label="Sections">
+  <ol>
+    <li><a href="#decisions">Key decisions</a></li>
+    <li><a href="#approval">Approval rule</a></li>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#workflow">Media workflow</a></li>
+    <li><a href="#editing">Editing style</a></li>
+    <li><a href="#ideas">Content pillars</a></li>
+    <li><a href="#claude">Claude Code</a></li>
+    <li><a href="#metricool">Metricool</a></li>
+    <li><a href="#email">Email blasts</a></li>
+    <li><a href="#rss">RSS & website</a></li>
+    <li><a href="#nudges">Reminder emails</a></li>
+    <li><a href="#metrics">Metrics</a></li>
+    <li><a href="#deploy">Deploy & auth</a></li>
+    <li><a href="#roadmap">Roadmap</a></li>
+    <li><a href="#questions">Open questions</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="decisions">
+  <div class="eyebrow">01 · The short version</div>
+  <h2>Key decisions</h2>
+  <div class="verdict">
+    <div><span class="tag t-yes">Recommended</span><h4>A standalone Docker app, connected to Dolibarr</h4><p>Not a Dolibarr plugin. Video editing, AI calls and background jobs need Python and ffmpeg, which a PHP module can't run well. Dolibarr remains the source of truth for contacts, consent and the email record.</p></div>
+    <div><span class="tag t-yes">Recommended</span><h4>Metricool publishes and measures</h4><p>The Studio creates and approves posts. Metricool posts them to Instagram and Facebook and supplies the analytics. Without Metricool's API plan, you can still use CSV bulk import.</p></div>
+    <div><span class="tag t-yes">Recommended</span><h4>An RSS feed for the website</h4><p>Approved posts marked "website" go into a public feed and an events calendar file. Your site picks them up, so you write each update once.</p></div>
+    <div><span class="tag t-yes">Recommended</span><h4>Claude Code through an MCP server</h4><p>The Studio provides tools that let Claude read media, draft posts, propose schedules and analyze metrics from a chat. No tool can approve a post.</p></div>
+    <div><span class="tag t-maybe">Later, optional</span><h4>A small Dolibarr module</h4><p>Only if the Dolibarr REST API can't reliably update unsubscribe flags or log emails on your version. It would add a hook, not the whole app.</p></div>
+    <div><span class="tag t-no">Not recommended</span><h4>Posting directly to Meta APIs</h4><p>App review, token renewal and per-platform quirks are a lot of upkeep for a volunteer-run org. Metricool already handles this.</p></div>
+  </div>
+</section>
+
+<section id="approval">
+  <div class="eyebrow">02 · Non-negotiable</div>
+  <h2>The approval rule</h2>
+  <div class="rule">
+    <span class="eyebrow">Hard rule, enforced in the database</span>
+    <p>Nothing leaves the Studio until a signed-in person with the Approver role has approved that exact version.</p>
+    <p>"Leaves" covers Metricool (API or CSV), email sends, the RSS feed and the website. AI, API tokens and the Claude Code connection can create and edit drafts. None of them can approve.</p>
+  </div>
+  <h3>How it's enforced</h3>
+  <ul>
+    <li><strong>Every post moves through a state machine.</strong> Only the Approve button in the web UI, clicked by a user with the Approver role, can move a post into <code>approved</code>.</li>
+    <li><strong>Approval covers one exact version.</strong> The approval stores a hash of the caption, media files and platform settings. Any later edit, even fixing a typo, sends the post back to review.</li>
+    <li><strong>Every exporter checks before it sends.</strong> The Metricool push, the CSV export, the email sender and the RSS feed each check the approval record and hash. A failed check blocks the send and is logged.</li>
+    <li><strong>The approval screen shows the final output.</strong> Approvers see the rendered video with music, the cropped images for each platform, the full caption with hashtags and the scheduled time. They never approve a summary.</li>
+    <li><strong>Email blasts need extra checks.</strong> Email can't be unsent, so a blast also shows the recipient count and the list filter and sends a test copy. You can optionally require a second approver.</li>
+    <li><strong>Every change is logged.</strong> Who generated, edited, approved, rejected and exported each post, and when.</li>
+  </ul>
+  <div class="diagram">
+<pre class="mermaid">
+stateDiagram-v2
+  [*] --> Idea: AI or person suggests
+  Idea --> Draft: media attached / text written
+  Draft --> InReview: submit
+  InReview --> Draft: changes requested
+  InReview --> Approved: Approver clicks Approve (human only)
+  Approved --> Draft: any edit (approval cleared)
+  Approved --> Queued: export to Metricool / schedule email
+  Queued --> Published: confirmed live
+  InReview --> Rejected
+  Published --> [*]
+</pre>
+  </div>
+</section>
+
+<section id="architecture">
+  <div class="eyebrow">03 · How the pieces fit</div>
+  <h2>Architecture</h2>
+  <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+  subgraph Unraid["Unraid server (Docker)"]
+    direction TB
+    Proxy["Reverse proxy + proxy auth"] --> App["Studio web app<br/>(FastAPI + web UI)"]
+    App --> DB[("Postgres")]
+    App --> Q[["Job queue (Redis)"]]
+    Q --> W["Media worker<br/>ffmpeg · Pillow · Whisper"]
+    W --> Media[("/mnt/user/cgw-media")]
+    App --> MCP["MCP endpoint<br/>for Claude Code"]
+    App --> Feed["Public RSS / iCal"]
+  end
+  Members["Members & staff<br/>(phone / desktop)"] --> Proxy
+  CC["Claude Code chat"] --> MCP
+  App <--> Claude["Claude API<br/>captions · vision · ideas"]
+  App -- approved posts --> Metricool
+  Metricool -- metrics --> App
+  App <-- contacts, unsubscribes, email log --> Dolibarr
+  App -- approved blasts --> SMTP2GO
+  SMTP2GO -- bounces, complaints --> App
+  Feed --> Website["columbiagadgetworks.org"]
+</pre>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Piece</th><th>Choice</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Backend</td><td><p>Python 3.12, FastAPI, SQLAlchemy</p></td><td><p>Python has the best media and AI libraries, and volunteers are likely to know it.</p></td></tr>
+      <tr><td>Front end</td><td><p>Server-rendered pages with HTMX, plus small JS components for the cropper, timeline and caption preview</p></td><td><p>No separate front-end build to maintain. Installs on phones as a PWA for quick uploads.</p></td></tr>
+      <tr><td>Database</td><td><p>Postgres</p></td><td><p>Supports multiple users, a reliable audit log and full-text search over captions and media descriptions.</p></td></tr>
+      <tr><td>Jobs</td><td><p>Redis + RQ (or Arq) worker container</p></td><td><p>Transcoding and AI calls run in the background so uploads stay fast.</p></td></tr>
+      <tr><td>Media</td><td><p>ffmpeg, Pillow, faster-whisper (local), and an optional on-CPU smart crop</p></td><td><p>Subtitles are transcribed locally, so member audio isn't sent to a third party.</p></td></tr>
+      <tr><td>AI</td><td><p>Claude API (current Sonnet for routine drafts, Opus for monthly strategy)</p></td><td><p>Vision reads photos and video frames. Prompts include the CGW brand guide. Expect roughly $5–25 a month at this volume.</p></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="workflow">
+  <div class="eyebrow">04 · Getting media in</div>
+  <h2>Media workflow</h2>
+  <p>This needs to be quick enough that a member will do it from their phone at the end of hack night.</p>
+  <ol class="steps">
+    <li><div><strong>Drop it in</strong><span>Upload several files at once from your phone or desktop, or have the Studio watch a shared Unraid folder. Add one line, for example "Sam's walnut ukulele, first laser-engraved rosette," and pick a project or event if you like.</span></div></li>
+    <li><div><strong>Consent check</strong><span>Tag the people shown. The Studio checks their photo release, stored on their Dolibarr contact. Anyone without a release, and any minor, is flagged, and the post can't be approved until that's resolved or they're blurred or cropped out.</span></div></li>
+    <li><div><strong>The Studio analyzes it</strong><span>It transcodes, pulls key frames and transcribes any speech. Claude describes what's shown (tools, materials, techniques) and suggests a content pillar and post types.</span></div></li>
+    <li><div><strong>Variants are generated</strong><span>Platform crops (9:16 reel, 4:5 feed, 1:1), a short cut with subtitles, three caption styles and a hashtag set. Each comes with a short explanation of why it was suggested.</span></div></li>
+    <li><div><strong>You edit</strong><span>Swap music, trim clips, adjust the subtitles, rewrite captions by hand or with "make it shorter / warmer / less salesy," and change the schedule slot.</span></div></li>
+    <li><div><strong>Submit and approve</strong><span>The Approver sees the final render. Approve, request changes with a comment, or reject.</span></div></li>
+    <li><div><strong>Out the door</strong><span>The post goes to Metricool for its time slot, to the RSS feed if marked for the website, and to the next newsletter digest if marked for email.</span></div></li>
+  </ol>
+  <h3>The media library</h3>
+  <ul>
+    <li>Search everything by person, tool, project, event or AI description, for example "all CNC router clips from 2026."</li>
+    <li>Each file shows where it has been used, so the same photo isn't posted twice in a month.</li>
+    <li>An "unused gems" view lists strong media that hasn't been posted yet. The idea engine draws from it.</li>
+  </ul>
+</section>
+
+<section id="editing">
+  <div class="eyebrow">05 · Polished, not cringe</div>
+  <h2>Editing style</h2>
+  <p>The AI edits within a brand kit you define once. It doesn't invent a new style for each post.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Tool</th><th>What it does</th><th>Guardrail</th></tr></thead>
+    <tbody>
+      <tr><td>Brand kit</td><td><p>Logo bug, 2 fonts, 4 colors, lower-third style, end card with membership/hack-night CTA</p></td><td><p>Every template uses only the kit. No random fonts.</p></td></tr>
+      <tr><td>Subtitles</td><td><p>Burned-in captions from Whisper, styled for readability, word-level timing</p></td><td><p>No bouncing emoji captions. One clean style, editable text.</p></td></tr>
+      <tr><td>Smart cuts</td><td><p>Picks the best 6–30 s from long clips (motion, faces, the "reveal" moment), cuts on beat</p></td><td><p>Always shows the source in/out points so a human can adjust.</p></td></tr>
+      <tr><td>Music</td><td><p>Picks from a <em>local, licensed</em> track library tagged by mood and tempo, ducked under speech</p></td><td><p>Only tracks with a recorded license. For Instagram trending audio, the post is marked "add trending sound in app."</p></td></tr>
+      <tr><td>Before / after</td><td><p>Split-screen or wipe templates for repairs and restorations</p></td><td><p>Works with two photos or a timelapse.</p></td></tr>
+      <tr><td>Meme mode</td><td><p>Shop-humor captions on member photos, using a few classic formats rendered in the brand fonts</p></td><td><p>Off by default per post. Never targets a person. Flagged for a second look in review.</p></td></tr>
+      <tr><td>Event graphics</td><td><p>Class and event cards built from the event record: title, date, price, sign-up link, QR code</p></td><td><p>Facts come from the record. The AI isn't allowed to change dates or prices.</p></td></tr>
+    </tbody>
+  </table></div>
+  <h3>Caption voice guide (included in every prompt)</h3>
+  <ul>
+    <li>Write like a member talking to a friend about the shop: specific, warm and dry rather than hyped.</li>
+    <li>Name the real thing, such as "1/4" baltic birch on the Epilog," not "an amazing creation."</li>
+    <li>Use at most one emoji, and only when it adds meaning. Avoid "game-changer," "unleash," "level up" and rocket emojis.</li>
+    <li>Follow the Hook → Value → CTA structure from your old spreadsheet. Facebook gets the full Givebutter link, Instagram says "link in bio," and both use 3–5 targeted hashtags.</li>
+    <li>Always generate three styles, <span class="mono">straight</span>, <span class="mono">warm</span> and <span class="mono">playful</span>, so the human picks the tone.</li>
+  </ul>
+</section>
+
+<section id="ideas">
+  <div class="eyebrow">06 · What to post</div>
+  <h2>Content pillars & idea engine</h2>
+  <p>These carry over the 3-a-week rhythm from the old system (Day 1 Membership, Day 3 Awareness, Day 5 Flex) and the two-month audience rotation. Each pillar becomes a tag the Studio schedules and measures.</p>
+  <div class="pillars">
+    <div class="pillar"><h4>Member projects</h4><p>Build photos, progress reels, "what's on the bench this week," finished-piece reveals.</p><span class="mono">Awareness · Flex</span></div>
+    <div class="pillar"><h4>Classes & events</h4><p>Announcements 2 weeks out, a reminder 2 days out, "tonight!" stories, recap carousels.</p><span class="mono">Flex · auto from calendar</span></div>
+    <div class="pillar"><h4>Thursday Open Hack Night</h4><p>Weekly reminder plus Friday photo dump. The single strongest "come try us" hook.</p><span class="mono">Recurring</span></div>
+    <div class="pillar"><h4>Tool spotlight</h4><p>"Tool of the week": what it does, what members made with it, which class unlocks it.</p><span class="mono">Membership</span></div>
+    <div class="pillar"><h4>Repair & reuse</h4><p>Before/after fixes, right-to-repair angle, fits the Mar–Apr audience block.</p><span class="mono">Awareness</span></div>
+    <div class="pillar"><h4>Shop humor</h4><p>Parts-bin mysteries, "the laser has opinions," failed-print hall of fame, member-submitted memes.</p><span class="mono">Awareness · shareable</span></div>
+    <div class="pillar"><h4>People</h4><p>Member, volunteer and instructor spotlights. Requires a release.</p><span class="mono">Flex · monthly</span></div>
+    <div class="pillar"><h4>Quick how-tos & safety</h4><p>30-second tips: kerf, bed leveling, push sticks. Builds credibility, gets saved.</p><span class="mono">Awareness</span></div>
+    <div class="pillar"><h4>Impact & giving</h4><p>Numbers (hours open, classes taught), donor/sponsor thanks, Giving Tuesday (Dec 1, 2026), year-end ask.</p><span class="mono">Fundraising</span></div>
+    <div class="pillar"><h4>Community & partners</h4><p>Local schools, libraries, maker faires, collabs with other Loop businesses.</p><span class="mono">Awareness</span></div>
+  </div>
+  <h3>How ideas get generated</h3>
+  <ul>
+    <li><strong>Gap filling.</strong> Each week the engine compares the next 3 weeks' queue with the cadence and suggests ideas for the empty slots, using unposted media first.</li>
+    <li><strong>Calendar triggers.</strong> When an event or class is added, the Studio creates a promo set (announce, reminder, day-of, recap) as <em>ideas</em> waiting for media and approval.</li>
+    <li><strong>Seasonal hooks.</strong> Back-to-school, Halloween builds, holiday gift memberships, Giving Tuesday, the CGW anniversary.</li>
+    <li><strong>Learning from results.</strong> Monthly, Claude reviews which pillars, formats and hooks performed and adjusts the mix, with its reasoning written out for you.</li>
+    <li><strong>Hook bank.</strong> The hooks, value statements and CTAs from the old spreadsheet are imported, tracked as used or unused, and ranked by performance.</li>
+  </ul>
+</section>
+
+<section id="claude">
+  <div class="eyebrow">07 · Chat with the Studio</div>
+  <h2>Claude Code integration</h2>
+  <p>The Studio exposes an <strong>MCP server</strong> at <code>/mcp</code>. Each user creates a personal token in settings, then connects Claude Code once:</p>
+<pre class="code">claude mcp add --transport http cgw-studio https://social.columbiagadgetworks.org/mcp \
+  --header "Authorization: Bearer &lt;your-studio-token&gt;"</pre>
+  <div class="tbl"><table>
+    <thead><tr><th>Tool</th><th>What Claude can do with it</th></tr></thead>
+    <tbody>
+      <tr><td>search_media</td><td><p>Find clips and photos by description, person, tool or event</p></td></tr>
+      <tr><td>create_draft</td><td><p>Create a post draft with captions, media and a proposed slot. It always starts as Draft.</p></td></tr>
+      <tr><td>revise_draft</td><td><p>Edit captions or swap media. Any edit clears an existing approval.</p></td></tr>
+      <tr><td>render_variant</td><td><p>Ask the worker for a crop, cut, subtitles or music bed</p></td></tr>
+      <tr><td>get_queue / get_calendar</td><td><p>See what's scheduled and where the gaps are</p></td></tr>
+      <tr><td>get_metrics</td><td><p>Per-post and per-pillar performance from Metricool, plus email open and click rates</p></td></tr>
+      <tr><td>propose_schedule</td><td><p>Suggest a 2–4 week plan, created as ideas and drafts</p></td></tr>
+      <tr><td>draft_campaign</td><td><p>Write a multi-post plus email campaign, for example a spring class series</p></td></tr>
+      <tr><td><s>approve_post</s></td><td><p><span class="tag t-no">Does not exist</span> Approval is only possible in the web UI.</p></td></tr>
+    </tbody>
+  </table></div>
+  <div class="mock" aria-label="Example conversation">
+    <div class="row"><span class="who">you</span><span class="txt">What did well last month? Then fill the gaps in the next two weeks.</span></div>
+    <div class="row"><span class="who">claude</span><span class="txt">Hack-night reels averaged 3.1× the reach of single photos; tool spotlights drove most Givebutter clicks. Oct 15 and Oct 20 are empty. I drafted a laser-cutter spotlight from Tuesday's clips and a "parts bin mystery" post. Both are waiting in the review queue.</span></div>
+  </div>
+  <p>The repo also gets a <code>CLAUDE.md</code> describing the brand voice, pillars and approval rule, so Claude Code sessions working <em>on the codebase</em> follow the same rules.</p>
+</section>
+
+<section id="metricool">
+  <div class="eyebrow">08 · Publishing</div>
+  <h2>Metricool</h2>
+  <p>Metricool does the publishing and analytics. The integration depends on your plan:</p>
+  <div class="verdict">
+    <div><span class="tag t-info">Any plan</span><h4>CSV bulk import</h4><p>The Studio exports approved posts in Metricool's bulk-upload format, the same idea as the old "METRICOOL EXPORT" sheet. You import the file in Metricool. Media is linked from the Studio's public media URLs. Metrics are imported from Metricool's CSV reports.</p></div>
+    <div><span class="tag t-yes">Advanced plan</span><h4>API, fully connected</h4><p>Approved posts are pushed to the Metricool planner automatically, and per-post metrics come back nightly. Third-party sources put API access on the Advanced tier, about €43/mo. Check Metricool's pricing before relying on this.</p></div>
+  </div>
+  <p>Build the CSV path first because it works on day one. Put the API behind the same "publisher" interface so switching to it is a settings change.</p>
+</section>
+
+<section id="email">
+  <div class="eyebrow">09 · Newsletters & announcements</div>
+  <h2>Email blasts</h2>
+  <p>Dolibarr owns <strong>who</strong> gets email and keeps the record. SMTP2GO handles delivery. The Studio handles writing, approval and sending.</p>
+  <ol class="steps">
+    <li><div><strong>Write</strong><span>Pick a template (monthly newsletter, class announcement, event, fundraising ask). Approved social posts can be added as newsletter blocks. Claude drafts the subject lines and body.</span></div></li>
+    <li><div><strong>Pick the audience</strong><span>Recipients come from Dolibarr contacts, filtered by category or tag (members, class alumni, donors, newsletter list). Anyone with <code>no_email</code> set or on the suppression list is always excluded.</span></div></li>
+    <li><div><strong>Approve</strong><span>The approver sees the rendered email, the recipient count and a test send. A second approver is optional.</span></div></li>
+    <li><div><strong>Send</strong><span>Emails go through the SMTP2GO API in throttled batches. Each one includes a <code>List-Unsubscribe</code> header and one-click unsubscribe (RFC 8058), which Gmail and Yahoo require for bulk senders.</span></div></li>
+    <li><div><strong>Record</strong><span>Each send is logged to the contact in Dolibarr as an agenda event, so the email history stays in Dolibarr.</span></div></li>
+  </ol>
+  <h3>Unsubscribes, with Dolibarr as the source of truth</h3>
+  <ul>
+    <li>The unsubscribe link goes to a Studio page that needs no login. It sets the contact's opt-out in Dolibarr through the REST API and adds the address to a local suppression list as a fallback.</li>
+    <li>Dolibarr's built-in Emailing module already marks contacts <code>no_email</code> through its <code>__UNSUBSCRIBE__</code> link. The Studio reads the same flag, so unsubscribing from either system has the same effect.</li>
+    <li>SMTP2GO webhooks for bounces, spam complaints and unsubscribes write back to Dolibarr and suppress the address.</li>
+    <li>Optional: a preferences page where people choose newsletter, classes and events, or fundraising, mapped to Dolibarr categories.</li>
+    <li><span class="tag t-maybe">Verify</span> Check that your Dolibarr version's REST API can write the contact opt-out field. If it can't, the small Dolibarr module listed in Key decisions adds an endpoint for it.</li>
+  </ul>
+</section>
+
+<section id="rss">
+  <div class="eyebrow">10 · The website</div>
+  <h2>RSS & website feed</h2>
+  <p>Yes, it's worth doing and it's inexpensive. Posts marked "website" at approval time appear in:</p>
+  <ul>
+    <li><code>/feed/news.xml</code>: RSS with images, for a "Latest from the shop" block on the website. WordPress, Squarespace and most builders can show an RSS feed.</li>
+    <li><code>/feed/events.ics</code>: an events and classes calendar people can subscribe to, which the website can embed.</li>
+    <li><code>/feed/projects.json</code>: a member project gallery feed, if the site wants a showcase page.</li>
+  </ul>
+  <p>The feeds include only approved, website-flagged items, and media is served at web-friendly sizes. Use <code>/feed/*</code> as the only public, unauthenticated path besides the unsubscribe page and the public media used in posts.</p>
+</section>
+
+<section id="nudges">
+  <div class="eyebrow">11 · Keeping it going</div>
+  <h2>Reminder emails</h2>
+  <p>These are internal emails to you and the content team, sent through SMTP2GO.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Trigger</th><th>Email</th></tr></thead>
+    <tbody>
+      <tr><td>Queue below 7 days</td><td><p>"The schedule runs dry on Oct 21." Includes 5 ready ideas and links to unused media.</p></td></tr>
+      <tr><td>Drafts waiting</td><td><p>Daily digest when posts are waiting for review, with one-click links to the review screen.</p></td></tr>
+      <tr><td>Event with no promo</td><td><p>A class 14 days out has no approved announcement.</p></td></tr>
+      <tr><td>Weekly (Monday)</td><td><p>Last week's results in three lines, plus this week's slots.</p></td></tr>
+      <tr><td>Monthly</td><td><p>Campaign brainstorm: Claude's strategy notes, the next audience block and 3 campaign concepts to review.</p></td></tr>
+      <tr><td>Export failure</td><td><p>Metricool or SMTP2GO rejected something.</p></td></tr>
+    </tbody>
+  </table></div>
+  <p>Each user sets how often they receive these, and every reminder links straight to the relevant screen.</p>
+</section>
+
+<section id="metrics">
+  <div class="eyebrow">12 · What's working</div>
+  <h2>Metrics & analysis</h2>
+  <ul>
+    <li><strong>Every post is tagged</strong> with pillar, format, audience block, hook, CTA, music, and whether people are shown. That makes "what works" a query instead of a guess.</li>
+    <li><strong>Outcomes, not just likes.</strong> UTM tags on every Givebutter and website link show which posts drive membership sign-ups and donations. Hack-night attendance can be logged as a weekly number.</li>
+    <li><strong>A dashboard</strong> showing reach and engagement rate by pillar and format, the best posting times, hook rankings, and email open and click rates by list.</li>
+    <li><strong>Claude's monthly read</strong> is a written analysis with recommended changes. It's saved, so you can see whether last month's advice helped.</li>
+  </ul>
+</section>
+
+<section id="deploy">
+  <div class="eyebrow">13 · Running it</div>
+  <h2>Deploy & auth on Unraid</h2>
+  <h3>Containers (one docker-compose stack, plus an Unraid template)</h3>
+  <ul>
+    <li><code>studio-web</code>: the FastAPI app and UI</li>
+    <li><code>studio-worker</code>: ffmpeg, Whisper and AI jobs. Give it most of the CPU and an optional GPU.</li>
+    <li><code>postgres</code> and <code>redis</code></li>
+    <li>Volumes: <code>/mnt/user/appdata/cgw-studio</code> for the database and config, and <code>/mnt/user/cgw-media</code> for originals and renders on the array</li>
+    <li>Nightly <code>pg_dump</code> to the array, included in your existing Unraid backup</li>
+  </ul>
+  <h3>Login: two layers, as you described</h3>
+  <ol>
+    <li><strong>Reverse-proxy auth</strong> (Authelia, Authentik or similar in front). The Studio trusts the <code>Remote-User</code> header <em>only</em> from the proxy's IP.</li>
+    <li><strong>Studio login</strong> with a local account and password (passkey optional). It's matched to the proxy user, and roles are assigned here.</li>
+  </ol>
+  <div class="tbl"><table>
+    <thead><tr><th>Role</th><th>Can do</th></tr></thead>
+    <tbody>
+      <tr><td>Contributor</td><td><p>Upload media, tag projects, write and edit drafts, submit for review</p></td></tr>
+      <tr><td>Editor</td><td><p>Everything above, plus manage the schedule, campaigns, brand kit and music library</p></td></tr>
+      <tr><td>Approver</td><td><p>Approve or reject posts and email blasts</p></td></tr>
+      <tr><td>Admin</td><td><p>Users, integrations, API tokens, settings</p></td></tr>
+    </tbody>
+  </table></div>
+  <p>Public paths that bypass proxy auth: <code>/feed/*</code>, <code>/u/&lt;token&gt;</code> (unsubscribe), <code>/m/&lt;id&gt;</code> (published media for Metricool), and SMTP2GO webhooks, which are verified by signature. MCP tokens are per-user, can be revoked, and can't approve anything.</p>
+  <p>Secrets are stored in environment variables or an <code>.env</code> file on the server and never in the repo: Claude API key, Metricool token, SMTP2GO key, Dolibarr API key.</p>
+</section>
+
+<section id="roadmap">
+  <div class="eyebrow">14 · Build order</div>
+  <h2>Roadmap</h2>
+  <div class="phase"><div class="when">Phase 1<small>~3–4 weekends</small></div><ul>
+    <li>Docker stack, auth (proxy plus local), roles, audit log</li>
+    <li>Upload, media library, transcoding, thumbnails</li>
+    <li>Post drafts, AI captions (3 styles), brand voice guide, approval state machine</li>
+    <li>Metricool CSV export of approved posts</li>
+    <li>Import the old spreadsheet's hooks, CTAs, hashtags and idea bank</li>
+  </ul></div>
+  <div class="phase"><div class="when">Phase 2<small>~3 weekends</small></div><ul>
+    <li>Video pipeline: crops, smart cuts, Whisper subtitles, music library with ducking, brand templates</li>
+    <li>Events and classes calendar with auto-generated promo ideas</li>
+    <li>RSS, iCal and JSON feeds for the website</li>
+    <li>Reminder emails through SMTP2GO</li>
+  </ul></div>
+  <div class="phase"><div class="when">Phase 3<small>~2–3 weekends</small></div><ul>
+    <li>MCP server for Claude Code</li>
+    <li>Metrics import, dashboard, monthly Claude analysis</li>
+    <li>Idea engine with gap filling and an unused-media pool</li>
+  </ul></div>
+  <div class="phase"><div class="when">Phase 4<small>~3 weekends</small></div><ul>
+    <li>Email blasts: Dolibarr lists, templates, one-click unsubscribe, SMTP2GO webhooks, logging to Dolibarr</li>
+    <li>Photo-release consent tracking on Dolibarr contacts</li>
+    <li>Metricool API push (if on Advanced)</li>
+    <li>Optional Dolibarr module, if the API is missing anything</li>
+  </ul></div>
+</section>
+
+<section id="questions">
+  <div class="eyebrow">15 · Need your input</div>
+  <h2>Open questions</h2>
+  <ol class="qs">
+    <li>Which Metricool plan are you on? <span>This decides whether we start with CSV import or the API.</span></li>
+    <li>Where do classes and events live today? <span>Dolibarr's Agenda or Events module, the website, Givebutter, or somewhere else? The Studio should read them from one place rather than have them typed in twice.</span></li>
+    <li>Which Dolibarr version, and how are newsletter contacts organized? <span>Categories, tags or a custom field. This also confirms whether the REST API can set the opt-out flag.</span></li>
+    <li>What runs the website? <span>This determines the best way to show the RSS feed on it.</span></li>
+    <li>Who approves? <span>One person, or a small group? Should email blasts require two approvers?</span></li>
+    <li>Do you keep photo releases today? <span>On paper, a waiver form, or a Dolibarr field? Minors at classes are the main concern.</span></li>
+    <li>Which platforms? <span>Instagram and Facebook for now. Do you want TikTok, YouTube Shorts or LinkedIn (good for sponsors) later? Metricool supports all of them.</span></li>
+    <li>GPU on the Unraid box? <span>Not required. With one, subtitles and renders are much faster.</span></li>
+  </ol>
+</section>
+
+</main>
+</div>
+
+<footer>CGW Content Studio · build plan v0.1 · github.com/ColumbiaGadgetWorks/social-media · Sources reviewed: the old social media spreadsheet and generator script (cadence, audiences, hooks, CTAs, idea bank).</footer>
