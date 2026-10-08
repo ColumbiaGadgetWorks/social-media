@@ -87,9 +87,12 @@ def test_extension_fills_upload_page(live_studio, tmp_path):
     (ext / "manifest.json").write_text(json.dumps(manifest))
     with playwright.sync_playwright() as p:
         try:
+            # Extensions need the full Chromium build, not Playwright's default headless shell.
+            browser = ({"executable_path": os.environ["CGW_TEST_CHROMIUM"]} if os.environ.get("CGW_TEST_CHROMIUM")
+                       else {"channel": "chromium"})
             ctx = p.chromium.launch_persistent_context(
-                str(tmp_path / "profile"), executable_path=os.environ.get("CGW_TEST_CHROMIUM") or None, headless=True,
-                args=[f"--disable-extensions-except={ext}", f"--load-extension={ext}", "--headless=new"])
+                str(tmp_path / "profile"), headless=True, **browser,
+                args=[f"--disable-extensions-except={ext}", f"--load-extension={ext}"])
         except Exception as exc:  # no browser installed here
             pytest.skip(f"Chromium not available: {exc}")
         ctx.route("https://www.tiktok.com/**", lambda r: r.fulfill(status=200, content_type="text/html", body=MOCK_PAGE))

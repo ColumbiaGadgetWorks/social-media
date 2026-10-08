@@ -177,6 +177,9 @@ def transcribe(asset: MediaAsset, model=None) -> None:
     if not settings().whisper_model:
         asset.transcript_status = "off"
         return
+    if not _probe_has_audio(media_mod.abs_path(asset.path)):
+        asset.transcript_status = "no audio"
+        return
     try:
         with tempfile.TemporaryDirectory() as tmp:
             wav = Path(tmp) / "audio.wav"
