@@ -103,7 +103,8 @@ becomes the note. The bot only reads the channel (it checks every minute), so no
 reachable from the internet.
 
 1. https://discord.com/developers/applications → **New Application** (e.g. "CGW Studio").
-2. **Bot** tab: **Reset Token**, copy it (that's `STUDIO_DISCORD_BOT_TOKEN`). Turn on **Message
+2. **General Information**: set the app icon to `docs/img/discord-bot-icon.png` (also on the
+   **Bot** tab as its avatar). **Bot** tab: **Reset Token**, copy it (that's `STUDIO_DISCORD_BOT_TOKEN`). Turn on **Message
    Content Intent** (free for bots in fewer than 100 servers; without it the bot sees empty
    messages). Leave "Public Bot" off.
 3. **OAuth2 → URL Generator**: scope **bot**; permissions **View Channels**, **Read Message
