@@ -2,7 +2,7 @@
 {% block title %}{{ a.subject }} · CGW Studio{% endblock %}
 {% block content %}
 <div class="row spread"><h1>{{ a.subject or 'Email' }}</h1>
-  <span class="tag {{ {'needs_claude': 'pink', 'in_review': 'warn', 'approved': 'ok', 'sent': 'ok', 'failed': 'stop'}.get(a.status, '') }}">{{ a.status | replace('_', ' ') }}</span></div>
+  <span class="tag {{ {'needs_claude': 'accent', 'in_review': 'warn', 'approved': 'ok', 'sent': 'ok', 'failed': 'stop'}.get(a.status, '') }}">{{ a.status | replace('_', ' ') }}</span></div>
 {% if a.review_comment %}<div class="problems"><strong>Reviewer:</strong> {{ a.review_comment }}</div>{% endif %}
 {% if a.last_error %}<div class="problems">Last send error: {{ a.last_error }}</div>{% endif %}
 <div class="two">

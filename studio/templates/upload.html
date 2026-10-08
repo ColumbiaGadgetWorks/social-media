@@ -9,6 +9,13 @@
   <label for="note">One line about it</label>
   <input type="text" id="note" name="note" placeholder="Sam's walnut ukulele, first laser-engraved rosette">
   <p class="small muted">Who made it, what it is, anything worth mentioning. Claude writes the captions from this and the media.</p>
+  {% if recent_events %}
+  <label for="event_id">Taken at (optional)</label>
+  <select id="event_id" name="event_id"><option value="">Not at an event</option>
+    {% for e in recent_events %}<option value="{{ e.id }}"{% if loop.first and e.is_now %} selected{% endif %}>{{ e.title }}, {{ e.label }}</option>{% endfor %}
+  </select>
+  <p class="small muted" style="margin:4px 0 0">Photos from Open Hack Night and other weekly events go into next week's post.</p>
+  {% endif %}
   <label for="pillar">Kind of post (optional)</label>
   <select id="pillar" name="pillar"><option value="">Let Claude suggest</option>
     {% for key, label in PILLARS %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>

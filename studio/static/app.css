@@ -1,25 +1,28 @@
-/* CGW Content Studio. Workshop-plain: graphite text, CGW dusty pink accent, steel for info. */
+/* CGW Content Studio. Matches columbiagadgetworks.org: warm paper, ink text, CGW orange accent, steel for info. */
 :root {
-  --bg: #f6f4f3; --surface: #fff; --fg: #23201f; --muted: #6b6362; --line: #ddd5d4;
-  --accent: #a4596f; --accent-soft: #f3e4e8; --steel: #3f5a6b; --steel-soft: #e3ebf0;
-  --ok: #2f7a4d; --ok-soft: #e2f1e8; --warn: #9a6a12; --warn-soft: #f8edd6; --stop: #a63a2b; --stop-soft: #f8e2de;
-  --bar: #a4596f; /* chart fill; validated against the light surface */
+  --bg: #faf7f2; --surface: #fff; --fg: #1f1f23; --muted: #5e5a55; --line: #e5ded4;
+  --accent: #bf4d28; --accent-ink: #983c1e; --on-accent: #fff; --accent-soft: #f6e3da;
+  --steel: #3f5a6b; --steel-soft: #e3ebf0;
+  --ok: #2f7a4b; --on-ok: #fff; --ok-soft: #e2f1e8; --warn: #9c6a00; --warn-soft: #f8edd6; --stop: #a63a2b; --stop-soft: #f8e2de;
+  --bar: #bf4d28; /* chart fill; validated against the light surface */
   --font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) { :root {
-  --bg: #171516; --surface: #211e1f; --fg: #ece6e5; --muted: #a59c9b; --line: #3a3435;
-  --accent: #e39ab0; --accent-soft: #3b2a30; --steel: #9cc0d4; --steel-soft: #23313a;
-  --ok: #7ccf9c; --ok-soft: #1f3328; --warn: #e6bb6a; --warn-soft: #3a2f1a; --stop: #f09484; --stop-soft: #3d2420;
-  --bar: #d26a92; /* deeper than --accent: the pale accent fails the mark lightness/chroma checks on dark */
+  --bg: #171412; --surface: #211c19; --fg: #f2ece6; --muted: #a99f97; --line: #3b322c;
+  --accent: #f08a5d; --accent-ink: #f08a5d; --on-accent: #1a120e; --accent-soft: #3a2519;
+  --steel: #9cc0d4; --steel-soft: #23313a;
+  --ok: #7ccf9c; --on-ok: #10261a; --ok-soft: #1f3328; --warn: #e6bb6a; --warn-soft: #3a2f1a; --stop: #f09484; --stop-soft: #3d2420;
+  --bar: #e0693a; /* deeper than --accent so bars pass the mark lightness/chroma checks on dark */
   color-scheme: dark; } }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.55 var(--font); }
-a { color: var(--accent); }
+a { color: var(--accent-ink); }
 header.bar { background: var(--surface); border-bottom: 1px solid var(--line); padding: 0 16px; position: sticky; top: 0; z-index: 5; }
 header.bar .in { max-width: 1100px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; min-height: 52px; }
 .brand { font-weight: 700; letter-spacing: .02em; text-decoration: none; color: var(--fg); margin-right: 8px; }
 .brand span { color: var(--accent); }
+.brand img { width: 22px; height: 22px; vertical-align: -5px; margin-right: 6px; }
 nav.main { display: flex; flex-wrap: wrap; gap: 2px 14px; flex: 1; }
 nav.main a { color: var(--muted); text-decoration: none; padding: 14px 0; border-bottom: 2px solid transparent; }
 nav.main a.on, nav.main a:hover { color: var(--fg); border-bottom-color: var(--accent); }
@@ -42,7 +45,7 @@ h3 { font-size: 16px; margin: 0 0 6px; }
 .tag.ok { background: var(--ok-soft); color: var(--ok); }
 .tag.warn { background: var(--warn-soft); color: var(--warn); }
 .tag.stop { background: var(--stop-soft); color: var(--stop); }
-.tag.pink { background: var(--accent-soft); color: var(--accent); }
+.tag.accent { background: var(--accent-soft); color: var(--accent-ink); }
 .flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; background: var(--ok-soft); color: var(--ok); }
 .flash.error { background: var(--stop-soft); color: var(--stop); }
 .problems { background: var(--warn-soft); color: var(--warn); border-radius: 6px; padding: 10px 14px; margin: 10px 0; }
@@ -53,10 +56,10 @@ input[type=text], input[type=password], input[type=email], input[type=url], inpu
 textarea { min-height: 110px; resize: vertical; }
 input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 button, .btn { font: 600 14px/1 var(--font); border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 5px; padding: 9px 14px; cursor: pointer; text-decoration: none; display: inline-block; }
-button.primary, .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-button.approve { background: var(--ok); border-color: var(--ok); color: #fff; }
+button.primary, .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+button.approve { background: var(--ok); border-color: var(--ok); color: var(--on-ok); }
 button.danger { color: var(--stop); }
-button.link { border: 0; background: none; color: var(--accent); padding: 0; font-weight: 500; }
+button.link { border: 0; background: none; color: var(--accent-ink); padding: 0; font-weight: 500; }
 .thumbs { display: flex; flex-wrap: wrap; gap: 8px; }
 .thumbs img, .thumb { width: 120px; height: 120px; object-fit: cover; border-radius: 4px; background: var(--line); display: block; }
 .media-tile { position: relative; }

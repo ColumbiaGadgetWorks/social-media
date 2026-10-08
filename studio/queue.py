@@ -14,8 +14,13 @@ from .timeutil import local_now, to_local
 
 
 def claude_queue(db: Session) -> list[Post]:
-    """Posts waiting for a Claude session, oldest first."""
-    return db.scalars(select(Post).where(Post.status == "needs_claude").order_by(Post.created_at)).all()
+    """Posts waiting for a Claude session, most urgent first.
+
+    Event posts count from the day they should go out; uploads from two days after they came in. So
+    fresh uploads aren't stuck behind event posts that aren't due for weeks.
+    """
+    items = db.scalars(select(Post).where(Post.status == "needs_claude").order_by(Post.created_at)).all()
+    return sorted(items, key=lambda p: p.target_at or p.created_at + timedelta(days=2))
 
 
 def queue_summary(db: Session) -> dict:

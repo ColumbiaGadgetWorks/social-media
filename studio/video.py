@@ -30,7 +30,7 @@ SHAPES = {"9:16": (1080, 1920), "4:5": (1080, 1350), "1:1": (1080, 1080)}
 MAX_SECONDS = 180  # Shorts, Reels and TikTok all take up to 3 minutes
 END_CARD_SECONDS = 2.0
 DEFAULT_END_CARD = "Open Hack Night · Thursdays 6 PM · Free"
-ACCENT, PAPER = (164, 89, 111), (255, 255, 255)
+ACCENT, PAPER = (191, 77, 40), (255, 255, 255)
 LOGO = Path(__file__).parent / "static" / "logo.png"
 SUBTITLE_FONT = "DejaVu Sans"
 

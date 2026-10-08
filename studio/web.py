@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections import defaultdict
+from datetime import timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request
@@ -21,6 +22,7 @@ from . import posts as post_svc
 from . import public_media as public_media_mod
 from . import video as video_mod
 from .auth import check_csrf, check_proxy, client_ip, current_user, require
+from .config import ip_in
 from .db import get_db, settings, utcnow
 from .dolibarr import Dolibarr
 from .media import MediaError, abs_path, human_size, store_upload
@@ -31,6 +33,7 @@ from .models import (
     ApiToken,
     AuditLog,
     ChannelVersion,
+    Event,
     MediaAsset,
     MusicTrack,
     Post,
@@ -47,7 +50,7 @@ from .security import (
     hash_password,
     verify_password,
 )
-from .timeutil import fmt_local, input_value, local_now, parse_local
+from .timeutil import fmt_local, input_value, local_now, parse_local, to_local
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -179,10 +182,33 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 # --- media ---------------------------------------------------------------
 
 
+def taken_at_choices(db: Session, asset: MediaAsset) -> list[dict]:
+    """Events around when a file was uploaded (5 weeks back to a day after), for "Taken at"."""
+    rows = db.scalars(select(Event).where(Event.start >= asset.created_at - timedelta(days=35),
+                                          Event.start <= asset.created_at + timedelta(days=1))
+                      .order_by(Event.start.desc())).all()
+    if asset.event_id and asset.event_id not in {e.id for e in rows} and (current := db.get(Event, asset.event_id)):
+        rows.append(current)
+    return [{"id": e.id, "title": e.title, "label": f"{to_local(e.start):%a %b} {to_local(e.start).day}"} for e in rows]
+
+
+def recent_events(db: Session) -> list[dict]:
+    """Events from the last 8 days up to tonight, newest first, for the upload form's "Taken at"."""
+    now = utcnow()
+    rows = db.scalars(select(Event).where(Event.start >= now - timedelta(days=8), Event.start <= now + timedelta(hours=12),
+                                          Event.status == "active").order_by(Event.start.desc())).all()
+    out = []
+    for e in rows:
+        start = to_local(e.start)
+        is_now = e.start - timedelta(hours=2) <= now <= (e.end or e.start) + timedelta(hours=6)
+        out.append({"id": e.id, "title": e.title, "label": "now" if is_now else f"{start:%a %b} {start.day}", "is_now": is_now})
+    return out
+
+
 @router.get("/upload")
 def upload_page(request: Request, db: Session = Depends(get_db)):
     user = require(request, db)
-    return render(request, "upload.html", user)
+    return render(request, "upload.html", user, recent_events=recent_events(db))
 
 
 @router.post("/upload")
@@ -194,11 +220,14 @@ async def upload(request: Request, db: Session = Depends(get_db)):
         flash(request, "Choose at least one photo or video.", "error")
         return back("/upload")
     note = str(form.get("note", "")).strip()
+    taken_at = db.get(Event, int(form["event_id"])) if str(form.get("event_id", "")).isdigit() else None
     actor = Actor("user", user)
     stored = []
     try:
         for f in files:
             asset = store_upload(db, f.file, f.filename, f.content_type, user.id, note)
+            if taken_at is not None:
+                asset.event_id = taken_at.id
             stored.append(asset)
             audit(db, actor, "media_uploaded", "media", asset.id, name=asset.original_name, size=asset.size_bytes)
     except MediaError as exc:
@@ -263,7 +292,8 @@ def media_detail(request: Request, media_id: int, db: Session = Depends(get_db))
     post_id = request.query_params.get("post")
     return render(request, "media_detail.html", user, asset=asset, used_in=used_in, jobs=jobs, tracks=tracks,
                   srt=video_mod.to_srt(asset.transcript or []), for_post=int(post_id) if post_id and post_id.isdigit() else None,
-                  shapes=list(video_mod.SHAPES), default_end_card=video_mod.DEFAULT_END_CARD)
+                  shapes=list(video_mod.SHAPES), default_end_card=video_mod.DEFAULT_END_CARD,
+                  taken_events=taken_at_choices(db, asset))
 
 
 @router.post("/media/{media_id}/render")
@@ -353,7 +383,9 @@ async def media_update(request: Request, media_id: int, db: Session = Depends(ge
     asset.alt_text = str(form.get("alt_text", "")).strip()
     asset.tags = [t.strip() for t in str(form.get("tags", "")).split(",") if t.strip()]
     asset.note = str(form.get("note", "")).strip()
-    audit(db, Actor("user", user), "media_edited", "media", asset.id)
+    event_id = str(form.get("event_id", ""))
+    asset.event_id = int(event_id) if event_id.isdigit() and db.get(Event, int(event_id)) else None
+    audit(db, Actor("user", user), "media_edited", "media", asset.id, event_id=asset.event_id)
     flash(request, "Saved.")
     return back(f"/media/{media_id}")
 
@@ -792,6 +824,19 @@ def batch_download(request: Request, channel: str, db: Session = Depends(get_db)
 # --- settings and users --------------------------------------------------
 
 
+def lan_address(request: Request) -> str | None:
+    """The Studio's LAN address for Claude Code and the extension: STUDIO_LAN_URL, or the address in
+    the browser bar when this page was opened directly on the LAN (Docker hides the host IP and port)."""
+    s = settings()
+    if s.lan_url:
+        return s.lan_url
+    ip = client_ip(request)
+    proxied = ip_in(ip, s.trusted_proxies) or "x-forwarded-for" in request.headers or "forwarded" in request.headers
+    if proxied or not ip_in(ip, s.mcp_allowed_networks):
+        return None
+    return f"{request.url.scheme}://{request.url.netloc}"
+
+
 @router.get("/settings")
 def settings_page(request: Request, db: Session = Depends(get_db)):
     user = require(request, db)
@@ -810,8 +855,9 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
         ("Email list (Dolibarr)", s.dolibarr_configured, "STUDIO_DOLIBARR_URL, STUDIO_DOLIBARR_API_KEY"),
         ("Subtitles (Whisper)", bool(s.whisper_model), f"STUDIO_WHISPER_MODEL={s.whisper_model or '(off)'}"),
     ]
+    lan = lan_address(request)
     return render(request, "settings.html", user, tokens=tokens, new_token=new_token, new_scope=new_scope,
-                  base_url=s.base_url,
+                  base_url=s.base_url, lan=lan, lan_configured=bool(s.lan_url),
                   connections=connections, media_base=s.media_base_url, is_admin=user.has_role("admin"))
 
 

@@ -99,6 +99,8 @@ class MediaAsset(Base):
     # Renders: where it came from, and any credit line its music license requires.
     source_media_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     credit: Mapped[str] = mapped_column(String(300), default="")
+    # The calendar event it was taken at ("Taken at" on upload), so weekly promos can find fresh photos.
+    event_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     processing_status: Mapped[str] = mapped_column(String(16), default="pending")
     processing_error: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -119,6 +121,7 @@ class Post(Base):
     event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id"), nullable=True)
     purpose: Mapped[str] = mapped_column(String(16), default="")
     target_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    angle: Mapped[str] = mapped_column(String(32), default="")  # weekly event promos rotate angles
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -227,6 +230,9 @@ class Event(Base):
     location: Mapped[str] = mapped_column(String(300), default="")
     url: Mapped[str] = mapped_column(String(512), default="")
     recurring: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Weekly series key (title|weekday|time). The site's feed lists each Hack Night separately,
+    # so the Studio spots the pattern itself.
+    series: Mapped[str] = mapped_column(String(320), default="")
     promote: Mapped[bool] = mapped_column(Boolean, default=True)
     email_ok: Mapped[bool] = mapped_column(Boolean, default=True)  # "Email: no" in the description turns it off
     status: Mapped[str] = mapped_column(String(16), default="active")  # active | cancelled

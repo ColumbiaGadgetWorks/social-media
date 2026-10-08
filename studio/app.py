@@ -67,6 +67,10 @@ def create_app(settings: Settings | None = None):
     web.include_router(router)
     web.include_router(ext_api.router)
 
+    @web.get("/favicon.ico", include_in_schema=False)
+    async def _favicon():
+        return RedirectResponse("/static/favicon.ico", status_code=301)
+
     @web.exception_handler(LoginRequired)
     async def _login(request: Request, _exc):
         return RedirectResponse("/login", status_code=303)

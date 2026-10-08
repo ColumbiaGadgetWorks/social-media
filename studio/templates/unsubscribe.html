@@ -1,6 +1,17 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Unsubscribe · Columbia Gadget Works</title><link rel="stylesheet" href="/static/app.css"></head>
+<title>Unsubscribe · Columbia Gadget Works</title><meta name="theme-color" content="#bf4d28">
+<!-- Inline styles: only /u/* is public at the proxy, so /static isn't reachable for recipients. -->
+<style>
+:root { --bg:#faf7f2; --surface:#fff; --fg:#1f1f23; --muted:#5e5a55; --line:#e5ded4; --accent:#bf4d28; --on-accent:#fff; }
+@media (prefers-color-scheme: dark) { :root { --bg:#171412; --surface:#211c19; --fg:#f2ece6; --muted:#a99f97; --line:#3b322c; --accent:#f08a5d; --on-accent:#1a120e; color-scheme: dark; } }
+body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { padding:24px 16px; }
+.card { background:var(--surface); border:1px solid var(--line); border-top:4px solid var(--accent); border-radius:6px; padding:20px; }
+h1 { font-size:22px; margin:0 0 12px; }
+.small { font-size:14px; } .muted { color:var(--muted); } .mono { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:14px; }
+button { font-weight:600; font-size:15px; font-family:inherit; background:var(--accent); color:var(--on-accent); border:1px solid var(--accent); border-radius:5px; padding:10px 16px; cursor:pointer; }
+</style></head>
 <body><main><div class="card" style="max-width:460px;margin:40px auto">
 <h1>Columbia Gadget Works</h1>
 {% if not email %}

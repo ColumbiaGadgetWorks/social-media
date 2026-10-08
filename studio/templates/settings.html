@@ -7,17 +7,39 @@
   <div class="card">
     <h2 style="margin-top:0">Claude Code and the browser extension</h2>
     <p class="small">Create a token for each. Claude Code tokens only work for drafting over MCP; extension tokens only work for batch day. Both connect only on the local network.</p>
+    {% set addr = lan or 'http://<unraid-lan-ip>:<port>' %}
     {% if new_token %}
       <p><strong>Your new token. Copy it now; it won't be shown again.</strong></p>
       <div class="token" id="new-token">{{ new_token }}</div>
       <p><button type="button" data-copy="new-token">Copy token</button></p>
+      {% if not lan %}
+      <p class="problems small">Replace <span class="mono">&lt;unraid-lan-ip&gt;:&lt;port&gt;</span> with your server's LAN IP and the host port you mapped. Set <span class="mono">STUDIO_LAN_URL</span> (LAN address in the Unraid template) and this page fills it in for you.</p>
+      {% endif %}
       {% if new_scope == 'extension' %}
-      <p class="small">Paste it into the CGW Studio extension's options, with the Studio's LAN address (for example <span class="mono">http://192.168.1.50:8080</span>).</p>
+      <p class="small">In the CGW Studio extension's options, enter this address and the token:</p>
+      <pre class="caption mono" id="ext-addr">{{ addr }}</pre>
+      <p><button type="button" data-copy="ext-addr">Copy address</button></p>
       {% else %}
-      <pre class="caption mono" id="mcp-cmd">claude mcp add --transport http cgw-studio http://&lt;unraid-lan-ip&gt;:8080/mcp --header "Authorization: Bearer {{ new_token }}"</pre>
+      <h3 style="margin-top:14px">Claude Code, or the Code tab in Claude Desktop</h3>
+      <p class="small">Run once in a terminal (PowerShell, Terminal) on the computer you use Claude on. Then open the <span class="mono">social-media</span> repo folder and type <span class="mono">/cgw-session</span>.</p>
+      <pre class="caption mono" id="mcp-cmd">claude mcp add --transport http --scope user cgw-studio {{ addr }}/mcp --header "Authorization: Bearer {{ new_token }}"</pre>
       <p><button type="button" data-copy="mcp-cmd">Copy command</button></p>
+      <h3 style="margin-top:14px">Claude Desktop chat</h3>
+      <p class="small">Needs Node.js. In Claude Desktop: Settings → Developer → Edit Config, add this (merge it into an existing <span class="mono">mcpServers</span> if there is one), then quit and reopen Claude. Start with: "Start a CGW Studio session: call get_guidelines, then work through the queue."</p>
+      <pre class="caption mono" id="desktop-cfg">{
+  "mcpServers": {
+    "cgw-studio": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "{{ addr }}/mcp", "--allow-http",
+               "--header", "Authorization:${AUTH_HEADER}"],
+      "env": { "AUTH_HEADER": "Bearer {{ new_token }}" }
+    }
+  }
+}</pre>
+      <p><button type="button" data-copy="desktop-cfg">Copy config</button></p>
       {% endif %}
     {% endif %}
+    {% if lan %}<p class="small muted">LAN address{% if not lan_configured %} (from this browser){% endif %}: <span class="mono">{{ lan }}</span></p>{% endif %}
     <form method="post" action="/settings/tokens" class="row">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <input type="text" name="name" placeholder="Name, e.g. Adam's desktop" style="flex:1;min-width:180px" aria-label="Token name">

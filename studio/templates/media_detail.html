@@ -67,6 +67,10 @@
       <label for="description">Description</label><textarea id="description" name="description">{{ asset.description }}</textarea>
       <label for="alt_text">Alt text</label><textarea id="alt_text" name="alt_text" style="min-height:60px">{{ asset.alt_text }}</textarea>
       <label for="tags">Tags (comma separated)</label><input type="text" id="tags" name="tags" value="{{ asset.tags | join(', ') }}">
+      <label for="event_id">Taken at</label>
+      <select id="event_id" name="event_id"><option value="">Not at an event</option>
+        {% for e in taken_events %}<option value="{{ e.id }}"{% if e.id == asset.event_id %} selected{% endif %}>{{ e.title }}, {{ e.label }}</option>{% endfor %}
+      </select>
       <p><button type="submit">Save</button></p>
     </form>
   </div>

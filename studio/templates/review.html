@@ -4,7 +4,7 @@
 {% block content %}
 <h1>Waiting for approval</h1>
 {% for a in emails %}
-  <div class="card" style="margin-bottom:14px"><div class="row spread"><h3><span class="tag pink">Email</span> <a href="/announcements/{{ a.id }}">{{ a.subject }}</a></h3>
+  <div class="card" style="margin-bottom:14px"><div class="row spread"><h3><span class="tag accent">Email</span> <a href="/announcements/{{ a.id }}">{{ a.subject }}</a></h3>
   <span class="small muted">Sends {{ a.send_at | local }}</span></div>
   <a class="btn primary" href="/announcements/{{ a.id }}">Review email</a></div>
 {% endfor %}

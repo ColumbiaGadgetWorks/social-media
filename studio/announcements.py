@@ -249,7 +249,7 @@ def _inline(text: str) -> str:
     out = html.escape(text)
     out = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", out)
     return re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)",
-                  r'<a href="\2" style="color:#a4596f">\1</a>', out)
+                  r'<a href="\2" style="color:#983c1e">\1</a>', out)
 
 
 def paragraphs(text: str) -> list[str]:

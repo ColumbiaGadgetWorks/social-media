@@ -156,9 +156,38 @@ def schedule_dry(db: Session) -> bool:
     return _send(db, "schedule_dry", f"{year}-W{week}", "Schedule running dry: run /cgw-plan", body)
 
 
+def photo_nudge(db: Session) -> bool:
+    """On a weekly event's day: ask for a few photos, so next week's post has something real."""
+    from datetime import timedelta
+
+    from .db import utcnow
+    from .models import Event
+
+    if not settings().photo_nudges:
+        return False
+    now = utcnow()
+    today_end = local_day_bounds_utc(local_now().date())[1]
+    events = db.scalars(select(Event).where(Event.series != "", Event.promote.is_(True), Event.status == "active",
+                                            Event.start > now, Event.start < min(today_end, now + timedelta(hours=12)))).all()
+    sent = False
+    for e in events:
+        start = to_local(e.start)
+        body = (
+            f"{e.title} is tonight at {start:%I:%M %p}".replace(" at 0", " at ") + ".\n\n"
+            "Grab 3-5 photos or a short clip while you're there: a project in progress, something that works for "
+            "the first time, people at the tools, anything funny. Ask before photographing someone's face.\n\n"
+            f"Upload them at {settings().base_url}/upload and choose \"Taken at: {e.title}\". Next week's "
+            "post will use them instead of the plain event card. A one-line note helps (\"Sam's first laser "
+            "cut\", \"fixed a 1970s lamp\")."
+        )
+        sent = _send(db, "photo_nudge", str(e.id), f"{e.title} tonight: grab a few photos", body) or sent
+    return sent
+
+
 def run_daily(db: Session) -> None:
     if local_now().hour < settings().reminder_hour:
         return
+    photo_nudge(db)
     claude_session(db)
     schedule_dry(db)
     approvals(db)

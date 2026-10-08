@@ -5,6 +5,9 @@ Optional lines in an event's description steer the Studio:
   Email: no           keep it out of the monthly email (Phase 3)
   Signup: https://…   the link posts should use
   Price: Free         shown on the event card
+
+Weekly events (the same title, weekday and time every week, like Open Hack Night) get one post per
+week instead of an announcement and a reminder, each with a different angle and real photos.
 """
 
 from __future__ import annotations
@@ -15,18 +18,20 @@ import io
 import json
 import logging
 import re
+from collections import defaultdict
 from datetime import UTC, date, datetime, time, timedelta
+from itertools import pairwise
 
 import httpx
 import icalendar
 import recurring_ical_events
 from PIL import Image, ImageDraw, ImageFont
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from . import media as media_mod
 from .db import settings, utcnow
-from .models import Event, Post
+from .models import Event, MediaAsset, Post, PostMedia
 from .posts import create_post
 from .security import Actor, audit
 from .timeutil import to_local
@@ -81,7 +86,36 @@ def parse(text: str, start: datetime, end: datetime) -> list[dict]:
             "cancelled": str(ev.get("STATUS", "")).upper() == "CANCELLED",
             "directives": directives,
         })
+    _mark_series(out)
     return out
+
+
+def _norm_title(title: str) -> str:
+    return " ".join(re.sub(r"[^a-z0-9 ]+", " ", title.lower()).split())
+
+
+def _mark_series(occurrences: list[dict]) -> None:
+    """Tag occurrences that repeat weekly (same title, weekday and local time, a week or so apart).
+
+    The website's feed flattens recurring events into separate events with separate UIDs, so an
+    RRULE alone can't be relied on.
+    """
+    tz = settings().timezone
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for o in occurrences:
+        o["series"] = ""
+        if o["all_day"] or not o["title"]:
+            continue
+        local = o["start"].replace(tzinfo=UTC).astimezone(tz)
+        groups[f"{_norm_title(o['title'])}|{local:%a}|{local:%H:%M}"].append(o)
+    for key, items in groups.items():
+        if len(items) < 2:
+            continue
+        starts = sorted(o["start"] for o in items)
+        gaps = [b - a for a, b in pairwise(starts)]
+        if min(gaps) <= timedelta(days=8) and max(gaps) <= timedelta(days=22):  # weekly, allowing a skipped week or two
+            for o in items:
+                o["series"] = key
 
 
 def facts_hash(o: dict) -> str:
@@ -95,16 +129,19 @@ def should_promote(o: dict) -> bool:
         return False
     if choice in ("yes", "true", "on"):
         return True
+    title = o["title"].lower()
+    skipped = any(word.lower() in title for word in settings().event_skip_keywords)
+    if o.get("series"):
+        return not skipped  # weekly events get a weekly post
     if o["recurring"]:
         return False
-    title = o["title"].lower()
-    return not any(word.lower() in title for word in settings().event_skip_keywords)
+    return not skipped
 
 
 # --- event cards ---------------------------------------------------------
 
 CARD_SIZE = (1080, 1350)
-ACCENT, INK, PAPER = (164, 89, 111), (35, 32, 31), (255, 255, 255)
+ACCENT, INK, PAPER = (191, 77, 40), (31, 31, 35), (255, 255, 255)
 
 
 def _wrap(draw: ImageDraw.ImageDraw, text: str, font, width: int) -> list[str]:
@@ -191,20 +228,26 @@ def _at_local(day: date, hour: int, minute: int) -> datetime:
     return local.astimezone(UTC).replace(tzinfo=None)
 
 
-def _note(event: Event, purpose: str) -> str:
+def _note(event: Event, purpose: str, angle: str = "") -> str:
     day, when = event_when(event)
-    parts = [f"{purpose.capitalize()} for: {event.title}", f"{day}, {when}"]
+    label = "Weekly post" if purpose == "weekly" else purpose.capitalize()
+    parts = [f"{label} for: {event.title}", f"{day}, {when}"]
     if event.location:
         parts.append(event.location)
     if event.url:
         parts.append(f"Link: {event.url}")
+    if angle in ANGLES:
+        parts.append(f"Angle: {ANGLES[angle][0]}")
     return " · ".join(parts)
 
 
 def promo_targets(event: Event) -> dict[str, datetime]:
-    """When to aim each promo: announce two weeks out (or tomorrow), remind two days out."""
+    """When to aim each promo: announce two weeks out (or tomorrow), remind two days out.
+    A weekly event's one post goes out the day before."""
     now = utcnow()
     local_start = to_local(event.start).date()
+    if event.series:
+        return {"weekly": max(_at_local(local_start - timedelta(days=1), 11, 30), now + timedelta(hours=2))}
     announce = _at_local(local_start - timedelta(days=14), 11, 30)
     if announce < now + timedelta(days=1):
         announce = _at_local(to_local(now).date() + timedelta(days=1), 11, 30)
@@ -252,7 +295,7 @@ def handle_change(db: Session, event: Event, price: str, changes: list[str]) -> 
             for link in post.media_links:
                 if link.media_id == old_card:
                     link.media = new_card
-        post.note = _note(event, post.purpose or "promo")
+        post.note = _note(event, post.purpose or "promo", post.angle)
         post.review_comment = f"The event changed ({', '.join(changes)}). Check the dates and details."
         if post.status == "approved":
             post.status = "in_review"
@@ -283,6 +326,154 @@ def handle_cancel(db: Session, event: Event) -> tuple[list[Post], bool]:
     return pulled, announced
 
 
+# --- weekly events -------------------------------------------------------
+
+# Angles for weekly posts, so Open Hack Night doesn't read the same every week.
+# key: (label, brief, needs real photos)
+ANGLES: dict[str, tuple[str, str, bool]] = {
+    "project_spotlight": ("Project spotlight", "One thing a member or visitor made or fixed recently, shown in a real "
+                          "photo: what it is, the tool or trick behind it. Invite people to bring theirs Thursday.", True),
+    "photo_recap": ("Photo recap", "A carousel from last week's session: what people were building, fixing and "
+                    "trying. \"This week could be you.\"", True),
+    "first_timer": ("First-timer guide", "What actually happens when you walk in the first time: who says hi, what "
+                    "to bring, what you can try. No experience or sign-up needed.", False),
+    "tool_spotlight": ("Tool spotlight", "One tool people can try at the next session (laser cutter, 3D printers, "
+                       "soldering, sewing, wood shop), ideally in a real photo of it in use.", False),
+    "fix_it": ("Bring something broken", "Repair angle: lamps, toys, small electronics, a wobbly chair. Someone "
+               "here can probably help you fix it.", False),
+    "question": ("Question for followers", "Ask something people want to answer (what would you make with X, the "
+                 "weirdest thing you've fixed) and tie it back to the next session.", False),
+    "humor": ("Shop humor", "A light, real moment from the shop in the CGW voice: a funny sign, a glorious fail, a "
+              "very serious robot. Not cringy, no forced memes.", False),
+}
+PHOTO_WINDOW_DAYS = 28
+
+
+def series_posts(db: Session, series: str, limit: int = 8) -> list[Post]:
+    """Earlier weekly posts for the same series, newest event first (rejected ones left out)."""
+    return db.scalars(
+        select(Post).join(Event, Post.event_id == Event.id)
+        .where(Event.series == series, Post.purpose == "weekly", Post.status != "rejected")
+        .order_by(Event.start.desc()).limit(limit)
+    ).all()
+
+
+def pick_angle(recent: list[str], has_photos: bool) -> str:
+    """The angle used least recently (never-used first). Photo angles need fresh photos."""
+    allowed = [k for k, (_, _, photos) in ANGLES.items() if has_photos or not photos]
+
+    def age(key: str) -> int:
+        return recent.index(key) if key in recent else len(recent) + 1
+
+    return max(allowed, key=lambda k: (age(k), -allowed.index(k)))
+
+
+def candidate_media(db: Session, event: Event, limit: int = 8) -> list[MediaAsset]:
+    """Fresh photos for a weekly post, best first: ones marked as taken at an earlier session of
+    this series, then recent uploads that mention it or were uploaded during a session.
+    Media already in another post (other than a rejected one) is left out."""
+    now = utcnow()
+    since = now - timedelta(days=PHOTO_WINDOW_DAYS)
+    used = select(PostMedia.media_id).join(Post).where(Post.status != "rejected")
+    past = db.scalars(select(Event).where(Event.series == event.series, Event.start < now, Event.start >= since)).all()
+    base = (select(MediaAsset).where(MediaAsset.processing_status == "ready", MediaAsset.id.not_in(used))
+            .order_by(MediaAsset.created_at.desc()))
+    found: list[MediaAsset] = []
+    if past:
+        found += db.scalars(base.where(MediaAsset.event_id.in_([e.id for e in past]))).all()
+    words = event.title.strip()
+    windows = [MediaAsset.created_at.between(e.start - timedelta(hours=1), (e.end or e.start) + timedelta(hours=4))
+               for e in past]
+    recent = db.scalars(base.where(MediaAsset.created_at >= since, or_(
+        MediaAsset.note.ilike(f"%{words}%"), MediaAsset.description.ilike(f"%{words}%"), *windows))).all()
+    seen = {m.id for m in found}
+    found += [m for m in recent if m.id not in seen and "event-card" not in (m.tags or [])]
+    return [m for m in found if "event-card" not in (m.tags or [])][:limit]
+
+
+def create_weekly_promo(db: Session, event: Event, price: str = "") -> Post:
+    card = _make_card(db, event, price)
+    candidates = candidate_media(db, event)
+    recent = [p.angle for p in series_posts(db, event.series)]
+    angle = pick_angle(recent, has_photos=bool(candidates))
+    images = [m for m in candidates if m.kind == "image"]
+    if angle == "photo_recap" and len(images) >= 2:
+        media = images[:5]
+    elif candidates:
+        media = candidates[:1]
+    else:
+        media = [card]  # nothing fresh yet: the card holds the spot, Claude asks for photos
+    pillar = "hack_night" if "hack night" in event.title.lower() else "classes_events"
+    post = create_post(db, SYSTEM, [m.id for m in media], note=_note(event, "weekly", angle), pillar=pillar,
+                       for_claude=True, source="event")
+    post.event_id, post.purpose, post.angle = event.id, "weekly", angle
+    post.target_at = promo_targets(event)["weekly"]
+    post.title = f"{event.title}: {ANGLES[angle][0]}"[:200]
+    event.promos_created = True
+    audit(db, SYSTEM, "event_promos_created", "event", event.id, posts=[post.id], title=event.title, angle=angle,
+          media=[m.id for m in media])
+    return post
+
+
+def _retire_old_promos(db: Session, event: Event) -> None:
+    """Announcement/reminder pairs made before weekly posts existed: pull the ones still showing only
+    the event card and not approved, so a weekly post replaces them."""
+    old = [p for p in _open_posts(event) if p.purpose in ("announce", "reminder")]
+    if not old:
+        return
+    keep = [p for p in old if p.status == "approved" or any(m.id != event.card_media_id for m in p.media)]
+    for post in old:
+        if post in keep:
+            continue
+        post.status = "rejected"
+        post.review_comment = "Replaced: weekly events now get one post a week with a fresh angle and real photos."
+        _clear_approval(post)
+        audit(db, SYSTEM, "rejected", "post", post.id, reason="weekly event: replaced by a weekly post")
+    if not keep:
+        event.promos_created = False
+
+
+def weekly_promos(db: Session) -> int:
+    """Create each weekly event's post once it's within weekly_promo_days, so it can use the latest photos."""
+    now = utcnow()
+    horizon = now + timedelta(days=settings().weekly_promo_days)
+    made = 0
+    events = db.scalars(select(Event).where(Event.series != "", Event.status == "active", Event.start > now)
+                        .order_by(Event.start)).all()
+    for event in events:
+        _retire_old_promos(db, event)
+        if event.promote and not event.promos_created and now + timedelta(hours=12) < event.start < horizon:
+            create_weekly_promo(db, event)
+            made += 1
+    return made
+
+
+def series_context(db: Session, post: Post) -> dict:
+    """What Claude needs to make this week's post different from the last few."""
+    event = post.event
+    history = []
+    for p in series_posts(db, event.series):
+        if p.id == post.id:
+            continue
+        first_lines = sorted({(v.body.strip().splitlines() or [""])[0][:140] for v in p.versions if v.enabled and v.body})
+        history.append({"date": event_when(p.event)[0], "angle": p.angle, "status": p.status,
+                        "opening_lines": first_lines, "media": [m.id for m in p.media]})
+    candidates = candidate_media(db, event)
+    in_post = {m.id for m in post.media}
+    label, brief, _ = ANGLES.get(post.angle, ("", "", False))
+    only_card = bool(post.media) and all(m.id == event.card_media_id for m in post.media)
+    return {
+        "angle": post.angle, "angle_label": label, "angle_brief": brief,
+        "other_angles": {k: v[0] for k, v in ANGLES.items() if k != post.angle},
+        "recent_posts": history,
+        "candidate_media": [{"media_id": m.id, "kind": m.kind, "note": m.note, "description": m.description,
+                             "uploaded": to_local(m.created_at).strftime("%a %b %-d"), "taken_at_event": bool(m.event_id)}
+                            for m in candidates if m.id not in in_post],
+        "card_media_id": event.card_media_id,
+        "needs_photos": only_card,
+    }
+
+
 def sync(db: Session, text: str) -> dict:
     """Bring Event rows in line with the feed. Returns what happened, for reminders and logs."""
     from . import reminders
@@ -303,18 +494,20 @@ def sync(db: Session, text: str) -> dict:
         if event is None:
             event = Event(uid=o["uid"], start=o["start"], end=o["end"], all_day=o["all_day"], title=o["title"],
                           description=o["description"], location=o["location"], url=o["url"],
-                          recurring=o["recurring"], promote=should_promote(o), facts_hash=digest,
+                          recurring=o["recurring"], series=o["series"], promote=should_promote(o), facts_hash=digest,
                           email_ok=o["directives"].get("email", "").lower() not in ("no", "false", "off"))
             db.add(event)
             db.flush()
             result["new"] += 1
             if o["cancelled"]:
                 event.status = "cancelled"
-            elif event.promote and event.start > now + timedelta(days=1):
+            elif event.promote and not event.series and event.start > now + timedelta(days=1):
                 create_promos(db, event, price)
                 result["promoted"] += 1
         else:
             event.missing_count = 0
+            if o["series"] and event.series != o["series"]:  # spotted as weekly (also after an upgrade)
+                event.series, event.promote = o["series"], should_promote(o)
             if o["cancelled"] and event.status != "cancelled":
                 pulled, announced = handle_cancel(db, event)
                 result["cancelled"] += 1
@@ -342,6 +535,7 @@ def sync(db: Session, text: str) -> dict:
             pulled, announced = handle_cancel(db, event)
             result["cancelled"] += 1
             reminders.event_cancelled(db, event, pulled, announced)
+    result["promoted"] += weekly_promos(db)
     return result
 
 
@@ -364,5 +558,5 @@ def event_facts(event: Event) -> dict:
     day, when = event_when(event)
     return {"event_id": event.id, "title": event.title, "date": day, "time": when, "location": event.location,
             "link": event.url, "description": event.description[:1500], "status": event.status,
-            "recurring": event.recurring}
+            "recurring": event.recurring, "weekly": bool(event.series)}
 

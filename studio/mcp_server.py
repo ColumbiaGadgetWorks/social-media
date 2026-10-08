@@ -17,6 +17,7 @@ from mcp.server.mcpserver.utilities.types import Image
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
+from sqlalchemy.orm import Session
 
 from . import announcements, calendar_sync, metrics, queue, video
 from . import channels as ch
@@ -83,7 +84,7 @@ def _media_summary(m: MediaAsset) -> dict:
     return out
 
 
-def _post_summary(p: Post) -> dict:
+def _post_summary(p: Post, db: Session | None = None) -> dict:
     summary = {
         "post_id": p.id, "status": p.status, "title": p.title, "note": p.note, "pillar": p.pillar,
         "review_comment": p.review_comment,
@@ -103,6 +104,18 @@ def _post_summary(p: Post) -> dict:
             "Facts (date, time, place, price, link) come only from `event`. Schedule close to `aim_for`. "
             "The attached event card shows the facts; swap in or add real photos with attach_media if any fit."
         )
+        if p.event.series and p.purpose == "weekly" and db is not None:
+            summary["weekly"] = calendar_sync.series_context(db, p)
+            summary["event_instructions"] = (
+                "This is this week's post for a weekly event. Follow `weekly.angle_brief` (or pick one of "
+                "`other_angles` if the media clearly suits it better, and say so in notes). It must read differently "
+                "from every `weekly.recent_posts` entry: a new hook and opening line, a different photo. Prefer real "
+                "photos from `weekly.candidate_media` (previews below) over the event card; use attach_media with "
+                "replace=true. The card is a last resort. If `weekly.needs_photos` is true or nothing fits, ask the "
+                "person in this session before drafting: for photos from the last session (they can upload them in "
+                "the Studio with 'Taken at' set) or one thing that happened there worth telling. Facts (date, time, "
+                "place, price, link) still come only from `event`."
+            )
     return summary
 
 
@@ -120,7 +133,7 @@ def get_guidelines() -> str:
 
 @server.tool()
 def get_work_queue() -> str:
-    """Posts waiting for Claude (oldest first) plus a summary. Work through these in order."""
+    """Posts waiting for Claude (most urgent first) plus a summary. Work through these in order."""
     with session_scope() as db:
         _actor(db)
         items = queue.claude_queue(db)
@@ -213,7 +226,8 @@ def get_work_item(post_id: int) -> list:
         post = db.get(Post, post_id)
         if post is None:
             return [f"Post {post_id} doesn't exist."]
-        content: list = [json.dumps(_post_summary(post), indent=1)]
+        summary = _post_summary(post, db)
+        content: list = [json.dumps(summary, indent=1)]
         images = 0
         for m in post.media:
             paths = [m.preview_path] if m.kind == "image" else m.frames or [m.preview_path]
@@ -224,6 +238,13 @@ def get_work_item(post_id: int) -> list:
                 content.append(label)
                 content.append(Image(path=abs_path(rel)))
                 images += 1
+        for c in summary.get("weekly", {}).get("candidate_media", []):  # fresh photos it could use instead
+            m = db.get(MediaAsset, c["media_id"])
+            if images >= MAX_IMAGES_PER_ITEM or m is None or not m.preview_path:
+                break
+            content.append(f"candidate media {m.id} ({m.kind}), not in the post yet")
+            content.append(Image(path=abs_path(m.preview_path)))
+            images += 1
         return content
 
 
@@ -392,11 +413,14 @@ def submit_drafts(
     notes: str = "",
     media: list[MediaNote] | None = None,
     submit_for_review: bool = True,
+    angle: str = "",
 ) -> str:
     """Save captions for each channel, media descriptions/alt text, and send the post for human review.
 
     Only include channels you want enabled (set enabled=false to drop one). If validation fails the
     drafts are still saved and the problems are returned so you can fix them and call again.
+    For a weekly event post, pass `angle` (a key from `weekly.other_angles`) if you used a different
+    angle than suggested, so next week's suggestion rotates correctly.
     """
     with session_scope() as db:
         actor = _actor(db)
@@ -431,6 +455,8 @@ def submit_drafts(
         except post_svc.PostError as exc:
             db.rollback()
             return f"Error: {exc}"
+        if angle and post.purpose == "weekly" and angle in calendar_sync.ANGLES:
+            post.angle = angle
         if post.status == "needs_claude":
             post.status = "draft"
         result = {"post_id": post.id, "status": post.status}

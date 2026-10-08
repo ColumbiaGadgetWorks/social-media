@@ -4,12 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}CGW Content Studio{% endblock %}</title>
+<link rel="icon" href="/static/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="/static/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<meta name="theme-color" content="#bf4d28">
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
 {% if user %}
 <header class="bar"><div class="in">
-  <a class="brand" href="/">CGW <span>Studio</span></a>
+  <a class="brand" href="/"><img src="/static/favicon-32.png" alt="">CGW <span>Studio</span></a>
   {% set here = request.url.path %}
   <nav class="main" aria-label="Main">
     <a href="/" class="{{ 'on' if here == '/' }}">Dashboard</a>

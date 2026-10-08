@@ -92,17 +92,21 @@ proxy, set *Require proxy auth* and *Secure cookies* to `false`; turn both back 
 4. Sign in with the admin account. Under **Users**, set each person's proxy username if it differs
    from their Studio username, and add an email address for reminders.
 
-## Connect Claude Code
+## Connect Claude Code (or Claude Desktop)
 
-1. In the Studio, open **Settings**, create a token, and copy the command it shows:
-   ```
-   claude mcp add --transport http cgw-studio http://<unraid-ip>:8080/mcp \
-     --header "Authorization: Bearer cgw_..."
-   ```
-   Use the LAN address (not the public one). MCP only answers requests from local networks.
-2. Open Claude Code in a checkout of this repo, so the `/cgw-session` and `/cgw-inbox` commands are
-   available, and run `/cgw-session` whenever the Studio emails you.
-3. Sonnet 5.5 is plenty for content sessions; use Opus 5.5 for the monthly review.
+1. Set **LAN address** (`STUDIO_LAN_URL`, e.g. `http://192.168.1.50:8095`) in the Unraid template so
+   Settings can fill in your address. Opening Settings directly on the LAN works too.
+2. In the Studio, open **Settings** and create a token **For Claude Code**. The page shows:
+   - a `claude mcp add --scope user ...` command for Claude Code or the **Code tab in Claude
+     Desktop**. Run it once in a terminal (PowerShell, Terminal) on your computer.
+   - a config block for the **Claude Desktop chat** (Settings → Developer → Edit Config; needs
+     Node.js for `mcp-remote`).
+   MCP only answers requests from local networks, never through the proxy.
+3. Clone this repo (`cd $HOME\Documents; git clone https://github.com/ColumbiaGadgetWorks/social-media.git`)
+   and open that folder in the Code tab, so `/cgw-session`, `/cgw-inbox` and the others are
+   available. Run `/cgw-session` whenever the Studio emails you. In the Desktop chat, ask it to
+   "start a CGW Studio session: call get_guidelines, then work through the queue".
+4. Sonnet 5.5 is plenty for content sessions; use Opus 5.5 for the monthly review.
 
 ## Day to day
 

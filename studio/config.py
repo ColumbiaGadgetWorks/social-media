@@ -71,10 +71,14 @@ class Settings:
     max_upload_mb: int = 500
     # Public address for media that Meta fetches (/m/...). Defaults to base_url.
     public_url: str = ""
+    # LAN address of the Studio (http://<unraid-ip>:<host port>) for Claude Code and the extension.
+    lan_url: str = ""
     # Calendar
     calendar_ics_url: str = ""
     calendar_poll_minutes: int = 15
     calendar_lookahead_days: int = 60
+    weekly_promo_days: int = 10  # weekly events get their post this many days ahead, so fresh photos can be used
+    photo_nudges: bool = True  # email on a weekly event's day asking for photos
     event_skip_keywords: list = field(default_factory=list)
     # Meta (Facebook page, Instagram business account, Threads)
     meta_graph_version: str = "v24.0"
@@ -174,11 +178,14 @@ def load_settings() -> Settings:
         scheduler_interval_s=_int("STUDIO_SCHEDULER_INTERVAL", 60),
         max_upload_mb=_int("STUDIO_MAX_UPLOAD_MB", 500),
         public_url=os.environ.get("STUDIO_PUBLIC_URL", ""),
+        lan_url=os.environ.get("STUDIO_LAN_URL", "").rstrip("/"),
         calendar_ics_url=os.environ.get(
             "STUDIO_CALENDAR_ICS_URL", "https://columbiagadgetworks.org/api/calendar.ics"
         ),
         calendar_poll_minutes=_int("STUDIO_CALENDAR_POLL_MINUTES", 15),
         calendar_lookahead_days=_int("STUDIO_CALENDAR_LOOKAHEAD_DAYS", 60),
+        weekly_promo_days=_int("STUDIO_WEEKLY_PROMO_DAYS", 10),
+        photo_nudges=_bool("STUDIO_PHOTO_NUDGES", True),
         event_skip_keywords=_list(os.environ.get("STUDIO_EVENT_SKIP_KEYWORDS", "board meeting,member meeting")),
         meta_graph_version=os.environ.get("STUDIO_META_GRAPH_VERSION", "v24.0"),
         meta_page_id=os.environ.get("STUDIO_META_PAGE_ID", ""),

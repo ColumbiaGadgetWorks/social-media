@@ -303,10 +303,10 @@ def calendar_text(class_offset=30, class_status="", class_time="1800", include_c
     return ics(*events)
 
 
-def test_sync_creates_promos_only_for_one_off_events(app2):
+def test_sync_creates_promos_for_one_off_and_weekly_events(app2):
     with db_mod.session_scope() as s:
         result = calendar_sync.sync(s, calendar_text())
-    assert result["promoted"] == 1
+    assert result["promoted"] == 3  # the class, plus Hack Night's next two weeks (one post each)
     with db_mod.session_scope() as s:
         event = s.scalar(select(Event).where(Event.uid == "solder@cgw"))
         assert event.url == "https://givebutter.com/solder" and "Signup" not in event.description
@@ -315,8 +315,9 @@ def test_sync_creates_promos_only_for_one_off_events(app2):
         assert post.status == "needs_claude" and post.media[0].tags == ["event-card"]
         assert post.media[0].processing_status == "ready"
         assert (to_local(event.start) - to_local(post.target_at)).days == 14
-        hack = s.scalars(select(Event).where(Event.uid == "hack@cgw")).all()
-        assert hack and all(not e.posts for e in hack)
+        hack = s.scalars(select(Event).where(Event.uid == "hack@cgw").order_by(Event.start)).all()
+        assert all(e.series for e in hack)
+        assert [[p.purpose for p in e.posts] for e in hack[:3]] == [["weekly"], ["weekly"], []]
         assert not s.scalar(select(Event).where(Event.uid == "board@cgw")).posts
     with db_mod.session_scope() as s:  # a second sync changes nothing
         assert calendar_sync.sync(s, calendar_text()) == {"new": 0, "promoted": 0, "changed": 0, "cancelled": 0}
