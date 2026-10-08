@@ -853,12 +853,40 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
         ("Events calendar", bool(s.calendar_ics_url), s.calendar_ics_url or "STUDIO_CALENDAR_ICS_URL"),
         ("Reminder email", s.mail_backend == "smtp" and bool(s.smtp_user), "STUDIO_SMTP_USER, STUDIO_SMTP_PASSWORD"),
         ("Email list (Dolibarr)", s.dolibarr_configured, "STUDIO_DOLIBARR_URL, STUDIO_DOLIBARR_API_KEY"),
+        ("Discord uploads", s.discord_configured, "STUDIO_DISCORD_BOT_TOKEN, STUDIO_DISCORD_CHANNEL_IDS"),
         ("Subtitles (Whisper)", bool(s.whisper_model), f"STUDIO_WHISPER_MODEL={s.whisper_model or '(off)'}"),
     ]
     lan = lan_address(request)
+    from . import reminders
+    from .config import WEEKDAYS
+
+    digest_subject, digest_body = reminders.digest(db)
+    next_digest = reminders.next_digest_date()
     return render(request, "settings.html", user, tokens=tokens, new_token=new_token, new_scope=new_scope,
                   base_url=s.base_url, lan=lan, lan_configured=bool(s.lan_url),
+                  digest_subject=digest_subject, digest_body=digest_body, digest_day=WEEKDAYS[s.digest_day].capitalize(),
+                  next_digest=f"{next_digest:%a %b} {next_digest.day}", reminder_hour=s.reminder_hour,
+                  last_call=s.last_call_alerts, quiet=reminders.quiet(db), reminder_to=reminders.recipients(db),
                   connections=connections, media_base=s.media_base_url, is_admin=user.has_role("admin"))
+
+
+@router.post("/settings/digest-test")
+async def digest_test(request: Request, db: Session = Depends(get_db)):
+    from . import reminders
+
+    user = require(request, db)
+    await form_with_csrf(request)
+    if not user.email:
+        flash(request, "Add an email address to your account first (Users page).", "error")
+        return back("/settings")
+    try:
+        sent = reminders.weekly_digest(db, force_to=[user.email])
+    except Exception as exc:  # SMTP not set up, wrong password…
+        flash(request, f"Couldn't send: {exc}", "error")
+        return back("/settings")
+    audit(db, Actor("user", user), "digest_test_sent", "user", user.id, sent=sent)
+    flash(request, f"Test digest sent to {user.email}." if sent else "Nothing to report right now, so nothing was sent.")
+    return back("/settings")
 
 
 @router.post("/settings/tokens")

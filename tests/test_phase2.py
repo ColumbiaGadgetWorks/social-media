@@ -14,7 +14,7 @@ from studio import calendar_sync, mailer, public_media, publishers, reminders
 from studio import db as db_mod
 from studio import posts as post_svc
 from studio.media import process, store_upload
-from studio.models import Event, Post, User
+from studio.models import Event, PendingAlert, Post, User
 from studio.publishers.meta import FacebookClient, InstagramClient, ThreadsClient
 from studio.publishers.website import WebsiteClient, build_files, description_from
 from studio.security import Actor
@@ -306,7 +306,8 @@ def calendar_text(class_offset=30, class_status="", class_time="1800", include_c
 def test_sync_creates_promos_for_one_off_and_weekly_events(app2):
     with db_mod.session_scope() as s:
         result = calendar_sync.sync(s, calendar_text())
-    assert result["promoted"] == 3  # the class, plus Hack Night's next two weeks (one post each)
+    # The class, plus one post per weekly Hack Night inside the 10-day window (how many depends on today).
+    assert result["promoted"] >= 2
     with db_mod.session_scope() as s:
         event = s.scalar(select(Event).where(Event.uid == "solder@cgw"))
         assert event.url == "https://givebutter.com/solder" and "Signup" not in event.description
@@ -315,9 +316,10 @@ def test_sync_creates_promos_for_one_off_and_weekly_events(app2):
         assert post.status == "needs_claude" and post.media[0].tags == ["event-card"]
         assert post.media[0].processing_status == "ready"
         assert (to_local(event.start) - to_local(post.target_at)).days == 14
-        hack = s.scalars(select(Event).where(Event.uid == "hack@cgw").order_by(Event.start)).all()
-        assert all(e.series for e in hack)
-        assert [[p.purpose for p in e.posts] for e in hack[:3]] == [["weekly"], ["weekly"], []]
+        hack = s.scalars(select(Event).where(Event.uid == "hack@cgw", Event.series != "").order_by(Event.start)).all()
+        horizon = db_mod.utcnow() + timedelta(days=10)
+        assert hack and all([p.purpose for p in e.posts] == (["weekly"] if e.start < horizon else []) for e in hack)
+        assert result["promoted"] == 1 + sum(1 for e in hack if e.start < horizon)
         assert not s.scalar(select(Event).where(Event.uid == "board@cgw")).posts
     with db_mod.session_scope() as s:  # a second sync changes nothing
         assert calendar_sync.sync(s, calendar_text()) == {"new": 0, "promoted": 0, "changed": 0, "cancelled": 0}
@@ -342,7 +344,11 @@ def test_event_change_clears_approval_and_moves_targets(app2):
         post = s.get(Post, post_id)
         assert post.status == "in_review" and post.approved_hash is None
         assert "changed" in post.review_comment and post.target_at - old_target == timedelta(days=2)
-    assert any("Event changed" in m["Subject"] for m in mailer.outbox)
+    with db_mod.session_scope() as s:  # posts go out in 5 days: it waits for the weekly digest
+        alert = s.scalar(select(PendingAlert).where(PendingAlert.kind == "event_changed"))
+        assert alert and not alert.urgent and "Intro to Soldering" in alert.line
+        assert "CALENDAR CHANGES" in reminders.digest(s)[1]
+    assert mailer.outbox == []
 
 
 def test_cancelled_event_pulls_posts(app2):
@@ -354,7 +360,8 @@ def test_cancelled_event_pulls_posts(app2):
         event = s.scalar(select(Event).where(Event.uid == "solder@cgw"))
         assert event.status == "cancelled"
         assert {p.status for p in event.posts} == {"rejected"}
-    assert any("Event cancelled" in m["Subject"] for m in mailer.outbox)
+        alert = s.scalar(select(PendingAlert).where(PendingAlert.kind == "event_cancelled"))
+        assert alert and not alert.urgent  # nothing was announced or approved yet
 
 
 def test_deleted_event_is_cancelled_after_two_missing_syncs(app2):
@@ -386,9 +393,8 @@ def test_gaps_and_schedule_dry_reminder(app2, monkeypatch):
     with db_mod.session_scope() as s:
         found = queue.gaps(s)
         assert found["weeks"][1]["missing"] == 3 and found["gbp_this_cycle"] == 0
-        assert reminders.schedule_dry(s) is True
-        assert reminders.schedule_dry(s) is False  # once a week
-    assert "/cgw-plan" in mailer.outbox[-1].get_content()
+        subject, body = reminders.digest(s)
+    assert subject and "SCHEDULE GAPS" in body and "/cgw-plan" in body
 
 
 # --- migration ---------------------------------------------------------------------------

@@ -162,18 +162,12 @@ def test_queue_puts_uploads_before_far_off_event_posts(app3):
         assert [p.note for p in queue.claude_queue(s)] == ["soon", "upload", "event"]
 
 
-def test_photo_nudge_on_the_day(app3):
-    from studio.timeutil import local_day_bounds_utc, local_now
-
-    now = db_mod.utcnow()
-    today_end = local_day_bounds_utc(local_now().date())[1]
+def test_digest_reminds_about_weekly_event_photos(app3):
     with db_mod.session_scope() as s:
-        s.add(Event(uid="t@site", start=now + min(timedelta(hours=3), (today_end - now) / 2), title="Open Hack Night",
+        s.add(Event(uid="t@site", start=db_mod.utcnow() + timedelta(days=2), title="Open Hack Night",
                     series="open hack night|Thu|18:00", promote=True))
         s.flush()
-        assert reminders.photo_nudge(s) is True
-        assert "Taken at: Open Hack Night" in mailer.outbox[-1].get_content()
-        assert reminders.photo_nudge(s) is False  # once per event
+        assert "Taken at" in reminders.digest(s)[1]
 
 
 def test_upload_taken_at_and_settings_snippets(app3):

@@ -1,7 +1,10 @@
 ---
 description: Fill gaps in the next two weeks of the schedule
 ---
-Use the `cgw-studio` MCP server. Call `get_guidelines`, `get_schedule`, `get_events`, and
+Use the `cgw-studio` MCP server. If its tools aren't available, stop and tell me: "The Studio
+isn't connected. Run /mcp, pick cgw-studio and Reconnect (or quit and reopen Claude Desktop). If it
+still fails, check the Studio opens in a browser at its LAN address." Don't draft anything without
+the tools. Call `get_guidelines`, `get_schedule`, `get_events`, and
 `get_metrics` (to lean toward what has worked).
 
 1. Look at `gaps`: weeks with fewer than 3 main posts, and whether Google Business Profile has its

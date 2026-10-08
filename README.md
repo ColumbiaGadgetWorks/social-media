@@ -12,7 +12,7 @@ The full plan is in [`docs/plan.html`](docs/plan.html). This is **Phase 1**.
   thumbnails, 768px previews, and 5 key frames per video, one job at a time.
 - **Claude sessions over MCP.** Claude Code on your LAN connects with a personal token, reads the
   queue and media previews, and submits per-channel drafts. There's no tool to approve, publish or
-  send. A "Claude session needed" email tells you when to run `/cgw-session`.
+  send. The Monday digest tells you when to run `/cgw-session`.
 - **Approval rule.** Only a signed-in Approver can approve. The approval is tied to a hash of the
   exact captions, media and times, and any later edit clears it. The approve button also checks the
   version the approver was looking at, and publishers re-check the hash before sending.
@@ -20,8 +20,9 @@ The full plan is in [`docs/plan.html`](docs/plan.html). This is **Phase 1**.
 - **Batch pages** for Instagram, Facebook, Threads, TikTok, YouTube Shorts, LinkedIn, X and
   Google Business Profile: numbered files, copy buttons, a zip (photos re-encoded without GPS
   data), and "Mark scheduled". Instagram, Facebook and Threads move to automatic posting in Phase 2.
-- **Reminder emails**: Claude session due, approvals waiting, batch day (every 14 days), Google
-  Business Profile posts due today, and publishing failures.
+- **Reminder emails, kept rare**: one Monday digest (posts to approve this week with deadlines, a
+  Claude session when work is due, batch day, Google Business Profile, gaps, Hack Night photos), a
+  last call when something goes out within 48 hours unapproved, and alerts when something breaks.
 - Roles (contributor, editor, approver, admin), reverse-proxy auth plus a Studio login, CSRF
   protection, and an activity log of every change.
 
@@ -104,19 +105,27 @@ proxy, set *Require proxy auth* and *Secure cookies* to `false`; turn both back 
    MCP only answers requests from local networks, never through the proxy.
 3. Clone this repo (`cd $HOME\Documents; git clone https://github.com/ColumbiaGadgetWorks/social-media.git`)
    and open that folder in the Code tab, so `/cgw-session`, `/cgw-inbox` and the others are
-   available. Run `/cgw-session` whenever the Studio emails you. In the Desktop chat, ask it to
+   available. Run `/cgw-session` when the Monday digest says a session is due. In the Desktop chat, ask it to
    "start a CGW Studio session: call get_guidelines, then work through the queue".
 4. Sonnet 5.5 is plenty for content sessions; use Opus 5.5 for the monthly review.
+
+### If Claude says the cgw-studio tools aren't available
+
+Claude Desktop and Claude Code connect to the Studio when they start and don't retry. If the
+container was restarting (an update) or unreachable at that moment, the tools stay missing. In
+Claude Code or the Code tab, run `/mcp`, pick **cgw-studio** and **Reconnect**; or quit and reopen
+Claude Desktop. Still failing: open `http://<unraid-ip>:<port>/` in a browser on the same computer.
+If that doesn't load either, the container isn't running or the port is wrong; if it does, check
+the address and token in the MCP setup (Settings shows the command).
 
 ## Day to day
 
 | When | What |
 |---|---|
-| Any time | Upload media (phone works fine) |
-| When emailed "Claude session needed" | Run `/cgw-session` in Claude Code (~15 min) |
-| When emailed "waiting for approval" | Review and approve on the Review page |
-| Every 2 weeks (batch day email) | Schedule the batch for each platform, mark each scheduled |
-| When emailed "Post today" | Post the Google Business Profile item by hand |
+| Any time | Upload media (phone works fine), or drop photos in the Discord uploads channel |
+| Monday digest email (only if something needs you) | Approve what goes out this week, run `/cgw-session` if it says so, batch day every 2 weeks, the Google Business Profile post on its day |
+| "Last call" email (rare) | Something goes out within 2 days unapproved: approve it or move it |
+| Alert email (rare) | A post failed to publish, the monthly email failed, or an announced event changed |
 
 ## Development
 

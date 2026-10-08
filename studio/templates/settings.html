@@ -69,6 +69,20 @@
   {% endfor %}</table>
   {% if is_admin %}<p class="small muted">Meta fetches approved photos and videos from <span class="mono">{{ media_base }}/m/…</span>. That path must be reachable from the internet without proxy sign-in.</p>{% endif %}
 </div>
+<div class="card">
+  <h2 style="margin-top:0">Email reminders</h2>
+  <p class="small">One digest a week ({{ digest_day }}s at {{ reminder_hour }}:00, only if something needs you), a last call when an unapproved post goes out within two days{% if not last_call %} (turned off){% endif %}, and an alert if something breaks. Sent to {{ reminder_to | join(', ') or 'nobody yet: add an email address to your account' }}.</p>
+  <p class="small"><strong>Next digest:</strong> {{ next_digest }}{% if quiet %} (quiet for the first 24 hours after the Studio starts){% endif %}</p>
+  {% if digest_subject %}
+  <details><summary class="small">What it would say right now</summary>
+    <pre class="caption small" style="margin-top:8px">{{ digest_subject }}
+
+{{ digest_body }}</pre></details>
+  <form method="post" action="/settings/digest-test" style="margin-top:10px"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit">Send me a test</button></form>
+  {% else %}
+  <p class="small muted">Right now there's nothing for it to say, so it wouldn't be sent.</p>
+  {% endif %}
+</div>
 <form method="post" action="/settings/password" class="card">
   <h2 style="margin-top:0">Password</h2>
   <input type="hidden" name="csrf" value="{{ csrf }}">

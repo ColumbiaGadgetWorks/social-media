@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -63,6 +64,8 @@ class Settings:
     batch_anchor: date = date(2026, 10, 12)
     batch_cycle_days: int = 14
     reminder_hour: int = 8
+    digest_day: int = 0  # weekday of the weekly email (0 = Monday)
+    last_call_alerts: bool = True  # email when an unapproved post goes out within 48 hours
     claude_queue_threshold: int = 10
     claude_max_age_days: int = 3
     # Background loop
@@ -73,6 +76,9 @@ class Settings:
     public_url: str = ""
     # LAN address of the Studio (http://<unraid-ip>:<host port>) for Claude Code and the extension.
     lan_url: str = ""
+    # Discord: photos/videos posted in these channels come into the media library
+    discord_bot_token: str = ""
+    discord_channel_ids: list = field(default_factory=list)
     # Calendar
     calendar_ics_url: str = ""
     calendar_poll_minutes: int = 15
@@ -126,6 +132,10 @@ class Settings:
         return bool(self.dolibarr_url and self.dolibarr_api_key)
 
     @property
+    def discord_configured(self) -> bool:
+        return bool(self.discord_bot_token and self.discord_channel_ids)
+
+    @property
     def website_configured(self) -> bool:
         return bool(self.github_token and self.website_repo)
 
@@ -172,6 +182,8 @@ def load_settings() -> Settings:
         batch_anchor=date.fromisoformat(anchor),
         batch_cycle_days=_int("STUDIO_BATCH_CYCLE_DAYS", 14),
         reminder_hour=_int("STUDIO_REMINDER_HOUR", 8),
+        digest_day=_weekday(os.environ.get("STUDIO_DIGEST_DAY", "monday")),
+        last_call_alerts=_bool("STUDIO_LAST_CALL_ALERTS", True),
         claude_queue_threshold=_int("STUDIO_CLAUDE_QUEUE_THRESHOLD", 10),
         claude_max_age_days=_int("STUDIO_CLAUDE_MAX_AGE_DAYS", 3),
         scheduler_enabled=_bool("STUDIO_SCHEDULER_ENABLED", True),
@@ -179,6 +191,8 @@ def load_settings() -> Settings:
         max_upload_mb=_int("STUDIO_MAX_UPLOAD_MB", 500),
         public_url=os.environ.get("STUDIO_PUBLIC_URL", ""),
         lan_url=os.environ.get("STUDIO_LAN_URL", "").rstrip("/"),
+        discord_bot_token=os.environ.get("STUDIO_DISCORD_BOT_TOKEN", "").strip(),
+        discord_channel_ids=[c for c in re.split(r"[\s,]+", os.environ.get("STUDIO_DISCORD_CHANNEL_IDS", "")) if c.isdigit()],
         calendar_ics_url=os.environ.get(
             "STUDIO_CALENDAR_ICS_URL", "https://columbiagadgetworks.org/api/calendar.ics"
         ),
@@ -208,6 +222,19 @@ def load_settings() -> Settings:
         whisper_model=os.environ.get("STUDIO_WHISPER_MODEL", "base.en"),
         ffmpeg_threads=_int("STUDIO_FFMPEG_THREADS", 2),
     )
+
+
+WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+
+
+def _weekday(value: str) -> int:
+    value = value.strip().lower()
+    if value.isdigit():
+        return int(value) % 7
+    for i, name in enumerate(WEEKDAYS):
+        if name.startswith(value[:3]) and value:
+            return i
+    return 0
 
 
 def ip_in(address: str | None, networks: list) -> bool:

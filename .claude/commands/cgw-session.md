@@ -1,7 +1,10 @@
 ---
 description: Work through everything the CGW Content Studio has waiting for Claude
 ---
-Use the `cgw-studio` MCP server.
+Use the `cgw-studio` MCP server. If its tools aren't available, stop and tell me: "The Studio
+isn't connected. Run /mcp, pick cgw-studio and Reconnect (or quit and reopen Claude Desktop). If it
+still fails, check the Studio opens in a browser at its LAN address." Don't draft anything without
+the tools.
 
 1. Call `get_guidelines` and follow it for the whole session.
 2. Call `get_work_queue`. If it's empty, say so, then call `get_schedule` and `search_media`

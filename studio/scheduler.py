@@ -7,7 +7,16 @@ import logging
 import threading
 import time
 
-from . import announcements, calendar_sync, media, metrics, publishers, reminders, video
+from . import (
+    announcements,
+    calendar_sync,
+    discord_ingest,
+    media,
+    metrics,
+    publishers,
+    reminders,
+    video,
+)
 from .db import session_scope, settings
 from .timeutil import local_now
 
@@ -17,13 +26,23 @@ _media_lock = threading.Lock()  # one heavy media job at a time keeps RAM low
 
 def tick() -> None:
     """One pass. Each step is isolated so one failure doesn't stop the others."""
-    steps = (("media", _media), ("calendar", _calendar), ("publish", _publish), ("email", _email),
+    steps = (("discord", _discord), ("media", _media), ("calendar", _calendar), ("publish", _publish), ("email", _email),
              ("reminders", _reminders), ("nightly", _nightly))
     for name, step in steps:
         try:
             step()
         except Exception:
             log.exception("background step %s failed", name)
+
+
+def _discord() -> None:
+    """Photos and videos posted in the Discord uploads channel."""
+    if not settings().discord_configured:
+        return
+    with session_scope() as db:
+        count = discord_ingest.poll(db)
+    if count:
+        log.info("took in %s file(s) from Discord", count)
 
 
 def _media() -> None:

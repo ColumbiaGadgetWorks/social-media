@@ -215,6 +215,21 @@ class ReminderLog(Base):
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class PendingAlert(Base):
+    """Something to tell people about: urgent ones go out in at most one email a day, the rest in the
+    weekly digest."""
+
+    __tablename__ = "pending_alerts"
+    __table_args__ = (UniqueConstraint("kind", "key"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    key: Mapped[str] = mapped_column(String(96))
+    urgent: Mapped[bool] = mapped_column(Boolean, default=False)
+    line: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class Event(Base):
     """One occurrence from the events calendar (ICS)."""
 
