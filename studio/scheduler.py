@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+import time
 
-from . import media, publishers, reminders
+from . import calendar_sync, media, metrics, publishers, reminders
 from .db import session_scope, settings
+from .timeutil import local_now
 
 log = logging.getLogger(__name__)
 _media_lock = threading.Lock()  # one heavy media job at a time keeps RAM low
@@ -15,7 +17,9 @@ _media_lock = threading.Lock()  # one heavy media job at a time keeps RAM low
 
 def tick() -> None:
     """One pass. Each step is isolated so one failure doesn't stop the others."""
-    for name, step in (("media", _media), ("publish", _publish), ("reminders", _reminders)):
+    steps = (("media", _media), ("calendar", _calendar), ("publish", _publish), ("reminders", _reminders),
+             ("nightly", _nightly))
+    for name, step in steps:
         try:
             step()
         except Exception:
@@ -38,6 +42,44 @@ def _publish() -> None:
         failed = publishers.publish_due(db)
         if failed:
             reminders.publish_failures(db, failed)
+
+
+_last_calendar_sync = 0.0
+
+
+def _calendar() -> None:
+    global _last_calendar_sync
+    if time.monotonic() - _last_calendar_sync < settings().calendar_poll_minutes * 60 and _last_calendar_sync:
+        return
+    _last_calendar_sync = time.monotonic()
+    if not settings().calendar_ics_url:
+        return
+    text = calendar_sync.fetch()
+    with session_scope() as db:
+        result = calendar_sync.sync(db, text)
+    if any(result.values()):
+        log.info("calendar sync: %s", result)
+
+
+def _nightly() -> None:
+    """Once a day after 3am: metrics and token upkeep."""
+    from .publishers.meta import refresh_threads_token
+    from .reminders import _once
+
+    now = local_now()
+    if now.hour < 3:
+        return
+    with session_scope() as db:
+        if not _once(db, "nightly", now.date().isoformat()):
+            return
+        db.commit()
+        try:
+            refresh_threads_token(db)
+            db.commit()
+        except Exception:
+            log.exception("Threads token refresh failed")
+            db.rollback()
+        log.info("collected %s metric snapshots", metrics.collect(db))
 
 
 def _reminders() -> None:

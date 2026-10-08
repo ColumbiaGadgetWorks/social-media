@@ -96,7 +96,7 @@ class BlueskyClient:
         self._check(r, "image upload")
         return r.json()["blob"], w, h
 
-    def publish(self, version: ChannelVersion) -> str:
+    def publish(self, version: ChannelVersion) -> tuple[str, str]:
         post = version.post
         text = version.full_text
         record: dict = {
@@ -121,5 +121,6 @@ class BlueskyClient:
             headers=self.headers,
         )
         self._check(r, "post")
-        rkey = r.json()["uri"].rsplit("/", 1)[-1]
-        return f"https://bsky.app/profile/{self.handle}/post/{rkey}"
+        uri = r.json()["uri"]
+        rkey = uri.rsplit("/", 1)[-1]
+        return f"https://bsky.app/profile/{self.handle}/post/{rkey}", uri

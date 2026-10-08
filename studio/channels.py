@@ -80,8 +80,38 @@ CHANNELS: dict[str, Channel] = {
             "x", "X", "batch", images=True, video=True, text_only=True,
             max_chars=280, max_images=4, tips="280 characters including hashtags; a link counts as 23.",
         ),
+        Channel(
+            "website", "Website news", "batch", images=True, video=False, text_only=True,
+            max_chars=20000, max_images=6, title_chars=90,
+            link_note="Markdown. Hashtags aren't used on the website.",
+            tips="A news post on columbiagadgetworks.org/news/. Title like a headline; body in Markdown, "
+                 "a few short paragraphs, link to /tools/... or /membership/ pages where useful. "
+                 "Only for posts worth keeping: class recaps, events, standout projects, org news.",
+        ),
     ]
 }
+
+# Channels that switch from batch day to automatic once their credentials are set.
+_DIRECT_WHEN = {
+    "instagram": "instagram_configured",
+    "facebook": "meta_configured",
+    "threads": "threads_configured",
+    "website": "website_configured",
+}
+
+
+def mode(channel: Channel | str) -> str:
+    """The channel's mode right now: direct when the Studio can publish it, else its default."""
+    from .db import settings
+
+    c = CHANNELS[channel] if isinstance(channel, str) else channel
+    flag = _DIRECT_WHEN.get(c.key)
+    if flag and getattr(settings(), flag):
+        return "direct"
+    return c.mode
+
+
+UNSAFE_HTML = ("<script", "<iframe", "<object", "<embed", "javascript:", "onerror=", "onload=")
 
 MANUAL_MODES = ("batch", "on_day")
 
@@ -110,6 +140,8 @@ def validate(channel: Channel, *, body: str, hashtags: str, title: str, kinds: s
         problems.append(f"{channel.label} accepts {' and '.join(accepts) or 'text only'}")
     if channel.images and image_count > channel.max_images:
         problems.append(f"{image_count} images; {channel.label} takes at most {channel.max_images}")
+    if channel.key == "website" and any(bad in body.lower() for bad in UNSAFE_HTML):
+        problems.append("the website text contains script or embed HTML, which isn't allowed")
     if channel.title_chars:
         if not title.strip():
             problems.append("title is empty")

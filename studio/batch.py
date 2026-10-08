@@ -73,7 +73,7 @@ def items(db: Session, channel_key: str) -> list[BatchItem]:
 def overview(db: Session) -> list[dict]:
     rows = []
     for c in ch.CHANNELS.values():
-        if c.mode not in ch.MANUAL_MODES:
+        if ch.mode(c) not in ch.MANUAL_MODES:
             continue
         found = items(db, c.key)
         rows.append({"channel": c, "count": len(found), "overdue": sum(1 for i in found if i.overdue)})

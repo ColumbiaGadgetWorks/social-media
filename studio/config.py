@@ -69,7 +69,45 @@ class Settings:
     scheduler_enabled: bool = True
     scheduler_interval_s: int = 60
     max_upload_mb: int = 500
+    # Public address for media that Meta fetches (/m/...). Defaults to base_url.
+    public_url: str = ""
+    # Calendar
     calendar_ics_url: str = ""
+    calendar_poll_minutes: int = 15
+    calendar_lookahead_days: int = 60
+    event_skip_keywords: list = field(default_factory=list)
+    # Meta (Facebook page, Instagram business account, Threads)
+    meta_graph_version: str = "v24.0"
+    meta_page_id: str = ""
+    meta_page_token: str = ""
+    meta_ig_user_id: str = ""
+    threads_user_id: str = ""
+    threads_token: str = ""
+    # Website (Hugo repo on GitHub)
+    github_token: str = ""
+    website_repo: str = "ColumbiaGadgetWorks/website"
+    website_branch: str = "main"
+    website_url: str = "https://columbiagadgetworks.org"
+
+    @property
+    def media_base_url(self) -> str:
+        return (self.public_url or self.base_url).rstrip("/")
+
+    @property
+    def meta_configured(self) -> bool:
+        return bool(self.meta_page_id and self.meta_page_token)
+
+    @property
+    def instagram_configured(self) -> bool:
+        return bool(self.meta_configured and self.meta_ig_user_id)
+
+    @property
+    def threads_configured(self) -> bool:
+        return bool(self.threads_user_id and self.threads_token)
+
+    @property
+    def website_configured(self) -> bool:
+        return bool(self.github_token and self.website_repo)
 
     @property
     def db_url(self) -> str:
@@ -119,9 +157,23 @@ def load_settings() -> Settings:
         scheduler_enabled=_bool("STUDIO_SCHEDULER_ENABLED", True),
         scheduler_interval_s=_int("STUDIO_SCHEDULER_INTERVAL", 60),
         max_upload_mb=_int("STUDIO_MAX_UPLOAD_MB", 500),
+        public_url=os.environ.get("STUDIO_PUBLIC_URL", ""),
         calendar_ics_url=os.environ.get(
             "STUDIO_CALENDAR_ICS_URL", "https://columbiagadgetworks.org/api/calendar.ics"
         ),
+        calendar_poll_minutes=_int("STUDIO_CALENDAR_POLL_MINUTES", 15),
+        calendar_lookahead_days=_int("STUDIO_CALENDAR_LOOKAHEAD_DAYS", 60),
+        event_skip_keywords=_list(os.environ.get("STUDIO_EVENT_SKIP_KEYWORDS", "board meeting,member meeting")),
+        meta_graph_version=os.environ.get("STUDIO_META_GRAPH_VERSION", "v24.0"),
+        meta_page_id=os.environ.get("STUDIO_META_PAGE_ID", ""),
+        meta_page_token=os.environ.get("STUDIO_META_PAGE_TOKEN", ""),
+        meta_ig_user_id=os.environ.get("STUDIO_META_IG_USER_ID", ""),
+        threads_user_id=os.environ.get("STUDIO_THREADS_USER_ID", ""),
+        threads_token=os.environ.get("STUDIO_THREADS_TOKEN", ""),
+        github_token=os.environ.get("STUDIO_GITHUB_TOKEN", ""),
+        website_repo=os.environ.get("STUDIO_WEBSITE_REPO", "ColumbiaGadgetWorks/website"),
+        website_branch=os.environ.get("STUDIO_WEBSITE_BRANCH", "main"),
+        website_url=os.environ.get("STUDIO_WEBSITE_URL", "https://columbiagadgetworks.org").rstrip("/"),
     )
 
 

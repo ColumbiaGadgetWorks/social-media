@@ -18,17 +18,46 @@ log = logging.getLogger(__name__)
 MAX_ATTEMPTS = 3
 
 
-def _bluesky_factory():
+def _bluesky(db):
     from .bluesky import BlueskyClient
 
     return BlueskyClient()
 
 
-PUBLISHERS: dict[str, Callable] = {"bluesky": _bluesky_factory}
+def _facebook(db):
+    from .meta import FacebookClient
+
+    return FacebookClient()
+
+
+def _instagram(db):
+    from .meta import InstagramClient
+
+    return InstagramClient()
+
+
+def _threads(db):
+    from .meta import ThreadsClient, threads_token
+
+    return ThreadsClient(token=threads_token(db))
+
+
+def _website(db):
+    from .website import WebsiteClient
+
+    return WebsiteClient()
+
+
+# Each factory takes the db session and returns a client whose publish(version)
+# returns (public url, platform id).
+PUBLISHERS: dict[str, Callable] = {
+    "bluesky": _bluesky, "facebook": _facebook, "instagram": _instagram,
+    "threads": _threads, "website": _website,
+}
 
 
 def due_versions(db: Session) -> list[ChannelVersion]:
-    direct = [c.key for c in ch.CHANNELS.values() if c.mode == "direct"]
+    direct = [c.key for c in ch.CHANNELS.values() if ch.mode(c) == "direct"]
     return db.scalars(
         select(ChannelVersion)
         .join(Post)
@@ -61,8 +90,8 @@ def publish_due(db: Session, factories: dict[str, Callable] | None = None) -> li
             continue
         try:
             if version.channel not in clients:
-                clients[version.channel] = factories[version.channel]()
-            url = clients[version.channel].publish(version)
+                clients[version.channel] = factories[version.channel](db)
+            url, external_id = clients[version.channel].publish(version)
         except Exception as exc:
             log.warning("publishing post %s to %s failed: %s", version.post_id, version.channel, exc)
             version.attempts += 1
@@ -77,6 +106,7 @@ def publish_due(db: Session, factories: dict[str, Callable] | None = None) -> li
             continue
         version.publish_state = "published"
         version.external_url = url
+        version.external_id = external_id
         version.published_at = utcnow()
         version.last_error = ""
         audit(db, system, "published", "post", version.post_id, channel=version.channel, url=url)

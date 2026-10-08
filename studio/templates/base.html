@@ -17,6 +17,7 @@
     <a href="/review" class="{{ 'on' if here.startswith('/review') }}">Review</a>
     <a href="/posts" class="{{ 'on' if here.startswith('/posts') }}">Posts</a>
     <a href="/media" class="{{ 'on' if here.startswith('/media') }}">Media</a>
+    <a href="/events" class="{{ 'on' if here.startswith('/events') }}">Events</a>
     <a href="/batch" class="{{ 'on' if here.startswith('/batch') }}">Batch day</a>
     {% if user.has_role('editor') %}<a href="/activity" class="{{ 'on' if here.startswith('/activity') }}">Activity</a>{% endif %}
     {% if user.has_role('admin') %}<a href="/admin/users" class="{{ 'on' if here.startswith('/admin') }}">Users</a>{% endif %}

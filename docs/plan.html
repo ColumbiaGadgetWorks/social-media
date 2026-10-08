@@ -140,7 +140,7 @@ td .tag { margin-right: 4px; }
 </style>
 
 <header class="top">
-  <div class="eyebrow">Columbia Gadget Works · Build plan v0.6 · Phase 1 built · $0 · ~0.1 GB idle</div>
+  <div class="eyebrow">Columbia Gadget Works · Build plan v0.7 · Phases 1–2 built · $0 · ~0.1 GB idle</div>
   <h1>CGW Content Studio</h1>
   <p class="lede">A self-hosted app for turning members' photos and videos, classes, events and shop humor into polished posts on nine channels, plus a separate announcement-only email list. Claude does the writing through your Pro plan, in sessions the Studio reminds you to run. A person approves every post before it goes anywhere.</p>
   <div class="meta"><span>Runs on: Unraid · one Docker container</span><span>AI: Claude Pro, via MCP on the LAN</span><span>Website: columbiagadgetworks/website (Hugo, Cloudflare)</span><span>Events from: Google Calendar</span><span>Contacts: Dolibarr (latest)</span><span>Revised Oct 7, 2026</span></div>
@@ -598,7 +598,7 @@ flowchart LR
     <thead><tr><th>What</th><th>Where the Studio writes it</th><th>How the site uses it</th></tr></thead>
     <tbody>
       <tr><td>News & projects</td><td><p><code>content/news/2026-10-14-laser-spotlight/index.md</code> with the images in the same folder</p></td><td><p>A normal Hugo section: a list page, single pages, and Hugo's built-in RSS feed for free</p></td></tr>
-      <tr><td>Events & classes</td><td><p><code>data/events.json</code>, rewritten whenever the ICS calendar changes</p></td><td><p>An upcoming-events list on the homepage and a page for each class (good Ad Grants landing pages)</p></td></tr>
+      <tr><td>Events & classes</td><td><p>Nothing to write</p></td><td><p>The site already reads the Google calendar live (<code>/api/calendar</code>), so the Studio only reads that same feed.</p></td></tr>
       <tr><td>Class descriptions</td><td><p><code>content/classes/intro-to-laser.md</code>, written by Claude and approved by you</p></td><td><p>The evergreen page that each calendar event links to</p></td></tr>
       <tr><td>Impact numbers</td><td><p><code>data/impact.json</code></p></td><td><p>A "this month at CGW" strip</p></td></tr>
     </tbody>
@@ -652,10 +652,10 @@ flowchart LR
     <li>LAN-only MCP server, <code>/cgw-session</code> and <code>/cgw-inbox</code>, "Claude session needed" reminder email</li>
     <li>Bluesky publishing, plus 2-week batch pages and zips for every other channel, so the Studio is useful from week one</li>
   </ul></div>
-  <div class="phase"><div class="when">Phase 2<small>~3 weekends</small></div><ul>
+  <div class="phase"><div class="when">Phase 2<small>Built, Oct 2026</small></div><ul>
     <li>Meta developer app: direct publishing to Instagram, Facebook and Threads, plus nightly metrics</li>
     <li>ICS calendar sync, event promo sets, <code>/cgw-event</code></li>
-    <li>Hugo publishing: news commits, <code>data/events.json</code>, class pages, and the site templates in the website repo</li>
+    <li>Hugo publishing: news posts committed to <code>content/news/</code> with photos in <code>assets/img/</code> (the site already shows the calendar live)</li>
     <li>Gap detection, <code>/cgw-plan</code>, hook bank import</li>
     <li>Apply for the YouTube audit, Google Business Profile API access and TikTok audit</li>
   </ul></div>
@@ -675,12 +675,12 @@ flowchart LR
   <div class="eyebrow">20 · Need your input</div>
   <h2>Status & settled questions</h2>
   <ol class="qs">
-    <li>Settled: Instagram is a Business account, the calendar is at <code>columbiagadgetworks.org/api/calendar.ics</code>, and Google Business Profile has no scheduling (1 post per 2 weeks, by hand on the day). <span>The Meta developer app setup in Phase 2 also needs the Instagram account linked to the Facebook page.</span></li>
-    <li>Phase 1 is built and in the repo. <span>Upload, media library, approval rule, MCP server with <code>/cgw-session</code>, Bluesky publishing, batch pages and zips, reminder emails, roles and the activity log. The app measured about 105 MB at idle.</span></li>
+    <li>Phase 1 and Phase 2 are built and published as <code>ghcr.io/columbiagadgetworks/social-media:latest</code>, with an Unraid template. <span>Phase 2 added automatic Instagram, Facebook, Threads and website posting (once connected), the events calendar sync with event cards and promo posts, gap detection, the hook bank, nightly metrics, and the /cgw-event, /cgw-plan and /cgw-review commands.</span></li>
+    <li>To turn on automatic posting: <span>follow <code>docs/setup-platforms.md</code> for the Meta app, Threads and the GitHub token, let <code>/m/</code> through the proxy, and file the free YouTube, Google Business Profile and TikTok API applications.</span></li>
   </ol>
 </section>
 
 </main>
 </div>
 
-<footer>CGW Content Studio · build plan v0.6 · github.com/ColumbiaGadgetWorks/social-media · Platform limits and API rules change often; each "Direct" channel is checked with a test post before it's built.</footer>
+<footer>CGW Content Studio · build plan v0.7 · github.com/ColumbiaGadgetWorks/social-media · Platform limits and API rules change often; each "Direct" channel is checked with a test post before it's built.</footer>

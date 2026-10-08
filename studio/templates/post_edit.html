@@ -18,7 +18,16 @@
     {% endfor %}
     {% if not post.media %}<p class="muted small">Text-only post.</p>{% endif %}
     </div>
-    {% if post.note %}<p class="small"><strong>Uploader's note:</strong> {{ post.note }}</p>{% endif %}
+    {% if post.event %}
+      {% set day, time = event_when(post.event) %}
+      <div class="problems small" style="background:var(--steel-soft);color:var(--fg)">
+        <strong>{{ (post.purpose or 'promo') | capitalize }} for an event:</strong> {{ post.event.title }}, {{ day }}, {{ time }}{% if post.event.location %}, {{ post.event.location }}{% endif %}.
+        {% if post.target_at %}Aim for {{ post.target_at | local }}.{% endif %}
+        {% if post.event.status == 'cancelled' %}<strong>The event was cancelled.</strong>{% endif %}
+        Check dates and times against <a href="/events">the calendar</a>.
+      </div>
+    {% endif %}
+    {% if post.note %}<p class="small"><strong>{{ 'Brief' if post.event else "Uploader's note" }}:</strong> {{ post.note }}</p>{% endif %}
     {% if post.claude_notes %}<p class="small"><strong>Claude's notes:</strong> {{ post.claude_notes }}</p>{% endif %}
     {% if post.review_comment %}<div class="problems"><strong>Reviewer:</strong> {{ post.review_comment }}</div>{% endif %}
   </div>
@@ -46,7 +55,7 @@
       <summary>
         <strong>{{ c.label }}</strong>
         {% if v.enabled %}<span class="tag ok">On</span>{% else %}<span class="tag">Off</span>{% endif %}
-        <span class="tag">{{ {'direct': 'Automatic', 'batch': 'Batch day', 'on_day': 'By hand on the day'}[c.mode] }}</span>
+        <span class="tag">{{ {'direct': 'Automatic', 'batch': 'Batch day', 'on_day': 'By hand on the day'}[mode_of(c)] }}</span>
         {% if v.scheduled_at %}<span class="small muted">{{ v.scheduled_at | local }}</span>{% endif %}
         {% if problems.get(key) %}<span class="tag warn">{{ problems[key] | length }} to fix</span>{% endif %}
       </summary>
@@ -123,8 +132,10 @@
           <span class="tag {{ {'published': 'ok', 'failed': 'stop', 'skipped': ''}.get(v.publish_state, 'warn') }}">{{ v.publish_state }}</span></div>
         <div class="small muted">{{ v.scheduled_at | local }}</div>
         {% if v.external_url %}<div class="small"><a href="{{ v.external_url }}" rel="noopener" target="_blank">View post</a></div>{% endif %}
+        {% set snap = snapshots.get(v.id) %}
+        {% if snap %}<div class="small muted mono">{% for k, val in snap.data.items() if val is number %}{{ k }} {{ val }}{{ ' · ' if not loop.last }}{% endfor %} <span>({{ snap.collected_at | local('%b %-d') }})</span></div>{% endif %}
         {% if v.last_error %}<div class="small" style="color:var(--stop)">{{ v.last_error }}</div>{% endif %}
-        {% if v.publish_state == 'pending' and c.mode != 'direct' %}
+        {% if v.publish_state == 'pending' and mode_of(c) != 'direct' %}
           <form method="post" action="/versions/{{ v.id }}/posted" class="row" style="margin-top:6px">
             <input type="hidden" name="csrf" value="{{ csrf }}">
             <input type="url" name="url" placeholder="Post link (optional)" style="flex:1;min-width:140px">

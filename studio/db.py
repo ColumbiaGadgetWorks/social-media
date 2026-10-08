@@ -46,9 +46,33 @@ def init(settings: Settings) -> None:
         cur.close()
 
     Base.metadata.create_all(engine)
+    _add_missing_columns(engine)
     state.settings = settings
     state.engine = engine
     state.SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
+
+
+def _add_missing_columns(engine) -> None:
+    """Tiny forward-only migration: add columns that newer code defines to existing tables.
+
+    New columns must be nullable or have a server-side-safe default; SQLite can't add
+    constraints to existing tables.
+    """
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            existing = {c["name"] for c in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in existing:
+                    continue
+                ddl_type = column.type.compile(dialect=engine.dialect)
+                default = ""
+                if column.default is not None and column.default.is_scalar:
+                    value = column.default.arg
+                    default = f" DEFAULT {int(value) if isinstance(value, bool) else repr(value)}"
+                conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {ddl_type}{default}'))
 
 
 def settings() -> Settings:

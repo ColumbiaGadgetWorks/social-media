@@ -13,9 +13,11 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from . import batch as batch_mod
+from . import calendar_sync, publishers
 from . import channels as ch
+from . import metrics as metrics_mod
 from . import posts as post_svc
-from . import publishers
+from . import public_media as public_media_mod
 from .auth import check_csrf, check_proxy, client_ip, current_user, require
 from .db import get_db, settings, utcnow
 from .media import MediaError, abs_path, human_size, store_upload
@@ -47,6 +49,7 @@ templates.env.filters["local"] = fmt_local
 templates.env.filters["input_dt"] = input_value
 templates.env.filters["size"] = human_size
 templates.env.globals["CHANNELS"] = ch.CHANNELS
+templates.env.globals["mode_of"] = ch.mode
 templates.env.globals["STATUS_LABELS"] = STATUS_LABELS
 
 PILLARS = [
@@ -316,9 +319,11 @@ def post_page(request: Request, post_id: int, db: Session = Depends(get_db)):
         select(AuditLog).where(AuditLog.entity_type == "post", AuditLog.entity_id == post.id).order_by(AuditLog.at.desc())
     ).all()
     compatible = {c.key for c in post_svc.compatible_channels(post)}
+    snapshots = {v.id: metrics_mod.latest(db, v.id) for v in post.versions if v.publish_state == "published"}
     return render(
         request, "post_edit.html", user, post=post, problems=found,
         history=history, compatible=compatible, seen_hash=post_svc.approval_hash(post),
+        snapshots=snapshots, event_when=calendar_sync.event_when,
     )
 
 
@@ -469,6 +474,22 @@ async def version_retry(request: Request, version_id: int, db: Session = Depends
     return await _version_action(request, version_id, db, "editor", fn)
 
 
+# --- events --------------------------------------------------------------
+
+
+@router.get("/events")
+def events_page(request: Request, db: Session = Depends(get_db)):
+    user = require(request, db)
+    events = calendar_sync.upcoming_events(db, days=settings().calendar_lookahead_days)
+    one_off = [e for e in events if not e.recurring or e.posts]
+    series: dict[str, list] = {}
+    for e in events:
+        if e.recurring and not e.posts:
+            series.setdefault(e.title, []).append(e)
+    return render(request, "events.html", user, events=one_off, series=series, when=calendar_sync.event_when,
+                  ics=settings().calendar_ics_url)
+
+
 # --- batch days ----------------------------------------------------------
 
 
@@ -481,7 +502,7 @@ def batch_overview(request: Request, db: Session = Depends(get_db)):
 @router.get("/batch/{channel}")
 def batch_channel(request: Request, channel: str, db: Session = Depends(get_db)):
     user = require(request, db)
-    if channel not in ch.CHANNELS or ch.CHANNELS[channel].mode not in ch.MANUAL_MODES:
+    if channel not in ch.CHANNELS or ch.mode(channel) not in ch.MANUAL_MODES:
         return render(request, "error.html", user, message="That channel doesn't have a batch page.")
     return render(request, "batch_channel.html", user, channel=ch.CHANNELS[channel],
                   items=batch_mod.items(db, channel), cycle=batch_mod.cycle_info())
@@ -490,7 +511,7 @@ def batch_channel(request: Request, channel: str, db: Session = Depends(get_db))
 @router.get("/batch/{channel}/download")
 def batch_download(request: Request, channel: str, db: Session = Depends(get_db)):
     user = require(request, db)
-    if channel not in ch.CHANNELS or ch.CHANNELS[channel].mode not in ch.MANUAL_MODES:
+    if channel not in ch.CHANNELS or ch.mode(channel) not in ch.MANUAL_MODES:
         return Response(status_code=404)
     data, count = batch_mod.build_zip(db, channel)
     audit(db, Actor("user", user), "batch_downloaded", "channel", None, channel=channel, items=count)
@@ -506,7 +527,18 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
     user = require(request, db)
     tokens = db.scalars(select(ApiToken).where(ApiToken.user_id == user.id).order_by(ApiToken.created_at.desc())).all()
     new_token = request.session.pop("new_token", None)
-    return render(request, "settings.html", user, tokens=tokens, new_token=new_token, base_url=settings().base_url)
+    s = settings()
+    connections = [
+        ("Bluesky", bool(s.bluesky_handle and s.bluesky_app_password), "STUDIO_BLUESKY_HANDLE, STUDIO_BLUESKY_APP_PASSWORD"),
+        ("Facebook page", s.meta_configured, "STUDIO_META_PAGE_ID, STUDIO_META_PAGE_TOKEN"),
+        ("Instagram", s.instagram_configured, "STUDIO_META_IG_USER_ID (plus the page token)"),
+        ("Threads", s.threads_configured, "STUDIO_THREADS_USER_ID, STUDIO_THREADS_TOKEN"),
+        ("Website news", s.website_configured, f"STUDIO_GITHUB_TOKEN (writes to {s.website_repo})"),
+        ("Events calendar", bool(s.calendar_ics_url), s.calendar_ics_url or "STUDIO_CALENDAR_ICS_URL"),
+        ("Reminder email", s.mail_backend == "smtp" and bool(s.smtp_user), "STUDIO_SMTP_USER, STUDIO_SMTP_PASSWORD"),
+    ]
+    return render(request, "settings.html", user, tokens=tokens, new_token=new_token, base_url=s.base_url,
+                  connections=connections, media_base=s.media_base_url, is_admin=user.has_role("admin"))
 
 
 @router.post("/settings/tokens")
@@ -602,6 +634,23 @@ def activity(request: Request, db: Session = Depends(get_db)):
     user = require(request, db, "editor")
     rows = db.scalars(select(AuditLog).order_by(AuditLog.at.desc()).limit(300)).all()
     return render(request, "activity.html", user, rows=rows)
+
+
+@router.get("/m/{media_id}/{variant}/{filename}")
+def public_media(media_id: int, variant: str, filename: str, db: Session = Depends(get_db)):
+    """Unauthenticated, signed links for platforms that fetch media (Meta). Approved posts only."""
+    sig = filename.rsplit(".", 1)[0]
+    if not public_media_mod.allowed(db, media_id, variant, sig):
+        return Response(status_code=404)
+    asset = db.get(MediaAsset, media_id)
+    if variant == "video":
+        if asset.kind != "video":
+            return Response(status_code=404)
+        return FileResponse(abs_path(asset.path), media_type=asset.mime)
+    if asset.kind != "image":
+        return Response(status_code=404)
+    return Response(public_media_mod.render(asset, variant), media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=3600"})
 
 
 @router.get("/healthz")

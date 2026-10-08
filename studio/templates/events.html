@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "_status.html" import status as st %}
+{% block title %}Events · CGW Studio{% endblock %}
+{% block content %}
+<h1>Upcoming events</h1>
+<p class="muted small">From the events calendar, checked every 15 minutes. One-off events get an announcement and a reminder post queued for Claude, with an event card. Recurring events (like Open Hack Night) and board or member meetings are skipped unless the event description has a line <span class="mono">Promote: yes</span>. Add <span class="mono">Promote: no</span> to skip one.</p>
+{% if series %}
+<div class="card small" style="margin-bottom:14px">
+  <strong>Recurring</strong> (no promo posts):
+  {% for title, items in series.items() %}{% set day, time = when(items[0]) %}{{ title }}, next {{ day }}, {{ time }} ({{ items | length }} upcoming){{ '; ' if not loop.last }}{% endfor %}
+</div>
+{% endif %}
+<div class="stack">
+{% for e in events %}
+  {% set day, time = when(e) %}
+  <div class="card">
+    <div class="row spread"><h3>{{ e.title }}</h3>
+      <div class="row">{% if e.status == 'cancelled' %}<span class="tag stop">Cancelled</span>{% endif %}{% if e.recurring %}<span class="tag">Recurring</span>{% endif %}{% if not e.promote %}<span class="tag">Not promoted</span>{% endif %}</div></div>
+    <p class="small">{{ day }}, {{ time }}{% if e.location %} · {{ e.location }}{% endif %}{% if e.url %} · <a href="{{ e.url }}" rel="noopener" target="_blank">Link</a>{% endif %}</p>
+    {% if e.posts %}<p class="small">{% for p in e.posts %}<a href="/posts/{{ p.id }}">{{ (p.purpose or 'post') | capitalize }}</a> {{ st(p.status) }}&nbsp;&nbsp;{% endfor %}</p>{% endif %}
+  </div>
+{% else %}<p class="muted">No upcoming events found yet. The calendar is read from {{ ics or 'nowhere (STUDIO_CALENDAR_ICS_URL is empty)' }}.</p>{% endfor %}
+</div>
+{% endblock %}

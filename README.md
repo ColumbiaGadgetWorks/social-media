@@ -25,10 +25,41 @@ The full plan is in [`docs/plan.html`](docs/plan.html). This is **Phase 1**.
 - Roles (contributor, editor, approver, admin), reverse-proxy auth plus a Studio login, CSRF
   protection, and an activity log of every change.
 
-Not in Phase 1: Meta/Threads direct posting, the calendar sync, the website feed, the browser
-extension, video editing (subtitles, music), and email announcements. See the roadmap in the plan.
+## What Phase 2 added
 
-## Run it on Unraid
+- **Automatic posting to Instagram, Facebook and Threads** once connected (photos, carousels,
+  Reels/videos, text). Instagram and Threads fetch media from signed `/m/...` links that only work
+  while the post is approved. Setup: [`docs/setup-platforms.md`](docs/setup-platforms.md).
+- **Website news posts:** approved `website` versions become one commit to
+  `ColumbiaGadgetWorks/website` (`content/news/<slug>.md` + photos in `assets/img/`) at the
+  scheduled time; Cloudflare deploys them.
+- **Events calendar sync** from the site's ICS feed every 15 minutes. New one-off events get an
+  event card and two queued posts (announce two weeks out, remind two days out). Recurring events
+  and board/member meetings are skipped unless the description says `Promote: yes`. If an event
+  moves, approvals on its posts are cleared; if it's cancelled, its posts are pulled (and a
+  cancellation notice is queued if it was already announced). See the **Events** page.
+- **Planning:** gap detection (3 main posts a week, 1 Google Business Profile post per cycle), a
+  weekly "schedule running dry" email, the old spreadsheet's hooks/CTAs as a hook bank, and
+  `/cgw-event`, `/cgw-plan`, `/cgw-review` commands.
+- **Nightly metrics** from Bluesky, Instagram, Facebook and Threads, kept permanently and shown
+  on each post; Claude reads them with `get_metrics`.
+
+Not yet: the browser extension, video editing (subtitles, music), and email announcements
+(Phase 3). The roadmap is in the plan.
+
+## Install on Unraid
+
+The image is published to `ghcr.io/columbiagadgetworks/social-media:latest` on every push. Add the
+template and icon:
+
+```
+wget -O /boot/config/plugins/dockerMan/templates-user/my-cgw-studio.xml https://raw.githubusercontent.com/ColumbiaGadgetWorks/social-media/HEAD/unraid/cgw-studio.xml
+```
+
+Then **Docker → Add Container → Template: cgw-studio**. For a first test on the LAN without the
+proxy, set *Require proxy auth* and *Secure cookies* to `false`; turn both back on behind the proxy.
+
+## Run it with docker compose
 
 1. Copy the repo to the server, then `cp .env.example .env` and fill it in. At minimum set
    `STUDIO_BASE_URL`, the admin username and password, `STUDIO_TRUSTED_PROXIES` (your reverse
@@ -36,8 +67,9 @@ extension, video editing (subtitles, music), and email announcements. See the ro
 2. `docker compose up -d --build`. The data lives in `/mnt/user/appdata/cgw-studio` and the media
    in `/mnt/user/cgw-media`. The container is capped at 1 GB of RAM; the app measured about 105 MB at idle.
 3. Point your reverse proxy at `http://<unraid-ip>:8080`, and have it pass the signed-in user in
-   the `Remote-User` header (Authelia and Authentik both do). **Block `/mcp` at the proxy.** The
-   Studio also refuses MCP requests that come through the proxy.
+   the `Remote-User` header (Authelia and Authentik both do). **Block `/mcp` at the proxy** (the
+   Studio also refuses MCP requests that come through the proxy) and **let `/m/*` through without
+   sign-in** so Meta can fetch approved media.
 4. Sign in with the admin account. Under **Users**, set each person's proxy username if it differs
    from their Studio username, and add an email address for reminders.
 

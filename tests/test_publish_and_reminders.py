@@ -71,7 +71,7 @@ def test_facets_use_byte_offsets():
 def test_publishes_due_bluesky_post(approved_post):
     calls = []
     with db_mod.session_scope() as s:
-        failed = publishers.publish_due(s, {"bluesky": lambda: BlueskyClient(http=fake_bluesky(calls))})
+        failed = publishers.publish_due(s, {"bluesky": lambda db: BlueskyClient(http=fake_bluesky(calls))})
         assert failed == []
     assert [c.rsplit(".", 1)[-1] for c in calls] == ["createSession", "uploadBlob", "createRecord"]
     with db_mod.session_scope() as s:
@@ -87,13 +87,13 @@ def test_tampered_post_is_blocked_not_sent(approved_post):
         s.get(Post, approved_post).version("bluesky").body = "Changed without approval"
     calls = []
     with db_mod.session_scope() as s:
-        failed = publishers.publish_due(s, {"bluesky": lambda: BlueskyClient(http=fake_bluesky(calls))})
+        failed = publishers.publish_due(s, {"bluesky": lambda db: BlueskyClient(http=fake_bluesky(calls))})
         assert len(failed) == 1 and failed[0].last_error.startswith("Blocked")
     assert calls == []
 
 
 def test_failures_retry_then_email(approved_post):
-    def broken():
+    def broken(db):
         raise RuntimeError("network down")
     for _ in range(publishers.MAX_ATTEMPTS):
         with db_mod.session_scope() as s:

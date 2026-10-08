@@ -107,6 +107,10 @@ class Post(Base):
     source: Mapped[str] = mapped_column(String(16), default="upload")
     claude_notes: Mapped[str] = mapped_column(Text, default="")
     review_comment: Mapped[str] = mapped_column(Text, default="")
+    # Event promos: which calendar event, what kind (announce | reminder), and when to aim for.
+    event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id"), nullable=True)
+    purpose: Mapped[str] = mapped_column(String(16), default="")
+    target_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -117,6 +121,7 @@ class Post(Base):
 
     created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_id])
     approved_by: Mapped[User | None] = relationship(foreign_keys=[approved_by_id])
+    event: Mapped[Event | None] = relationship(back_populates="posts")
     media_links: Mapped[list[PostMedia]] = relationship(
         order_by="PostMedia.position", cascade="all, delete-orphan", back_populates="post"
     )
@@ -163,6 +168,7 @@ class ChannelVersion(Base):
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # naive UTC
     publish_state: Mapped[str] = mapped_column(String(16), default="pending")
     external_url: Mapped[str] = mapped_column(String(512), default="")
+    external_id: Mapped[str] = mapped_column(String(256), default="")  # platform id, for metrics
     last_error: Mapped[str] = mapped_column(Text, default="")
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -196,3 +202,49 @@ class ReminderLog(Base):
     kind: Mapped[str] = mapped_column(String(32))
     key: Mapped[str] = mapped_column(String(64))
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Event(Base):
+    """One occurrence from the events calendar (ICS)."""
+
+    __tablename__ = "events"
+    __table_args__ = (UniqueConstraint("uid", "start"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uid: Mapped[str] = mapped_column(String(256))
+    start: Mapped[datetime] = mapped_column(DateTime)  # naive UTC
+    end: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    all_day: Mapped[bool] = mapped_column(Boolean, default=False)
+    title: Mapped[str] = mapped_column(String(300), default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    location: Mapped[str] = mapped_column(String(300), default="")
+    url: Mapped[str] = mapped_column(String(512), default="")
+    recurring: Mapped[bool] = mapped_column(Boolean, default=False)
+    promote: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String(16), default="active")  # active | cancelled
+    facts_hash: Mapped[str] = mapped_column(String(64), default="")
+    missing_count: Mapped[int] = mapped_column(Integer, default=0)
+    first_seen: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    changed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    promos_created: Mapped[bool] = mapped_column(Boolean, default=False)
+    card_media_id: Mapped[int | None] = mapped_column(ForeignKey("media.id"), nullable=True)
+    posts: Mapped[list[Post]] = relationship(back_populates="event")
+
+
+class MetricSnapshot(Base):
+    """Engagement numbers for one published channel version at one point in time."""
+
+    __tablename__ = "metric_snapshots"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    version_id: Mapped[int] = mapped_column(ForeignKey("channel_versions.id", ondelete="CASCADE"))
+    collected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    data: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    version: Mapped[ChannelVersion] = relationship()
+
+
+class Credential(Base):
+    """Tokens the Studio refreshes itself (e.g. Threads), overriding the .env value."""
+
+    __tablename__ = "credentials"
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

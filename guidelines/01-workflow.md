@@ -21,14 +21,30 @@ shouldn't try to work around that.
 6. Finish with a short summary: what you drafted, which days are still empty in the next two
    weeks, and any unused media worth turning into posts (`search_media` with `unused_only`).
 
+## Event promos
+
+Posts created from the events calendar carry an `event` block in `get_work_item`. Its facts (date,
+time, place, price, link) are the only facts you may use; the attached event card already shows
+them. Schedule near `aim_for`: announcements about two weeks out, reminders two days out. A
+`cancellation` post tells people the event is off; keep it short and point to the calendar at
+https://columbiagadgetworks.org/calendar/.
+
+## The website channel
+
+`website` publishes a news post on columbiagadgetworks.org/news/. Use it only for things worth
+keeping on the site: class and event announcements, recaps, standout projects, org news. Give it a
+headline-style `title` and a Markdown `body` of a few short paragraphs; link to site pages such as
+/tools/laser-cutter/, /membership/ or /calendar/ where they help. No hashtags, no raw HTML.
+
 ## Scheduling defaults
 
 - Rhythm: three main posts a week. Day 1 Membership, Day 3 Awareness, Day 5 Flex (events,
   projects, hack night, donations). Don't put two main posts on the same day.
 - Good times (Central): weekdays 11:30 or 18:00, Saturday 10:00. Thursday hack-night reminders at
   12:00 on Thursday.
-- Batch-day channels (TikTok, YouTube Shorts, LinkedIn, X, and for now Instagram, Facebook and
-  Threads) are scheduled by hand every 2 weeks. TikTok only accepts posts up to 10 days ahead, so
+- Batch-day channels (TikTok, YouTube Shorts, LinkedIn, X, plus Instagram, Facebook, Threads and
+  the website until they're connected; `get_guidelines` lists which are automatic) are scheduled
+  by hand every 2 weeks. TikTok only accepts posts up to 10 days ahead, so
   keep TikTok times within 10 days of the next batch day.
 - Google Business Profile: at most one post every 2 weeks, chosen for local search value (an
   upcoming class or event, or a standout project). It's posted by hand on the day.

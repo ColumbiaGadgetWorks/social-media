@@ -18,13 +18,13 @@ from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 
+from . import calendar_sync, metrics, queue
 from . import channels as ch
 from . import posts as post_svc
-from . import queue
 from .config import ip_in
 from .db import session_scope, settings
 from .media import abs_path
-from .models import MediaAsset, Post, User
+from .models import MediaAsset, Post, PostMedia, User
 from .security import Actor, audit, user_for_token
 from .timeutil import fmt_local, input_value, parse_local
 from .web import PILLARS
@@ -76,7 +76,7 @@ def _media_summary(m: MediaAsset) -> dict:
 
 
 def _post_summary(p: Post) -> dict:
-    return {
+    summary = {
         "post_id": p.id, "status": p.status, "title": p.title, "note": p.note, "pillar": p.pillar,
         "review_comment": p.review_comment,
         "media": [_media_summary(m) for m in p.media],
@@ -87,6 +87,15 @@ def _post_summary(p: Post) -> dict:
             for v in p.versions if v.enabled or v.body
         ],
     }
+    if p.event is not None:
+        summary["event"] = calendar_sync.event_facts(p.event)
+        summary["purpose"] = p.purpose
+        summary["aim_for"] = input_value(p.target_at)
+        summary["event_instructions"] = (
+            "Facts (date, time, place, price, link) come only from `event`. Schedule close to `aim_for`. "
+            "The attached event card shows the facts; swap in or add real photos with attach_media if any fit."
+        )
+    return summary
 
 
 @server.tool()
@@ -179,10 +188,65 @@ def search_media(query: str = "", kind: str = "", unused_only: bool = False, lim
 
 @server.tool()
 def get_schedule(days: int = 21) -> str:
-    """What's planned per day (drafts, in review, approved) and which days have nothing yet."""
+    """What's planned per day, which days are empty, weeks short of 3 main posts, and the GBP post for this cycle."""
     with session_scope() as db:
         _actor(db)
-        return json.dumps(queue.schedule(db, days=min(max(days, 1), 60)), indent=1)
+        data = queue.schedule(db, days=min(max(days, 1), 60))
+        data["gaps"] = queue.gaps(db, weeks=3)
+        return json.dumps(data, indent=1)
+
+
+@server.tool()
+def get_events(days: int = 45) -> str:
+    """Upcoming calendar events, with whether the Studio made promo posts for each."""
+    with session_scope() as db:
+        _actor(db)
+        events = calendar_sync.upcoming_events(db, days=min(max(days, 1), 120))
+        return json.dumps([
+            {**calendar_sync.event_facts(e), "promoted": e.promos_created,
+             "promo_posts": [{"post_id": p.id, "purpose": p.purpose, "status": p.status} for p in e.posts]}
+            for e in events
+        ], indent=1)
+
+
+@server.tool()
+def get_metrics(days: int = 90) -> str:
+    """Engagement for posts published in the last `days`, with averages by pillar and by channel."""
+    with session_scope() as db:
+        _actor(db)
+        return json.dumps(metrics.summary(db, days=min(max(days, 7), 365)), indent=1, default=str)
+
+
+@server.tool()
+def attach_media(post_id: int, media_ids: list[int], replace: bool = False) -> str:
+    """Add library photos/videos to a post that isn't approved yet (or replace its media with replace=true)."""
+    with session_scope() as db:
+        actor = _actor(db)
+        post = db.get(Post, post_id)
+        if post is None:
+            return f"Error: post {post_id} doesn't exist."
+        if post.status in ("approved", "done"):
+            return "Error: approved posts can only be changed in the web app."
+        assets = [db.get(MediaAsset, i) for i in media_ids]
+        if any(a is None for a in assets):
+            return "Error: one of those media ids doesn't exist."
+        if replace:
+            post.media_links.clear()
+            db.flush()
+        have = {link.media_id for link in post.media_links}
+        for asset in assets:
+            if asset.id not in have:
+                post.media_links.append(PostMedia(media=asset, position=len(post.media_links)))
+        post_svc.ensure_versions(post)
+        for v in post.versions:  # drop channels that can no longer take this media
+            if v.enabled and v.channel not in {c.key for c in post_svc.compatible_channels(post)}:
+                v.enabled = False
+        if post.status == "in_review":
+            post.status = "draft"
+        audit(db, actor, "media_changed", "post", post.id, media=[link.media_id for link in post.media_links])
+        return json.dumps({"post_id": post.id, "media": [link.media_id for link in post.media_links],
+                           "channels_available": [c.key for c in post_svc.compatible_channels(post)],
+                           "status": post.status})
 
 
 @server.tool()

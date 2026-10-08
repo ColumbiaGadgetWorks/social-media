@@ -81,10 +81,59 @@ def channel_rules_text() -> str:
     lines = []
     for c in ch.CHANNELS.values():
         accepts = ", ".join(k for k, ok in (("images", c.images), ("video", c.video), ("text only", c.text_only)) if ok)
-        how = {"direct": "published automatically", "batch": "scheduled by hand on batch day", "on_day": "posted by hand on the day"}[c.mode]
+        how = {"direct": "published automatically", "batch": "scheduled by hand on batch day", "on_day": "posted by hand on the day"}[ch.mode(c)]
         extra = f" Title up to {c.title_chars} chars." if c.title_chars else ""
         lines.append(
             f"- {c.key} ({c.label}): {how}; accepts {accepts}; caption up to {c.max_chars} chars incl. hashtags"
             f"{'; up to ' + str(c.max_images) + ' images' if c.images else ''}.{extra} {c.link_note} {c.tips}".rstrip()
         )
     return "\n".join(lines)
+
+
+MAIN_POSTS_PER_WEEK = 3
+PLANNED_STATUSES = ("needs_claude", "draft", "in_review", "approved", "done")
+
+
+def _planned_times(db: Session) -> list[tuple[Post, object]]:
+    """Each planned post with its first scheduled time (or its target time while it waits for Claude)."""
+    out = []
+    for post in db.scalars(select(Post).where(Post.status.in_(PLANNED_STATUSES))).all():
+        times = [v.scheduled_at for v in post.versions if v.enabled and v.scheduled_at]
+        when = min(times) if times else post.target_at
+        if when:
+            out.append((post, when))
+    return out
+
+
+def gaps(db: Session, weeks: int = 3) -> dict:
+    """Weeks with fewer than three main posts, and whether Google Business Profile has its post this cycle."""
+    from .timeutil import cycle_start
+
+    today = local_now().date()
+    monday = today - timedelta(days=today.weekday())
+    planned = _planned_times(db)
+    week_rows = []
+    for i in range(weeks):
+        start = monday + timedelta(weeks=i)
+        count = sum(1 for _, when in planned if start <= to_local(when).date() < start + timedelta(days=7))
+        week_rows.append({"week_of": start.isoformat(), "planned": count, "target": MAIN_POSTS_PER_WEEK,
+                          "missing": max(0, MAIN_POSTS_PER_WEEK - count)})
+    cycle = cycle_start(today)
+    gbp = sum(
+        1 for post, _ in planned for v in post.versions
+        if v.channel == "gbp" and v.enabled and v.scheduled_at
+        and cycle <= to_local(v.scheduled_at).date() < cycle + timedelta(days=14)
+    )
+    return {"weeks": week_rows, "gbp_this_cycle": gbp, "gbp_target": 1, "cycle_start": cycle.isoformat()}
+
+
+def approved_in_next(db: Session, days: int = 7) -> int:
+    now = utcnow()
+    return len({
+        v.post_id for v in db.scalars(
+            select(ChannelVersion).join(Post).where(
+                Post.status.in_(("in_review", "approved")), ChannelVersion.enabled.is_(True),
+                ChannelVersion.scheduled_at >= now, ChannelVersion.scheduled_at < now + timedelta(days=days),
+            )
+        ).all()
+    })

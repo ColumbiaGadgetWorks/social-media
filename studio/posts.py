@@ -74,6 +74,8 @@ def problems(post: Post) -> dict[str, list[str]]:
         out[""] = ["no channels are selected"]
     if any(m.processing_status != "ready" for m in post.media):
         out.setdefault("", []).append("media is still processing")
+    if any(m.kind == "video" for m in post.media) and len(post.media) > 1:
+        out.setdefault("", []).append("a post with a video can't have other photos or videos; split it into separate posts")
     kinds, images = media_kinds(post), image_count(post)
     for v in enabled:
         channel = ch.CHANNELS.get(v.channel)
@@ -221,7 +223,7 @@ def mark_posted(db: Session, actor: Actor, version: ChannelVersion, url: str = "
     if not actor.is_human:
         raise PostError("Only a person can mark a post as scheduled.")
     channel = ch.CHANNELS[version.channel]
-    if channel.mode not in ch.MANUAL_MODES:
+    if ch.mode(channel) not in ch.MANUAL_MODES:
         raise PostError(f"{channel.label} is published automatically.")
     ok, reason = is_publishable(version.post)
     if not ok:

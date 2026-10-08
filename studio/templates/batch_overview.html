@@ -8,9 +8,9 @@
   <a class="card" href="/batch/{{ r.channel.key }}" style="text-decoration:none;color:inherit">
     <h3>{{ r.channel.label }}</h3>
     <div class="stat">{{ r.count }}</div>
-    <p class="small muted">{% if r.channel.mode == 'on_day' %}Posted by hand on the day{% else %}Up to {{ r.channel.horizon_days }} days ahead{% endif %}{% if r.overdue %} · <span style="color:var(--stop)">{{ r.overdue }} overdue</span>{% endif %}</p>
+    <p class="small muted">{% if mode_of(r.channel) == 'on_day' %}Posted by hand on the day{% else %}Up to {{ r.channel.horizon_days }} days ahead{% endif %}{% if r.overdue %} · <span style="color:var(--stop)">{{ r.overdue }} overdue</span>{% endif %}</p>
   </a>
 {% endfor %}
 </div>
-<p class="small muted" style="margin-top:16px">Instagram, Facebook and Threads are on this list until the Meta connection is set up (Phase 2). Bluesky publishes automatically.</p>
+<p class="small muted" style="margin-top:16px">Channels that publish automatically (Bluesky, and Instagram, Facebook, Threads and the website once connected) aren't listed here.</p>
 {% endblock %}

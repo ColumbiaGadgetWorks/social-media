@@ -32,6 +32,16 @@
     {% endif %}
   </div>
 </div>
+<div class="stack">
+<div class="card">
+  <h2 style="margin-top:0">Connections</h2>
+  <p class="small muted">Set in the container's environment (Unraid template or <span class="mono">.env</span>). Connected channels publish automatically; the rest go to batch day.</p>
+  <table>{% for name, ok, hint in connections %}
+    <tr><td>{{ name }}</td><td>{% if ok %}<span class="tag ok">Connected</span>{% else %}<span class="tag">Not set up</span>{% endif %}</td>
+    {% if is_admin %}<td class="small muted mono" style="word-break:break-word">{{ hint }}</td>{% endif %}</tr>
+  {% endfor %}</table>
+  {% if is_admin %}<p class="small muted">Meta fetches approved photos and videos from <span class="mono">{{ media_base }}/m/…</span>. That path must be reachable from the internet without proxy sign-in.</p>{% endif %}
+</div>
 <form method="post" action="/settings/password" class="card">
   <h2 style="margin-top:0">Password</h2>
   <input type="hidden" name="csrf" value="{{ csrf }}">
@@ -39,5 +49,6 @@
   <label for="new">New password (10+ characters)</label><input type="password" id="new" name="new" autocomplete="new-password" required>
   <p><button type="submit">Change password</button></p>
 </form>
+</div>
 </div>
 {% endblock %}

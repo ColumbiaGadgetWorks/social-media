@@ -12,7 +12,7 @@ from . import batch, mailer
 from . import channels as ch
 from .db import settings
 from .models import ChannelVersion, Post, ReminderLog, User
-from .queue import queue_summary
+from .queue import approved_in_next, gaps, queue_summary
 from .timeutil import local_day_bounds_utc, local_now, to_local
 
 log = logging.getLogger(__name__)
@@ -108,7 +108,7 @@ def batch_day(db: Session) -> bool:
 def on_day_posts(db: Session) -> bool:
     """Channels that can't schedule ahead (Google Business Profile): remind on the day."""
     start, end = local_day_bounds_utc(local_now().date())
-    keys = [c.key for c in ch.CHANNELS.values() if c.mode == "on_day"]
+    keys = [c.key for c in ch.CHANNELS.values() if ch.mode(c) == "on_day"]
     due = db.scalars(
         select(ChannelVersion).join(Post).where(
             ChannelVersion.channel.in_(keys), ChannelVersion.enabled.is_(True),
@@ -132,11 +132,49 @@ def publish_failures(db: Session, failed: list[ChannelVersion]) -> None:
         _send(db, "publish_failed", f"{v.id}:{v.attempts}:{v.last_error[:20]}", f"Publishing failed: {v.post.display_title}", body)
 
 
+def schedule_dry(db: Session) -> bool:
+    """Fewer than two posts lined up for the next week: ask for a planning session."""
+    if approved_in_next(db, 7) >= 2:
+        return False
+    found = gaps(db, weeks=2)
+    lines = [f"- Week of {w['week_of']}: {w['planned']} of {w['target']} posts planned" for w in found["weeks"]]
+    if found["gbp_this_cycle"] < found["gbp_target"]:
+        lines.append("- Google Business Profile: no post yet this cycle")
+    body = (
+        "The schedule is running dry: fewer than two posts are approved or in review for the next 7 days.\n\n"
+        + "\n".join(lines)
+        + "\n\nIn Claude Code, run:\n\n    /cgw-plan\n\nClaude will suggest posts from unused media and upcoming events."
+    )
+    year, week, _ = local_now().isocalendar()
+    return _send(db, "schedule_dry", f"{year}-W{week}", "Schedule running dry: run /cgw-plan", body)
+
+
 def run_daily(db: Session) -> None:
     if local_now().hour < settings().reminder_hour:
         return
     claude_session(db)
+    schedule_dry(db)
     approvals(db)
     batch_day(db)
     on_day_posts(db)
 
+
+
+def event_changed(db: Session, event, posts, changes: list[str]) -> bool:
+    if not posts:
+        return False
+    lines = [f"- {p.display_title} ({p.status.replace('_', ' ')}): {settings().base_url}/posts/{p.id}" for p in posts]
+    body = (f"\"{event.title}\" changed in the calendar ({', '.join(changes)}). Posts about it need another look; "
+            "any approval was cleared:\n\n" + "\n".join(lines))
+    return _send(db, "event_changed", f"{event.id}:{event.facts_hash[:12]}", f"Event changed: {event.title}", body)
+
+
+def event_cancelled(db: Session, event, pulled, announced: bool) -> bool:
+    lines = [f"- {p.display_title}: {settings().base_url}/posts/{p.id}" for p in pulled]
+    body = f"\"{event.title}\" was cancelled or removed from the calendar."
+    if lines:
+        body += " These posts were pulled and won't publish:\n\n" + "\n".join(lines)
+    if announced:
+        body += ("\n\nIt had already been announced, so a cancellation notice is queued for the next Claude "
+                 "session. Also delete any copies already scheduled on batch-day platforms.")
+    return _send(db, "event_cancelled", str(event.id), f"Event cancelled: {event.title}", body)

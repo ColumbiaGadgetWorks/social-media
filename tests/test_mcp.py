@@ -147,3 +147,21 @@ def test_claude_cannot_edit_an_approved_post(setup):
     with db_mod.session_scope() as s:
         post = s.get(Post, post_id)
         assert post.status == "approved" and post.version("bluesky").body == "Hi"
+
+
+def test_phase2_tools(setup):
+    web, token, post_id = setup
+    mcp = MCP(web, token).init()
+    schedule = json.loads(mcp.call("get_schedule")["content"][0]["text"])
+    assert "gaps" in schedule and len(schedule["gaps"]["weeks"]) == 3
+    assert json.loads(mcp.call("get_events")["content"][0]["text"]) == []
+    assert "by_pillar" in json.loads(mcp.call("get_metrics")["content"][0]["text"])
+
+    upload(web, [("b.jpg", jpeg_bytes(), "image/jpeg")], mode="library")
+    with db_mod.session_scope() as s:
+        from sqlalchemy import select as sel
+
+        from studio.models import MediaAsset
+        library_id = s.scalars(sel(MediaAsset.id).order_by(MediaAsset.id.desc())).first()
+    result = json.loads(mcp.call("attach_media", post_id=post_id, media_ids=[library_id])["content"][0]["text"])
+    assert len(result["media"]) == 2 and "website" in result["channels_available"]
