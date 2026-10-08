@@ -44,8 +44,27 @@ The full plan is in [`docs/plan.html`](docs/plan.html). This is **Phase 1**.
 - **Nightly metrics** from Bluesky, Instagram, Facebook and Threads, kept permanently and shown
   on each post; Claude reads them with `get_metrics`.
 
-Not yet: the browser extension, video editing (subtitles, music), and email announcements
-(Phase 3). The roadmap is in the plan.
+## What Phase 3 added
+
+- **Video editing.** On any video's page (or "Edit video" from a post), or from Claude with
+  `request_render`: trim, shape (9:16 / 4:5 / 1:1, blurred background or crop), burned-in subtitles,
+  a licensed music bed ducked under speech, a small logo and a 2-second end card. Edits are new media
+  items; when requested for a post, the edit replaces the original in it. Subtitles come from a local
+  Whisper model (`base.en`, downloaded once to `/data/models`); fix any words on the video's page.
+- **Music library** (`/music`): upload licensed tracks with their license. Tracks that need credit
+  (CC BY) make the credit line required in every caption of a post that uses them.
+- **Monthly "Coming up at CGW" email** to the Dolibarr contacts tagged *Email updates* (the list
+  the website signup already builds). The draft appears about 12 days before the first Tuesday with
+  that month's one-off events, Claude writes it (`draft_announcement`), you approve it, and it sends
+  at 10 am on the first Tuesday. Special announcements are possible; a third email in a month needs
+  an admin override. Every email has one-click unsubscribe (RFC 8058), which removes the Dolibarr tag
+  and sets the contact's email opt-out; each send is logged on the contact's Dolibarr agenda.
+  Social posts can't be emailed.
+- **Browser extension** for batch day ([`extension/`](extension/README.md)): fills each platform's
+  upload form (file, title, caption) from the approved batch; you press Schedule.
+- **Insights** (`/insights`): average engagement by pillar, channel and format, and the top posts.
+
+The roadmap and long-term ideas are in the plan.
 
 ## Install on Unraid
 
@@ -67,9 +86,9 @@ proxy, set *Require proxy auth* and *Secure cookies* to `false`; turn both back 
 2. `docker compose up -d --build`. The data lives in `/mnt/user/appdata/cgw-studio` and the media
    in `/mnt/user/cgw-media`. The container is capped at 1 GB of RAM; the app measured about 105 MB at idle.
 3. Point your reverse proxy at `http://<unraid-ip>:8080`, and have it pass the signed-in user in
-   the `Remote-User` header (Authelia and Authentik both do). **Block `/mcp` at the proxy** (the
-   Studio also refuses MCP requests that come through the proxy) and **let `/m/*` through without
-   sign-in** so Meta can fetch approved media.
+   the `Remote-User` header (Authelia and Authentik both do). **Block `/mcp` and `/api/ext/` at
+   the proxy** (the Studio also refuses those through the proxy) and **let `/m/*` and `/u/*` through
+   without sign-in** so Meta can fetch approved media and email recipients can unsubscribe.
 4. Sign in with the admin account. Under **Users**, set each person's proxy username if it differs
    from their Studio username, and add an email address for reminders.
 

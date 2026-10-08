@@ -43,7 +43,7 @@ def create_app(settings: Settings | None = None):
     db_mod.init(settings)
     _bootstrap_admin()
 
-    from . import mcp_server, scheduler
+    from . import ext_api, mcp_server, scheduler
     from .web import router
 
     mcp_app = mcp_server.MCPGate()
@@ -65,6 +65,7 @@ def create_app(settings: Settings | None = None):
     )
     web.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
     web.include_router(router)
+    web.include_router(ext_api.router)
 
     @web.exception_handler(LoginRequired)
     async def _login(request: Request, _exc):

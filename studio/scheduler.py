@@ -7,7 +7,7 @@ import logging
 import threading
 import time
 
-from . import calendar_sync, media, metrics, publishers, reminders
+from . import announcements, calendar_sync, media, metrics, publishers, reminders, video
 from .db import session_scope, settings
 from .timeutil import local_now
 
@@ -17,8 +17,8 @@ _media_lock = threading.Lock()  # one heavy media job at a time keeps RAM low
 
 def tick() -> None:
     """One pass. Each step is isolated so one failure doesn't stop the others."""
-    steps = (("media", _media), ("calendar", _calendar), ("publish", _publish), ("reminders", _reminders),
-             ("nightly", _nightly))
+    steps = (("media", _media), ("calendar", _calendar), ("publish", _publish), ("email", _email),
+             ("reminders", _reminders), ("nightly", _nightly))
     for name, step in steps:
         try:
             step()
@@ -32,6 +32,8 @@ def _media() -> None:
     try:
         with session_scope() as db:
             while media.process_pending(db):
+                pass
+            while video.run_pending(db):
                 pass
     finally:
         _media_lock.release()
@@ -80,6 +82,29 @@ def _nightly() -> None:
             log.exception("Threads token refresh failed")
             db.rollback()
         log.info("collected %s metric snapshots", metrics.collect(db))
+
+
+def _email() -> None:
+    """Monthly drafts, due announcements, and unsubscribes waiting to reach Dolibarr."""
+    with session_scope() as db:
+        announcements.ensure_monthly(db)
+        db.commit()
+        if settings().dolibarr_configured:
+            announcements.sync_pending_unsubscribes(db)
+            db.commit()
+        for ann in announcements.due(db):
+            try:
+                announcements.send(db, ann)
+                reminders.announcement_sent(db, ann)
+            except Exception as exc:
+                log.exception("sending announcement %s failed", ann.id)
+                db.rollback()
+                ann.attempts += 1
+                ann.last_error = str(exc)[:500]
+                if ann.attempts >= 3:
+                    ann.status = "failed"
+                db.commit()
+                reminders.announcement_failed(db, ann)
 
 
 def _reminders() -> None:

@@ -12,23 +12,29 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from . import announcements as ann_mod
 from . import batch as batch_mod
 from . import calendar_sync, publishers
 from . import channels as ch
 from . import metrics as metrics_mod
 from . import posts as post_svc
 from . import public_media as public_media_mod
+from . import video as video_mod
 from .auth import check_csrf, check_proxy, client_ip, current_user, require
 from .db import get_db, settings, utcnow
+from .dolibarr import Dolibarr
 from .media import MediaError, abs_path, human_size, store_upload
 from .models import (
     ROLES,
     STATUS_LABELS,
+    Announcement,
     ApiToken,
     AuditLog,
     ChannelVersion,
     MediaAsset,
+    MusicTrack,
     Post,
+    RenderJob,
     User,
 )
 from .queue import queue_summary
@@ -51,6 +57,16 @@ templates.env.filters["size"] = human_size
 templates.env.globals["CHANNELS"] = ch.CHANNELS
 templates.env.globals["mode_of"] = ch.mode
 templates.env.globals["STATUS_LABELS"] = STATUS_LABELS
+
+# License name -> does it require a credit line in captions?
+MUSIC_LICENSES = {
+    "Pixabay Content License": False,
+    "CC0 / public domain": False,
+    "CC BY 4.0": True,
+    "CC BY-SA 4.0": True,
+    "Own recording": False,
+    "Other (credit required)": True,
+}
 
 PILLARS = [
     ("member_projects", "Member projects"),
@@ -242,7 +258,90 @@ def media_detail(request: Request, media_id: int, db: Session = Depends(get_db))
     if asset is None:
         return render(request, "error.html", user, message="That file doesn't exist.")
     used_in = db.scalars(select(Post).join(Post.media_links).where(Post.media_links.any(media_id=media_id))).unique().all()
-    return render(request, "media_detail.html", user, asset=asset, used_in=used_in)
+    jobs = db.scalars(select(RenderJob).where(RenderJob.source_media_id == media_id).order_by(RenderJob.id.desc())).all()
+    tracks = db.scalars(select(MusicTrack).order_by(MusicTrack.title)).all()
+    post_id = request.query_params.get("post")
+    return render(request, "media_detail.html", user, asset=asset, used_in=used_in, jobs=jobs, tracks=tracks,
+                  srt=video_mod.to_srt(asset.transcript or []), for_post=int(post_id) if post_id and post_id.isdigit() else None,
+                  shapes=list(video_mod.SHAPES), default_end_card=video_mod.DEFAULT_END_CARD)
+
+
+@router.post("/media/{media_id}/render")
+async def media_render(request: Request, media_id: int, db: Session = Depends(get_db)):
+    user = require(request, db)
+    form = await form_with_csrf(request)
+    asset = db.get(MediaAsset, media_id)
+    post = db.get(Post, int(form["post_id"])) if str(form.get("post_id", "")).isdigit() else None
+    raw = {k: form.get(k) for k in ("start", "end", "shape", "fit", "music_track_id", "music_volume", "end_card_text")}
+    raw |= {k: form.get(k) == "1" for k in ("subtitles", "keep_audio", "logo", "end_card")}
+    try:
+        video_mod.request(db, Actor("user", user), asset, raw, post=post)
+    except video_mod.RenderError as exc:
+        db.rollback()
+        flash(request, str(exc), "error")
+        return back(f"/media/{media_id}" + (f"?post={post.id}" if post else ""))
+    db.commit()
+    kick_media()
+    flash(request, "Render queued. It usually takes a minute or two; reload to see it." +
+          (" The result will replace this video in the post." if post else ""))
+    return back(f"/media/{media_id}" + (f"?post={post.id}" if post else ""))
+
+
+@router.post("/media/{media_id}/transcript")
+async def media_transcript(request: Request, media_id: int, db: Session = Depends(get_db)):
+    user = require(request, db)
+    form = await form_with_csrf(request)
+    asset = db.get(MediaAsset, media_id)
+    try:
+        asset.transcript = video_mod.from_srt(str(form.get("srt", "")))
+    except ValueError:
+        flash(request, "That doesn't look like subtitle text. Keep the numbered blocks and the time lines.", "error")
+        return back(f"/media/{media_id}")
+    asset.transcript_status = "done" if asset.transcript else asset.transcript_status
+    audit(db, Actor("user", user), "transcript_edited", "media", asset.id, segments=len(asset.transcript))
+    flash(request, "Subtitles saved.")
+    return back(f"/media/{media_id}")
+
+
+@router.get("/music")
+def music_page(request: Request, db: Session = Depends(get_db)):
+    user = require(request, db)
+    tracks = db.scalars(select(MusicTrack).order_by(MusicTrack.title)).all()
+    return render(request, "music.html", user, tracks=tracks, licenses=MUSIC_LICENSES)
+
+
+@router.post("/music")
+async def music_upload(request: Request, db: Session = Depends(get_db)):
+    user = require(request, db, "editor")
+    form = await form_with_csrf(request)
+    upload = form.get("file")
+    license_ = str(form.get("license", ""))
+    if not getattr(upload, "filename", "") or license_ not in MUSIC_LICENSES:
+        flash(request, "Choose an audio file and its license.", "error")
+        return back("/music")
+    credit = str(form.get("credit_line", "")).strip()
+    if MUSIC_LICENSES[license_] and not credit:
+        flash(request, f"{license_} requires a credit line, e.g. \"Music: Title by Artist (CC BY 4.0)\".", "error")
+        return back("/music")
+    try:
+        track = video_mod.store_music(
+            db, upload.file, upload.filename, title=str(form.get("title", "")).strip() or upload.filename,
+            artist=str(form.get("artist", "")).strip(), license=license_, credit_line=credit,
+            source_url=str(form.get("source_url", "")).strip(), mood=str(form.get("mood", "")).strip())
+    except video_mod.RenderError as exc:
+        db.rollback()
+        flash(request, str(exc), "error")
+        return back("/music")
+    audit(db, Actor("user", user), "music_added", "music", track.id, title=track.title, license=license_)
+    flash(request, f"Added {track.title}.")
+    return back("/music")
+
+
+@router.get("/music/{track_id}/file")
+def music_file(request: Request, track_id: int, db: Session = Depends(get_db)):
+    require(request, db)
+    track = db.get(MusicTrack, track_id)
+    return FileResponse(abs_path(track.path)) if track else Response(status_code=404)
 
 
 @router.post("/media/{media_id}")
@@ -298,7 +397,8 @@ def posts_list(request: Request, status: str = "", db: Session = Depends(get_db)
 def review(request: Request, db: Session = Depends(get_db)):
     user = require(request, db)
     waiting = db.scalars(select(Post).where(Post.status == "in_review").order_by(Post.submitted_at)).all()
-    return render(request, "review.html", user, posts=waiting)
+    emails = db.scalars(select(Announcement).where(Announcement.status == "in_review")).all()
+    return render(request, "review.html", user, posts=waiting, emails=emails)
 
 
 def _load_post(db: Session, post_id: int) -> Post | None:
@@ -474,6 +574,176 @@ async def version_retry(request: Request, version_id: int, db: Session = Depends
     return await _version_action(request, version_id, db, "editor", fn)
 
 
+# --- email announcements ---------------------------------------------------
+
+
+@router.get("/announcements")
+def announcements_page(request: Request, db: Session = Depends(get_db)):
+    user = require(request, db)
+    rows = db.scalars(select(Announcement).order_by(Announcement.send_at.desc().nulls_last()).limit(60)).all()
+    return render(request, "announcements.html", user, rows=rows, dolibarr=settings().dolibarr_configured)
+
+
+@router.post("/announcements/new")
+async def announcement_new(request: Request, db: Session = Depends(get_db)):
+    user = require(request, db, "editor")
+    form = await form_with_csrf(request)
+    try:
+        when = parse_local(form.get("send_at"))
+        if when is None:
+            raise ValueError
+        ann = ann_mod.create_special(db, Actor("user", user), str(form.get("subject", "")), when)
+    except (ValueError, ann_mod.AnnouncementError) as exc:
+        db.rollback()
+        flash(request, str(exc) or "Enter a subject and a send time.", "error")
+        return back("/announcements")
+    return back(f"/announcements/{ann.id}")
+
+
+def _recipient_count() -> tuple[int | None, str]:
+    if not settings().dolibarr_configured:
+        return None, "Dolibarr isn't connected, so the list can't be read yet."
+    try:
+        return len(Dolibarr().recipients()), ""
+    except Exception as exc:
+        return None, f"Couldn't read the list from Dolibarr: {exc}"
+
+
+@router.get("/announcements/{ann_id}")
+def announcement_page(request: Request, ann_id: int, db: Session = Depends(get_db)):
+    user = require(request, db)
+    ann = db.get(Announcement, ann_id)
+    if ann is None:
+        return render(request, "error.html", user, message="That email doesn't exist.")
+    preview_html, _ = ann_mod.render(ann, "#unsubscribe")
+    count, count_note = _recipient_count() if ann.status in ("in_review", "approved") else (None, "")
+    history = db.scalars(select(AuditLog).where(AuditLog.entity_type == "announcement", AuditLog.entity_id == ann.id)
+                         .order_by(AuditLog.at.desc())).all()
+    return render(request, "announcement_edit.html", user, a=ann, preview_html=preview_html,
+                  problems=ann_mod.problems(db, ann), seen_hash=ann_mod.content_hash(ann), history=history,
+                  count=count, count_note=count_note, same_month=ann_mod.same_month_count(db, ann),
+                  editable=ann.status not in ("sent", "cancelled"))
+
+
+@router.post("/announcements/{ann_id}")
+async def announcement_save(request: Request, ann_id: int, db: Session = Depends(get_db)):
+    user = require(request, db, "editor")
+    form = await form_with_csrf(request)
+    ann = db.get(Announcement, ann_id)
+    items = []
+    for i, item in enumerate(ann.items):
+        if form.get(f"item{i}.remove") == "1":
+            continue
+        items.append({**item, "blurb": str(form.get(f"item{i}.blurb", item.get("blurb", ""))).strip()})
+    try:
+        when = parse_local(form.get("send_at"))
+        ann_mod.update(db, Actor("user", user), ann, subject=str(form.get("subject", "")).strip(),
+                       preheader=str(form.get("preheader", "")).strip(),
+                       intro=str(form.get("intro", "")).replace("\r\n", "\n").strip(),
+                       closing=str(form.get("closing", "")).replace("\r\n", "\n").strip(), items=items, send_at=when)
+        if form.get("action") == "submit":
+            ann_mod.submit(db, Actor("user", user), ann)
+            flash(request, "Saved and sent for review.")
+        else:
+            flash(request, "Saved.")
+    except (ValueError, ann_mod.AnnouncementError) as exc:
+        db.rollback()
+        flash(request, str(exc), "error")
+    return back(f"/announcements/{ann_id}")
+
+
+async def _ann_action(request: Request, ann_id: int, db: Session, role: str, fn):
+    user = require(request, db, role)
+    form = await form_with_csrf(request)
+    ann = db.get(Announcement, ann_id)
+    try:
+        flash(request, fn(Actor("user", user), ann, form))
+    except ann_mod.AnnouncementError as exc:
+        db.rollback()
+        flash(request, str(exc), "error")
+    return back(f"/announcements/{ann_id}")
+
+
+@router.post("/announcements/{ann_id}/approve")
+async def announcement_approve(request: Request, ann_id: int, db: Session = Depends(get_db)):
+    def fn(actor, ann, form):
+        ann_mod.approve(db, actor, ann, str(form.get("seen_hash", "")))
+        return f"Approved. It sends {fmt_local(ann.send_at)}."
+    return await _ann_action(request, ann_id, db, "approver", fn)
+
+
+@router.post("/announcements/{ann_id}/changes")
+async def announcement_changes(request: Request, ann_id: int, db: Session = Depends(get_db)):
+    def fn(actor, ann, form):
+        cancel = form.get("cancel") == "1"
+        ann_mod.send_back(db, actor, ann, str(form.get("comment", "")).strip(), cancel=cancel)
+        return "Cancelled; it won't be sent." if cancel else "Sent back for changes."
+    return await _ann_action(request, ann_id, db, "approver", fn)
+
+
+@router.post("/announcements/{ann_id}/override")
+async def announcement_override(request: Request, ann_id: int, db: Session = Depends(get_db)):
+    def fn(actor, ann, form):
+        ann_mod.set_override(db, actor, ann, form.get("on") == "1")
+        return "Monthly limit overridden for this email." if ann.override_cap else "Override removed."
+    return await _ann_action(request, ann_id, db, "admin", fn)
+
+
+@router.post("/announcements/{ann_id}/test")
+async def announcement_test(request: Request, ann_id: int, db: Session = Depends(get_db)):
+    def fn(actor, ann, form):
+        if not actor.user.email:
+            raise ann_mod.AnnouncementError("Add your email address under Users first.")
+        ann_mod.send_test(ann, actor.user.email)
+        audit(db, actor, "test_sent", "announcement", ann.id)
+        return f"Test sent to {actor.user.email}."
+    return await _ann_action(request, ann_id, db, "editor", fn)
+
+
+# --- unsubscribe (public) --------------------------------------------------
+
+
+@router.get("/u/{token}")
+def unsubscribe_page(request: Request, token: str):
+    email = ann_mod.email_from_token(token)
+    return templates.TemplateResponse(request, "unsubscribe.html", {"email": email, "done": False, "token": token},
+                                      status_code=200 if email else 404)
+
+
+@router.post("/u/{token}")
+def unsubscribe_now(request: Request, token: str, db: Session = Depends(get_db)):
+    """The page's button and RFC 8058 one-click requests (List-Unsubscribe=One-Click) both land here."""
+    email = ann_mod.email_from_token(token)
+    if email is None:
+        return Response("That unsubscribe link isn't valid.", status_code=404)
+    ann_mod.record_unsubscribe(db, email)
+    return templates.TemplateResponse(request, "unsubscribe.html", {"email": email, "done": True, "token": token})
+
+
+# --- insights --------------------------------------------------------------
+
+
+def _bars(groups: dict, labels: dict) -> list[dict]:
+    rows = sorted(groups.items(), key=lambda kv: kv[1]["avg_engagement"], reverse=True)
+    top = max((v["avg_engagement"] for _, v in rows), default=0) or 1
+    return [{"label": labels.get(k, k.replace("_", " ").capitalize()), "value": v["avg_engagement"],
+             "posts": v["posts"], "pct": round(100 * v["avg_engagement"] / top, 1)} for k, v in rows]
+
+
+@router.get("/insights")
+def insights(request: Request, days: int = 90, db: Session = Depends(get_db)):
+    user = require(request, db)
+    days = days if days in (30, 90, 365) else 90
+    data = metrics_mod.summary(db, days=days)
+    channel_labels = {k: c.label for k, c in ch.CHANNELS.items()}
+    top = sorted((p for p in data["posts"] if p["metrics"]), key=lambda p: p["engagement"], reverse=True)[:15]
+    return render(request, "insights.html", user, days=days, measured=sum(1 for p in data["posts"] if p["metrics"]),
+                  published=len(data["posts"]), top=top, channel_labels=channel_labels,
+                  charts=[("By pillar", _bars(data["by_pillar"], dict(PILLARS) | {"none": "No pillar"})),
+                          ("By channel", _bars(data["by_channel"], channel_labels)),
+                          ("By format", _bars(data["by_format"], {}))])
+
+
 # --- events --------------------------------------------------------------
 
 
@@ -527,6 +797,7 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
     user = require(request, db)
     tokens = db.scalars(select(ApiToken).where(ApiToken.user_id == user.id).order_by(ApiToken.created_at.desc())).all()
     new_token = request.session.pop("new_token", None)
+    new_scope = request.session.pop("new_token_scope", "mcp")
     s = settings()
     connections = [
         ("Bluesky", bool(s.bluesky_handle and s.bluesky_app_password), "STUDIO_BLUESKY_HANDLE, STUDIO_BLUESKY_APP_PASSWORD"),
@@ -536,8 +807,11 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
         ("Website news", s.website_configured, f"STUDIO_GITHUB_TOKEN (writes to {s.website_repo})"),
         ("Events calendar", bool(s.calendar_ics_url), s.calendar_ics_url or "STUDIO_CALENDAR_ICS_URL"),
         ("Reminder email", s.mail_backend == "smtp" and bool(s.smtp_user), "STUDIO_SMTP_USER, STUDIO_SMTP_PASSWORD"),
+        ("Email list (Dolibarr)", s.dolibarr_configured, "STUDIO_DOLIBARR_URL, STUDIO_DOLIBARR_API_KEY"),
+        ("Subtitles (Whisper)", bool(s.whisper_model), f"STUDIO_WHISPER_MODEL={s.whisper_model or '(off)'}"),
     ]
-    return render(request, "settings.html", user, tokens=tokens, new_token=new_token, base_url=s.base_url,
+    return render(request, "settings.html", user, tokens=tokens, new_token=new_token, new_scope=new_scope,
+                  base_url=s.base_url,
                   connections=connections, media_base=s.media_base_url, is_admin=user.has_role("admin"))
 
 
@@ -545,10 +819,12 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
 async def token_create(request: Request, db: Session = Depends(get_db)):
     user = require(request, db)
     form = await form_with_csrf(request)
-    name = str(form.get("name", "")).strip() or "Claude Code"
-    token = create_api_token(db, user, name)
-    audit(db, Actor("user", user), "token_created", "user", user.id, name=name)
+    scope = "extension" if form.get("scope") == "extension" else "mcp"
+    name = str(form.get("name", "")).strip() or ("Browser extension" if scope == "extension" else "Claude Code")
+    token = create_api_token(db, user, name, scope)
+    audit(db, Actor("user", user), "token_created", "user", user.id, name=name, scope=scope)
     request.session["new_token"] = token
+    request.session["new_token_scope"] = scope
     return back("/settings")
 
 

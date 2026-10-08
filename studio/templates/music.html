@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Music · CGW Studio{% endblock %}
+{% block content %}
+<h1>Music library</h1>
+<p class="muted small">Only tracks with a known license go here. Good free sources: Pixabay Music (no credit needed) and the Free Music Archive (check each track; CC BY needs a credit line). Instagram and TikTok trending sounds are added in their apps instead.</p>
+{% if tracks %}
+<div class="table-wrap"><table>
+  <thead><tr><th>Track</th><th>License</th><th>Credit line</th><th>Length</th><th>Listen</th></tr></thead>
+  <tbody>{% for t in tracks %}<tr>
+    <td>{{ t.title }}{% if t.artist %} <span class="muted">· {{ t.artist }}</span>{% endif %}{% if t.mood %}<div class="small muted">{{ t.mood }}</div>{% endif %}</td>
+    <td class="small">{{ t.license }}{% if t.source_url %}<div><a href="{{ t.source_url }}" rel="noopener" target="_blank">Source</a></div>{% endif %}</td>
+    <td class="small">{{ t.credit_line or '—' }}</td>
+    <td class="small mono">{{ '%d:%02d' | format((t.duration_s or 0) // 60, (t.duration_s or 0) % 60) }}</td>
+    <td><audio controls preload="none" src="/music/{{ t.id }}/file" style="max-width:220px"></audio></td>
+  </tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<p class="muted">No tracks yet.</p>{% endif %}
+{% if user.has_role('editor') %}
+<h2>Add a track</h2>
+<form method="post" action="/music" enctype="multipart/form-data" class="card" style="max-width:640px">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label for="m-file">Audio file</label><input type="file" id="m-file" name="file" accept="audio/*" required>
+  <div class="grid">
+    <div><label for="m-title">Title</label><input type="text" id="m-title" name="title"></div>
+    <div><label for="m-artist">Artist</label><input type="text" id="m-artist" name="artist"></div>
+    <div><label for="m-license">License</label><select id="m-license" name="license" required>{% for name, credit in licenses.items() %}<option value="{{ name }}">{{ name }}{{ ' (credit required)' if credit and 'credit' not in name }}</option>{% endfor %}</select></div>
+    <div><label for="m-mood">Mood</label><input type="text" id="m-mood" name="mood" placeholder="upbeat, chill, workshop"></div>
+  </div>
+  <label for="m-credit">Credit line (required for CC BY)</label><input type="text" id="m-credit" name="credit_line" placeholder="Music: Title by Artist (CC BY 4.0)">
+  <label for="m-src">Where it came from</label><input type="url" id="m-src" name="source_url" placeholder="https://pixabay.com/music/...">
+  <p><button type="submit" class="primary">Add track</button></p>
+</form>
+{% endif %}
+{% endblock %}

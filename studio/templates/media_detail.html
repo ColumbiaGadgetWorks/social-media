@@ -15,6 +15,52 @@
       {% if asset.processing_status == 'pending' %}<p class="muted small">Still processing. Reload in a moment.</p>{% endif %}
       {% if asset.frames %}<h3 style="margin-top:12px">Frames Claude sees</h3><div class="thumbs">{% for f in asset.frames %}<img src="/files/{{ asset.id }}/frame{{ loop.index }}" alt="Frame {{ loop.index }}">{% endfor %}</div>{% endif %}
     </div>
+    {% if asset.kind == 'video' and asset.processing_status == 'ready' %}
+    <form method="post" action="/media/{{ asset.id }}/render" class="card" id="edit">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      {% if for_post %}<input type="hidden" name="post_id" value="{{ for_post }}">{% endif %}
+      <h3>Edit video</h3>
+      <p class="small muted">Makes a new edited copy; the original stays as it is.{% if for_post %} The edit replaces this video in <a href="/posts/{{ for_post }}">post {{ for_post }}</a> when it's done.{% endif %}</p>
+      <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
+        <div><label for="r-start">Start (seconds)</label><input type="text" id="r-start" name="start" value="0" inputmode="decimal"></div>
+        <div><label for="r-end">End (seconds)</label><input type="text" id="r-end" name="end" value="{{ '%.1f' | format(asset.duration_s or 0) }}" inputmode="decimal"></div>
+        <div><label for="r-shape">Shape</label><select id="r-shape" name="shape">{% for s in shapes %}<option value="{{ s }}">{{ s }}{{ ' (Reels, Shorts, TikTok)' if s == '9:16' }}</option>{% endfor %}</select></div>
+        <div><label for="r-fit">Fit</label><select id="r-fit" name="fit"><option value="pad">Blurred background</option><option value="crop">Crop to fill</option></select></div>
+      </div>
+      <label class="row" style="font-weight:500"><input type="checkbox" name="subtitles" value="1" {{ 'checked' if asset.transcript else 'disabled' }}> Subtitles {% if not asset.transcript %}<span class="muted small">(no transcript{{ ': ' ~ asset.transcript_status if asset.transcript_status }})</span>{% endif %}</label>
+      <label class="row" style="font-weight:500"><input type="checkbox" name="keep_audio" value="1" checked> Keep the original sound</label>
+      <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
+        <div><label for="r-music">Music</label><select id="r-music" name="music_track_id"><option value="">None</option>
+          {% for t in tracks %}<option value="{{ t.id }}">{{ t.title }}{% if t.mood %} ({{ t.mood }}){% endif %}{% if t.credit_line %} · credit required{% endif %}</option>{% endfor %}</select>
+          {% if not tracks %}<p class="small muted"><a href="/music">Add licensed music</a> first.</p>{% endif %}</div>
+        <div><label for="r-vol">Music volume</label><select id="r-vol" name="music_volume"><option value="0.15">Quiet</option><option value="0.25" selected>Background</option><option value="0.45">Upfront</option></select></div>
+      </div>
+      <label class="row" style="font-weight:500"><input type="checkbox" name="logo" value="1" checked> CGW logo in the corner</label>
+      <label class="row" style="font-weight:500"><input type="checkbox" name="end_card" value="1" checked> 2-second end card</label>
+      <input type="text" name="end_card_text" value="{{ default_end_card }}" maxlength="80" aria-label="End card text">
+      <p><button type="submit" class="primary">Render</button></p>
+    </form>
+
+    {% if jobs %}
+    <div class="card"><h3>Edits</h3>
+      {% for j in jobs %}<div class="row spread small" style="border-top:1px solid var(--line);padding:6px 0">
+        <span>#{{ j.id }} · {{ j.spec.shape }} · {{ j.spec.start }}–{{ j.spec.end }}s{% if j.spec.subtitles %} · subtitles{% endif %}{% if j.spec.music_track_id %} · music{% endif %} <span class="muted">by {{ j.requested_by }}</span></span>
+        <span>{% if j.status == 'done' %}<a href="/media/{{ j.output_media_id }}">Open</a> <span class="muted">{{ j.note }}</span>{% elif j.status == 'failed' %}<span style="color:var(--stop)">Failed: {{ j.error }}</span>{% else %}<span class="tag warn">{{ j.status }}</span>{% endif %}</span>
+      </div>{% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="post" action="/media/{{ asset.id }}/transcript" class="card">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <h3>Subtitles</h3>
+      <p class="small muted">{% if asset.transcript %}Fix any words Whisper got wrong. Keep the numbers and time lines as they are.{% else %}No transcript yet{% if asset.transcript_status == 'failed' %} (transcription failed){% elif asset.transcript_status == 'off' %} (transcription is turned off){% endif %}. You can paste subtitles in SRT format.{% endif %}</p>
+      <textarea name="srt" style="min-height:180px;font-family:var(--mono);font-size:13px">{{ srt }}</textarea>
+      <p><button type="submit">Save subtitles</button></p>
+    </form>
+    {% endif %}
+    {% if asset.credit %}<div class="problems small">Music credit required in captions: <strong>{{ asset.credit }}</strong></div>{% endif %}
+    {% if asset.source_media_id %}<p class="small muted">Edited from <a href="/media/{{ asset.source_media_id }}">media {{ asset.source_media_id }}</a>.</p>{% endif %}
+
     <form method="post" action="/media/{{ asset.id }}" class="card">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <label for="note">Uploader's note</label><input type="text" id="note" name="note" value="{{ asset.note }}">

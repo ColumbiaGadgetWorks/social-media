@@ -303,7 +303,8 @@ def sync(db: Session, text: str) -> dict:
         if event is None:
             event = Event(uid=o["uid"], start=o["start"], end=o["end"], all_day=o["all_day"], title=o["title"],
                           description=o["description"], location=o["location"], url=o["url"],
-                          recurring=o["recurring"], promote=should_promote(o), facts_hash=digest)
+                          recurring=o["recurring"], promote=should_promote(o), facts_hash=digest,
+                          email_ok=o["directives"].get("email", "").lower() not in ("no", "false", "off"))
             db.add(event)
             db.flush()
             result["new"] += 1
@@ -325,6 +326,7 @@ def sync(db: Session, text: str) -> dict:
                     setattr(event, k, o[k])
                 event.facts_hash, event.changed_at = digest, now
                 event.promote = should_promote(o)
+                event.email_ok = o["directives"].get("email", "").lower() not in ("no", "false", "off")
                 touched = handle_change(db, event, price, changes or ["details"])
                 result["changed"] += 1
                 reminders.event_changed(db, event, touched, changes)

@@ -19,13 +19,17 @@ def claude_queue(db: Session) -> list[Post]:
 
 
 def queue_summary(db: Session) -> dict:
+    from .models import Announcement
+
     items = claude_queue(db)
-    oldest = items[0].created_at if items else None
+    emails = db.scalars(select(Announcement).where(Announcement.status == "needs_claude")).all()
+    oldest = min([p.created_at for p in items] + [a.created_at for a in emails], default=None)
     return {
-        "count": len(items),
+        "count": len(items) + len(emails),
+        "emails": len(emails),
         "oldest_days": (utcnow() - oldest).days if oldest else 0,
         "media_count": sum(len(p.media_links) for p in items),
-        "minutes": max(5, round(len(items) * 1.5)) if items else 0,
+        "minutes": max(5, round(len(items) * 1.5) + 5 * len(emails)) if items or emails else 0,
     }
 
 

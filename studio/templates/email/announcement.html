@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ a.subject }}</title></head>
+<body style="margin:0;padding:0;background:#f6f4f3;font-family:Helvetica,Arial,sans-serif;color:#23201f">
+<span style="display:none;max-height:0;overflow:hidden">{{ a.preheader }}</span>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f4f3">
+<tr><td align="center" style="padding:24px 12px">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:8px;overflow:hidden">
+    <tr><td style="background:#a4596f;padding:22px 28px;color:#ffffff">
+      <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.9">Columbia Gadget Works</div>
+      <div style="font-size:24px;font-weight:bold;line-height:1.25;margin-top:6px">{{ a.subject }}</div>
+    </td></tr>
+    <tr><td style="padding:24px 28px 8px;font-size:16px;line-height:1.55">
+      {% for p in intro %}<p style="margin:0 0 14px">{{ p | safe }}</p>{% endfor %}
+    </td></tr>
+    {% for item in items %}
+    <tr><td style="padding:8px 28px">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #ddd5d4;border-radius:6px">
+        <tr><td style="padding:16px 18px">
+          <div style="font-size:18px;font-weight:bold;line-height:1.3">{{ item.title }}</div>
+          <div style="font-size:14px;color:#6b6362;margin:4px 0 10px">{{ item.when }}{% if item.where %} · {{ item.where }}{% endif %}</div>
+          <div style="font-size:15px;line-height:1.5">{{ item.blurb_html | safe }}</div>
+          {% if item.link %}<div style="margin-top:12px"><a href="{{ item.link }}" style="display:inline-block;background:#a4596f;color:#ffffff;text-decoration:none;padding:9px 16px;border-radius:5px;font-size:14px;font-weight:bold">Details</a></div>{% endif %}
+        </td></tr>
+      </table>
+    </td></tr>
+    {% endfor %}
+    <tr><td style="padding:16px 28px 24px;font-size:15px;line-height:1.55">
+      {% for p in closing %}<p style="margin:0 0 12px">{{ p | safe }}</p>{% endfor %}
+      <p style="margin:0"><a href="{{ site }}/calendar/" style="color:#a4596f">Full calendar</a> · <a href="{{ site }}" style="color:#a4596f">columbiagadgetworks.org</a></p>
+    </td></tr>
+  </table>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px">
+    <tr><td style="padding:16px 28px;font-size:12px;line-height:1.5;color:#6b6362;text-align:center">
+      You're getting this because you signed up for email updates from Columbia Gadget Works.<br>
+      {{ address }}<br>
+      <a href="{{ unsubscribe_url }}" style="color:#6b6362">Unsubscribe</a>
+    </td></tr>
+  </table>
+</td></tr>
+</table>
+</body>
+</html>

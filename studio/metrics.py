@@ -111,7 +111,7 @@ def summary(db: Session, days: int = 90) -> dict:
         select(ChannelVersion, Post).join(Post).where(
             ChannelVersion.publish_state == "published", ChannelVersion.published_at >= since)
     ).all()
-    posts, by_pillar, by_channel = [], defaultdict(lambda: [0, 0]), defaultdict(lambda: [0, 0])
+    posts, by_pillar, by_channel, by_format = [], defaultdict(lambda: [0, 0]), defaultdict(lambda: [0, 0]), defaultdict(lambda: [0, 0])
     for version, post in rows:
         snap = latest(db, version.id)
         data = snap.data if snap else {}
@@ -122,10 +122,14 @@ def summary(db: Session, days: int = 90) -> dict:
             "media": sorted({m.kind for m in post.media}) or ["text"], "url": version.external_url,
             "metrics": data, "engagement": score,
         })
+        kinds = [m.kind for m in post.media]
+        fmt = "video" if "video" in kinds else "carousel" if len(kinds) > 1 else "photo" if kinds else "text"
+        posts[-1]["format"] = fmt
         if snap:
-            for bucket, key in ((by_pillar, post.pillar or "none"), (by_channel, version.channel)):
+            for bucket, key in ((by_pillar, post.pillar or "none"), (by_channel, version.channel), (by_format, fmt)):
                 bucket[key][0] += 1
                 bucket[key][1] += score
     avg = lambda d: {k: {"posts": n, "avg_engagement": round(t / n, 1)} for k, (n, t) in d.items()}  # noqa: E731
     return {"days": days, "posts": posts, "by_pillar": avg(by_pillar), "by_channel": avg(by_channel),
+            "by_format": avg(by_format),
             "note": "Engagement = likes + comments/replies + shares/reposts + saves. Batch-day channels have links only."}

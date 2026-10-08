@@ -10,7 +10,9 @@ names are what matter.
 | Path | Rule |
 |---|---|
 | `/m/*` | **Public, no sign-in.** Meta's servers fetch approved photos and videos here. Links are signed and stop working when a post isn't approved. |
+| `/u/*` | **Public, no sign-in.** Unsubscribe links in emails (including one-click unsubscribe from Gmail and Yahoo). |
 | `/mcp` | **Blocked.** Claude Code connects on the LAN directly to port 8080. |
+| `/api/ext/*` | **Blocked.** The browser extension connects on the LAN directly to port 8080. |
 | everything else | Behind proxy auth, as now. |
 
 If `/m/` should be served from a different hostname than the one people use, set
@@ -78,7 +80,22 @@ onto a blurred background instead of cropping them. Videos post as Reels.
    `content/news/<slug>.md` plus photos in `assets/img/`. Cloudflare deploys it within minutes.
    The commit message names the post and its approver.
 
-## 5. Apply for the remaining APIs (free, takes weeks)
+## 5. Dolibarr (monthly email)
+
+1. In Dolibarr, create a user for the Studio (or use an existing one) with permission to read and
+   create/modify **contacts**, read and modify **tags/categories**, and create **agenda events**.
+   Under that user's card, generate an **API key**. The REST API module must be enabled
+   (Setup → Modules → API REST).
+2. Set **STUDIO_DOLIBARR_URL** (Dolibarr's address, reachable from the Studio container; no
+   trailing slash), **STUDIO_DOLIBARR_API_KEY**, and **STUDIO_DOLIBARR_USER_ID** (that user's id,
+   used as the owner of the "email sent" agenda events).
+3. The list is the contacts tagged **Email updates** (change with STUDIO_DOLIBARR_TAG if the
+   onboarding module uses a different name). Settings → Connections shows whether it's reachable;
+   an email's page shows how many people are on the list.
+4. Sending goes through the same SMTP2GO login as reminders. Make sure the From address
+   (STUDIO_ANNOUNCE_FROM, default `mail@columbiagadgetworks.org`) is a verified sender in SMTP2GO.
+
+## 6. Apply for the remaining APIs (free, takes weeks)
 
 These move channels from batch day to automatic when approved:
 
@@ -91,4 +108,4 @@ These move channels from batch day to automatic when approved:
 - **TikTok:** create an app at <https://developers.tiktok.com>, add the Content Posting API, and
   apply for the audit. Unaudited apps can only post privately.
 
-Until then, batch day covers them, and the browser extension (Phase 3) speeds it up.
+Until then, batch day covers them, and the browser extension speeds it up.

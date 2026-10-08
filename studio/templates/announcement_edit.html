@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ a.subject }} · CGW Studio{% endblock %}
+{% block content %}
+<div class="row spread"><h1>{{ a.subject or 'Email' }}</h1>
+  <span class="tag {{ {'needs_claude': 'pink', 'in_review': 'warn', 'approved': 'ok', 'sent': 'ok', 'failed': 'stop'}.get(a.status, '') }}">{{ a.status | replace('_', ' ') }}</span></div>
+{% if a.review_comment %}<div class="problems"><strong>Reviewer:</strong> {{ a.review_comment }}</div>{% endif %}
+{% if a.last_error %}<div class="problems">Last send error: {{ a.last_error }}</div>{% endif %}
+<div class="two">
+<div class="stack">
+  {% if editable and user.has_role('editor') %}
+  <form method="post" action="/announcements/{{ a.id }}" class="card">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label for="subject">Subject</label><input type="text" id="subject" name="subject" value="{{ a.subject }}" maxlength="200">
+    <label for="preheader">Preview text (shown after the subject in inboxes)</label><input type="text" id="preheader" name="preheader" value="{{ a.preheader }}" maxlength="200">
+    <label for="send_at">Send at</label><input type="datetime-local" id="send_at" name="send_at" value="{{ a.send_at | input_dt }}">
+    <label for="intro">Opening</label><textarea id="intro" name="intro">{{ a.intro }}</textarea>
+    <p class="small muted">Paragraphs separated by a blank line. **bold** and [links](https://...) work.</p>
+    {% for item in a.items %}
+      <div style="border-top:1px solid var(--line);margin-top:12px;padding-top:10px">
+        <div class="row spread"><strong>{{ item.title }}</strong><label class="row small" style="margin:0;font-weight:500"><input type="checkbox" name="item{{ loop.index0 }}.remove" value="1"> Remove</label></div>
+        <div class="small muted">{{ item.when }}{% if item.where %} · {{ item.where }}{% endif %}{% if item.link %} · <a href="{{ item.link }}" target="_blank" rel="noopener">link</a>{% endif %}</div>
+        <textarea name="item{{ loop.index0 }}.blurb" style="min-height:70px" aria-label="Description of {{ item.title }}">{{ item.blurb }}</textarea>
+      </div>
+    {% endfor %}
+    <label for="closing">Closing</label><textarea id="closing" name="closing" style="min-height:70px">{{ a.closing }}</textarea>
+    <div class="sticky-actions row">
+      <button type="submit" name="action" value="save">Save</button>
+      {% if a.status in ('needs_claude', 'draft') %}<button type="submit" name="action" value="submit" class="primary">Save and send for review</button>{% endif %}
+      {% if a.status == 'approved' %}<span class="small muted">Saving any change clears the approval.</span>{% endif %}
+    </div>
+  </form>
+  {% endif %}
+  <div class="card"><h3>Preview</h3>
+    <iframe title="Email preview" srcdoc="{{ preview_html }}" style="width:100%;height:720px;border:1px solid var(--line);border-radius:6px;background:#fff"></iframe>
+  </div>
+</div>
+<aside class="stack">
+  <div class="card">
+    <h3>Sending</h3>
+    <p class="small">{% if a.status == 'sent' %}Sent {{ a.sent_at | local }} to {{ a.recipient_count }} people.{% else %}Sends {{ a.send_at | local if a.send_at else '(no time set)' }}.{% endif %}</p>
+    {% if count is not none %}<p class="small"><strong>{{ count }}</strong> people on the "Email updates" list right now.</p>{% elif count_note %}<p class="small" style="color:var(--warn)">{{ count_note }}</p>{% endif %}
+    <p class="small muted">{{ same_month }} other email(s) approved or sent that month (limit 2).</p>
+    {% if problems and a.status not in ('sent', 'cancelled') %}<div class="problems small"><ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></div>{% endif %}
+    {% if editable and user.has_role('editor') %}
+      <form method="post" action="/announcements/{{ a.id }}/test"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit">Send a test to me</button></form>
+    {% endif %}
+    {% if a.status == 'in_review' and user.has_role('approver') %}
+      <form method="post" action="/announcements/{{ a.id }}/approve" style="margin-top:10px">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="seen_hash" value="{{ seen_hash }}">
+        <p class="small">Approving sends exactly this email to the whole list at the time shown.</p>
+        <button class="approve" type="submit" {{ 'disabled' if problems }}>Approve</button>
+      </form>
+    {% endif %}
+    {% if editable and user.has_role('approver') and a.status != 'needs_claude' %}
+      <form method="post" action="/announcements/{{ a.id }}/changes" style="margin-top:10px">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <textarea name="comment" style="min-height:60px" placeholder="What should change?" aria-label="Note"></textarea>
+        <div class="row" style="margin-top:8px"><button type="submit">Request changes</button><button type="submit" name="cancel" value="1" class="danger">Cancel email</button></div>
+      </form>
+    {% endif %}
+    {% if editable and user.has_role('admin') and (same_month >= 2 or a.override_cap) %}
+      <form method="post" action="/announcements/{{ a.id }}/override" style="margin-top:10px">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="on" value="{{ '0' if a.override_cap else '1' }}">
+        <button type="submit" class="link small">{{ 'Remove the monthly-limit override' if a.override_cap else 'Override the monthly limit for this email' }}</button>
+      </form>
+    {% endif %}
+  </div>
+  <div class="card"><h3>History</h3><ul class="history">{% for h in history %}<li><span class="muted">{{ h.at | local('%b %-d %-I:%M %p') }}</span> {{ h.actor_label }}: {{ h.action | replace('_', ' ') }}</li>{% endfor %}</ul></div>
+</aside>
+</div>
+{% endblock %}

@@ -21,6 +21,7 @@ jobs:
           python-version: "3.12"
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: pip install -r requirements.txt -r requirements-dev.txt ruff
+      - run: python -m playwright install --with-deps chromium
       - run: ruff check studio tests --select F,E9,B,I --ignore B008
       - run: python -m pytest -q
 

@@ -9,7 +9,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/ColumbiaGadgetWorks/social-media</Support>
   <Project>https://github.com/ColumbiaGadgetWorks/social-media</Project>
-  <Overview>CGW Content Studio: upload members' photos and videos, draft posts with Claude Code over MCP (LAN only), approve every post, then publish or schedule them on batch day. Put it behind your reverse proxy with auth, and block /mcp at the proxy.</Overview>
+  <Overview>CGW Content Studio: upload members' photos and videos, draft posts with Claude Code over MCP (LAN only), approve every post, then publish or schedule them on batch day. Put it behind your reverse proxy with auth; block /mcp and /api/ext at the proxy and let /m/ and /u/ through without sign-in.</Overview>
   <Category>Productivity: Tools:</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/ColumbiaGadgetWorks/social-media/HEAD/unraid/cgw-studio.xml</TemplateURL>
@@ -52,6 +52,11 @@
   <Config Name="Threads token" Target="STUDIO_THREADS_TOKEN" Default="" Mode="" Description="Long-lived Threads token. The Studio refreshes it and keeps the new one in its database." Type="Variable" Display="always" Required="false" Mask="true"></Config>
   <Config Name="GitHub token (website)" Target="STUDIO_GITHUB_TOKEN" Default="" Mode="" Description="Fine-grained token for ColumbiaGadgetWorks/website only, Contents read and write. Lets approved news posts publish to the site." Type="Variable" Display="always" Required="false" Mask="true"></Config>
   <Config Name="Event skip words" Target="STUDIO_EVENT_SKIP_KEYWORDS" Default="board meeting,member meeting" Mode="" Description="No promo posts for events whose titles contain these." Type="Variable" Display="advanced" Required="false" Mask="false">board meeting,member meeting</Config>
+  <Config Name="Dolibarr address" Target="STUDIO_DOLIBARR_URL" Default="" Mode="" Description="For the monthly email list (contacts tagged Email updates). No trailing slash." Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Dolibarr API key" Target="STUDIO_DOLIBARR_API_KEY" Default="" Mode="" Description="API key of a Dolibarr user with contacts, tags and agenda permissions." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Dolibarr user ID" Target="STUDIO_DOLIBARR_USER_ID" Default="1" Mode="" Description="Owner of the 'email sent' agenda events." Type="Variable" Display="advanced" Required="false" Mask="false">1</Config>
+  <Config Name="Email from" Target="STUDIO_ANNOUNCE_FROM" Default="Columbia Gadget Works &lt;mail@columbiagadgetworks.org&gt;" Mode="" Description="Must be a verified sender in SMTP2GO." Type="Variable" Display="advanced" Required="false" Mask="false">Columbia Gadget Works &lt;mail@columbiagadgetworks.org&gt;</Config>
+  <Config Name="Whisper model" Target="STUDIO_WHISPER_MODEL" Default="base.en" Mode="" Description="Speech model for subtitles, downloaded once to /data/models (~150 MB). Empty turns subtitles off." Type="Variable" Display="advanced" Required="false" Mask="false">base.en</Config>
   <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="" Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
   <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="" Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
 </Container>

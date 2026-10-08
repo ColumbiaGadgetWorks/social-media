@@ -140,7 +140,7 @@ td .tag { margin-right: 4px; }
 </style>
 
 <header class="top">
-  <div class="eyebrow">Columbia Gadget Works · Build plan v0.7 · Phases 1–2 built · $0 · ~0.1 GB idle</div>
+  <div class="eyebrow">Columbia Gadget Works · Build plan v0.8 · Phases 1–3 built · $0 · ~0.1 GB idle</div>
   <h1>CGW Content Studio</h1>
   <p class="lede">A self-hosted app for turning members' photos and videos, classes, events and shop humor into polished posts on nine channels, plus a separate announcement-only email list. Claude does the writing through your Pro plan, in sessions the Studio reminds you to run. A person approves every post before it goes anywhere.</p>
   <div class="meta"><span>Runs on: Unraid · one Docker container</span><span>AI: Claude Pro, via MCP on the LAN</span><span>Website: columbiagadgetworks/website (Hugo, Cloudflare)</span><span>Events from: Google Calendar</span><span>Contacts: Dolibarr (latest)</span><span>Revised Oct 7, 2026</span></div>
@@ -659,7 +659,7 @@ flowchart LR
     <li>Gap detection, <code>/cgw-plan</code>, hook bank import</li>
     <li>Apply for the YouTube audit, Google Business Profile API access and TikTok audit</li>
   </ul></div>
-  <div class="phase"><div class="when">Phase 3<small>~3 weekends</small></div><ul>
+  <div class="phase"><div class="when">Phase 3<small>Built, Oct 2026</small></div><ul>
     <li>CGW browser extension: YouTube Studio and TikTok Studio first, then X, LinkedIn and Google Business Profile</li>
     <li>Video pipeline: whisper.cpp subtitles, cuts, crops, music, brand templates</li>
     <li>Monthly "Coming up at CGW" email: Dolibarr category, template, 1–2 a month cap, one-click unsubscribe, logging to Dolibarr</li>
@@ -675,12 +675,12 @@ flowchart LR
   <div class="eyebrow">20 · Need your input</div>
   <h2>Status & settled questions</h2>
   <ol class="qs">
-    <li>Phase 1 and Phase 2 are built and published as <code>ghcr.io/columbiagadgetworks/social-media:latest</code>, with an Unraid template. <span>Phase 2 added automatic Instagram, Facebook, Threads and website posting (once connected), the events calendar sync with event cards and promo posts, gap detection, the hook bank, nightly metrics, and the /cgw-event, /cgw-plan and /cgw-review commands.</span></li>
-    <li>To turn on automatic posting: <span>follow <code>docs/setup-platforms.md</code> for the Meta app, Threads and the GitHub token, let <code>/m/</code> through the proxy, and file the free YouTube, Google Business Profile and TikTok API applications.</span></li>
+    <li>Phases 1–3 are built and published as <code>ghcr.io/columbiagadgetworks/social-media:latest</code>, with an Unraid template. <span>Phase 3 added video editing (trim, 9:16, subtitles from a local Whisper model, licensed music ducked under speech, logo, end card), the music library with credit enforcement, the monthly "Coming up at CGW" email to the Dolibarr "Email updates" list with one-click unsubscribe synced to Dolibarr, the batch-day browser extension, and the Insights page.</span></li>
+    <li>To finish setup: <span>connect Dolibarr (API key), verify the From address in SMTP2GO, let <code>/u/</code> through the proxy, block <code>/api/ext/</code>, and load the extension (see <code>extension/README.md</code>).</span></li>
   </ol>
 </section>
 
 </main>
 </div>
 
-<footer>CGW Content Studio · build plan v0.7 · github.com/ColumbiaGadgetWorks/social-media · Platform limits and API rules change often; each "Direct" channel is checked with a test post before it's built.</footer>
+<footer>CGW Content Studio · build plan v0.8 · github.com/ColumbiaGadgetWorks/social-media · Platform limits and API rules change often; each "Direct" channel is checked with a test post before it's built.</footer>

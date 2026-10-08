@@ -77,12 +77,16 @@ def problems(post: Post) -> dict[str, list[str]]:
     if any(m.kind == "video" for m in post.media) and len(post.media) > 1:
         out.setdefault("", []).append("a post with a video can't have other photos or videos; split it into separate posts")
     kinds, images = media_kinds(post), image_count(post)
+    credits = [m.credit for m in post.media if m.credit]
     for v in enabled:
         channel = ch.CHANNELS.get(v.channel)
         if channel is None:
             out[v.channel] = ["unknown channel"]
             continue
         found = ch.validate(channel, body=v.body, hashtags=v.hashtags, title=v.title, kinds=kinds, image_count=images)
+        for credit in credits:  # music licenses like CC BY need the credit in every caption
+            if credit.lower() not in v.full_text.lower():
+                found.append(f"add the music credit: {credit}")
         if v.scheduled_at is None:
             found.append("no date and time set")
         elif v.publish_state == "pending" and v.scheduled_at < utcnow() - timedelta(minutes=5):

@@ -88,6 +88,18 @@ class Settings:
     website_repo: str = "ColumbiaGadgetWorks/website"
     website_branch: str = "main"
     website_url: str = "https://columbiagadgetworks.org"
+    # Email announcements: Dolibarr is the list, SMTP2GO (SMTP) sends
+    dolibarr_url: str = ""
+    dolibarr_api_key: str = ""
+    dolibarr_tag: str = "Email updates"
+    dolibarr_user_id: int = 1
+    announce_from: str = "Columbia Gadget Works <mail@columbiagadgetworks.org>"
+    announce_reply_to: str = "mail@columbiagadgetworks.org"
+    announce_hour: int = 10
+    org_address: str = "Columbia Gadget Works, 1404 Grand Ave, Columbia, MO 65203"
+    # Video: Whisper model for subtitles ("" turns transcription off), ffmpeg threads per job
+    whisper_model: str = "base.en"
+    ffmpeg_threads: int = 2
 
     @property
     def media_base_url(self) -> str:
@@ -104,6 +116,10 @@ class Settings:
     @property
     def threads_configured(self) -> bool:
         return bool(self.threads_user_id and self.threads_token)
+
+    @property
+    def dolibarr_configured(self) -> bool:
+        return bool(self.dolibarr_url and self.dolibarr_api_key)
 
     @property
     def website_configured(self) -> bool:
@@ -174,6 +190,16 @@ def load_settings() -> Settings:
         website_repo=os.environ.get("STUDIO_WEBSITE_REPO", "ColumbiaGadgetWorks/website"),
         website_branch=os.environ.get("STUDIO_WEBSITE_BRANCH", "main"),
         website_url=os.environ.get("STUDIO_WEBSITE_URL", "https://columbiagadgetworks.org").rstrip("/"),
+        dolibarr_url=os.environ.get("STUDIO_DOLIBARR_URL", "").rstrip("/"),
+        dolibarr_api_key=os.environ.get("STUDIO_DOLIBARR_API_KEY", ""),
+        dolibarr_tag=os.environ.get("STUDIO_DOLIBARR_TAG", "Email updates"),
+        dolibarr_user_id=_int("STUDIO_DOLIBARR_USER_ID", 1),
+        announce_from=os.environ.get("STUDIO_ANNOUNCE_FROM", "Columbia Gadget Works <mail@columbiagadgetworks.org>"),
+        announce_reply_to=os.environ.get("STUDIO_ANNOUNCE_REPLY_TO", "mail@columbiagadgetworks.org"),
+        announce_hour=_int("STUDIO_ANNOUNCE_HOUR", 10),
+        org_address=os.environ.get("STUDIO_ORG_ADDRESS", "Columbia Gadget Works, 1404 Grand Ave, Columbia, MO 65203"),
+        whisper_model=os.environ.get("STUDIO_WHISPER_MODEL", "base.en"),
+        ffmpeg_threads=_int("STUDIO_FFMPEG_THREADS", 2),
     )
 
 

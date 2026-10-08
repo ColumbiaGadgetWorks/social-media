@@ -1,0 +1,20 @@
+{{ a.subject }}
+{{ "=" * (a.subject | length) }}
+
+{{ plain(a.intro) }}
+{% for item in items %}
+
+{{ item.title }}
+{{ item.when }}{% if item.where %} · {{ item.where }}{% endif %}
+{{ plain(item.blurb) }}{% if item.link %}
+Details: {{ item.link }}{% endif %}
+{% endfor %}
+
+{{ plain(a.closing) }}
+
+Full calendar: {{ site }}/calendar/
+
+--
+You're getting this because you signed up for email updates from Columbia Gadget Works.
+{{ address }}
+Unsubscribe: {{ unsubscribe_url }}

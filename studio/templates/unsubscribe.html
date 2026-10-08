@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unsubscribe · Columbia Gadget Works</title><link rel="stylesheet" href="/static/app.css"></head>
+<body><main><div class="card" style="max-width:460px;margin:40px auto">
+<h1>Columbia Gadget Works</h1>
+{% if not email %}
+  <p>That unsubscribe link isn't valid. Email <span class="mono">mail@columbiagadgetworks.org</span> and we'll take you off the list.</p>
+{% elif done %}
+  <p><strong>{{ email }}</strong> is unsubscribed from our email updates. You won't get any more.</p>
+  <p class="small muted">Changed your mind? Sign up again at columbiagadgetworks.org.</p>
+{% else %}
+  <p>Stop email updates to <strong>{{ email }}</strong>?</p>
+  <form method="post" action="/u/{{ token }}"><button class="primary" type="submit">Unsubscribe</button></form>
+{% endif %}
+</div></main></body></html>

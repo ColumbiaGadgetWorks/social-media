@@ -67,7 +67,8 @@ def claude_session(db: Session, force: bool = False) -> bool:
         return False
     today = local_now().date().isoformat()
     body = (
-        f"{summary['count']} post(s) are waiting for Claude ({summary['media_count']} photo/video files). "
+        f"{summary['count']} item(s) are waiting for Claude ({summary['media_count']} photo/video files"
+        f"{', ' + str(summary['emails']) + ' email draft(s)' if summary.get('emails') else ''}). "
         f"The oldest has waited {summary['oldest_days']} day(s).\n"
         f"Estimated time: about {summary['minutes']} minutes.\n\n"
         "On your computer, open Claude Code in the social-media repo and run:\n\n"
@@ -78,12 +79,18 @@ def claude_session(db: Session, force: bool = False) -> bool:
 
 
 def approvals(db: Session) -> bool:
+    from .models import Announcement
+
     waiting = db.scalars(select(Post).where(Post.status == "in_review").order_by(Post.submitted_at)).all()
-    if not waiting:
+    emails = db.scalars(select(Announcement).where(Announcement.status == "in_review")).all()
+    if not waiting and not emails:
         return False
     lines = [f"- {p.display_title} ({', '.join(ch.CHANNELS[v.channel].label for v in p.enabled_versions)})" for p in waiting[:20]]
-    body = f"{len(waiting)} post(s) are waiting for your approval:\n\n" + "\n".join(lines) + f"\n\nReview: {settings().base_url}/review"
-    return _send(db, "approvals", local_now().date().isoformat(), f"{len(waiting)} post(s) waiting for approval", body)
+    lines += [f"- EMAIL: {a.subject} (sends {to_local(a.send_at):%a %b %-d, %-I:%M %p}) -> {settings().base_url}/announcements/{a.id}"
+              for a in emails]
+    total = len(waiting) + len(emails)
+    body = f"{total} item(s) are waiting for your approval:\n\n" + "\n".join(lines) + f"\n\nReview: {settings().base_url}/review"
+    return _send(db, "approvals", local_now().date().isoformat(), f"{total} item(s) waiting for approval", body)
 
 
 def batch_day(db: Session) -> bool:
@@ -178,3 +185,14 @@ def event_cancelled(db: Session, event, pulled, announced: bool) -> bool:
         body += ("\n\nIt had already been announced, so a cancellation notice is queued for the next Claude "
                  "session. Also delete any copies already scheduled on batch-day platforms.")
     return _send(db, "event_cancelled", str(event.id), f"Event cancelled: {event.title}", body)
+
+
+def announcement_sent(db: Session, ann) -> bool:
+    body = f"\"{ann.subject}\" went to {ann.recipient_count} people.\n\n{settings().base_url}/announcements/{ann.id}"
+    return _send(db, "announcement_sent", str(ann.id), f"Email sent: {ann.subject}", body)
+
+
+def announcement_failed(db: Session, ann) -> bool:
+    body = (f"\"{ann.subject}\" couldn't be sent (attempt {ann.attempts} of 3).\n\nError: {ann.last_error}\n\n"
+            f"{settings().base_url}/announcements/{ann.id}")
+    return _send(db, "announcement_failed", f"{ann.id}:{ann.attempts}", f"Email not sent: {ann.subject}", body)

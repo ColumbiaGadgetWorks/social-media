@@ -37,16 +37,21 @@ def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def create_api_token(db: Session, user: User, name: str) -> str:
+TOKEN_SCOPES = ("mcp", "extension")
+
+
+def create_api_token(db: Session, user: User, name: str, scope: str = "mcp") -> str:
     """Returns the plain token once; only its hash is stored."""
-    token = "cgw_" + secrets.token_urlsafe(32)
-    db.add(ApiToken(user_id=user.id, name=name, prefix=token[:10], token_hash=_token_hash(token)))
+    if scope not in TOKEN_SCOPES:
+        raise ValueError(f"unknown token scope {scope!r}")
+    token = ("cgw_" if scope == "mcp" else "cgwx_") + secrets.token_urlsafe(32)
+    db.add(ApiToken(user_id=user.id, name=name, prefix=token[:10], token_hash=_token_hash(token), scope=scope))
     return token
 
 
-def user_for_token(db: Session, token: str) -> User | None:
+def user_for_token(db: Session, token: str, scope: str = "mcp") -> User | None:
     row = db.scalar(select(ApiToken).where(ApiToken.token_hash == _token_hash(token)))
-    if row is None or row.revoked_at is not None or not row.user.is_active:
+    if row is None or row.revoked_at is not None or not row.user.is_active or (row.scope or "mcp") != scope:
         return None
     row.last_used_at = utcnow()
     return row.user

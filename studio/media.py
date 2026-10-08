@@ -159,6 +159,10 @@ def _process_video(asset: MediaAsset) -> None:
         _grab_frame(src, at, PREVIEW_PX, path)
         frames.append(rel)
     asset.frames = frames
+    if not asset.source_media_id:  # edits reuse the original's transcript
+        from .video import transcribe
+
+        transcribe(asset)
 
 
 def process(asset: MediaAsset) -> None:

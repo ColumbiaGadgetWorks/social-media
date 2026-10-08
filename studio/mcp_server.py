@@ -18,13 +18,13 @@ from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 
-from . import calendar_sync, metrics, queue
+from . import announcements, calendar_sync, metrics, queue, video
 from . import channels as ch
 from . import posts as post_svc
 from .config import ip_in
 from .db import session_scope, settings
 from .media import abs_path
-from .models import MediaAsset, Post, PostMedia, User
+from .models import Announcement, MediaAsset, MusicTrack, Post, PostMedia, User
 from .security import Actor, audit, user_for_token
 from .timeutil import fmt_local, input_value, parse_local
 from .web import PILLARS
@@ -67,12 +67,20 @@ def _actor(db) -> Actor:
 
 
 def _media_summary(m: MediaAsset) -> dict:
-    return {
+    out = {
         "media_id": m.id, "kind": m.kind, "status": m.processing_status,
         "width": m.width, "height": m.height,
         "duration_s": round(m.duration_s, 1) if m.duration_s else None,
         "uploader_note": m.note, "description": m.description, "alt_text": m.alt_text, "tags": m.tags,
     }
+    if m.kind == "video":
+        out["transcript"] = [f"{seg['start']:.1f}-{seg['end']:.1f}s: {seg['text']}" for seg in m.transcript or []]
+        out["transcript_status"] = m.transcript_status or "none"
+        if m.source_media_id:
+            out["edited_from"] = m.source_media_id
+    if m.credit:
+        out["credit_required"] = m.credit
+    return out
 
 
 def _post_summary(p: Post) -> dict:
@@ -124,7 +132,77 @@ def get_work_queue() -> str:
                  "media_ready": all(m.processing_status == "ready" for m in p.media)}
                 for p in items
             ],
+            "emails": [
+                {"announcement_id": a.id, "subject": a.subject, "sends": fmt_local(a.send_at), "items": len(a.items),
+                 "review_comment": a.review_comment}
+                for a in db.scalars(select(Announcement).where(Announcement.status.in_(("needs_claude", "draft"))))
+            ],
         }, indent=1)
+
+
+class BlurbDraft(BaseModel):
+    index: int = Field(description="Position of the item in the email's items list (0-based)")
+    blurb: str = Field(description="2-3 sentences: what it is, who it's for, what to bring or do. No new facts.")
+
+
+@server.tool()
+def get_announcement(announcement_id: int) -> str:
+    """An email draft: subject, opening, the event items (facts from the calendar), closing, send time."""
+    with session_scope() as db:
+        _actor(db)
+        a = db.get(Announcement, announcement_id)
+        if a is None:
+            return "Error: no such email."
+        return json.dumps({
+            "announcement_id": a.id, "kind": a.kind, "status": a.status, "sends": fmt_local(a.send_at),
+            "subject": a.subject, "preheader": a.preheader, "intro": a.intro, "closing": a.closing,
+            "items": [{"index": i, **item} for i, item in enumerate(a.items)], "review_comment": a.review_comment,
+            "rules": "Email is for classes, events and important news only. Professional and warm, no hype, no "
+                     "emoji, no hashtags. Facts (dates, times, places, prices, links) only from the items. "
+                     "Opening: 2-4 sentences. You can't add or remove items; a person does that.",
+        }, indent=1)
+
+
+@server.tool()
+def draft_announcement(
+    announcement_id: int,
+    subject: str = "",
+    preheader: str = "",
+    intro: str = "",
+    blurbs: list[BlurbDraft] | None = None,
+    closing: str = "",
+    submit_for_review: bool = True,
+) -> str:
+    """Write an email draft's text (subject, preview text, opening, item descriptions, closing) and send it
+    for human review. You can't approve or send it."""
+    with session_scope() as db:
+        actor = _actor(db)
+        a = db.get(Announcement, announcement_id)
+        if a is None:
+            return "Error: no such email."
+        if a.status not in ("needs_claude", "draft"):
+            return f"Error: this email is {a.status.replace('_', ' ')}; edits happen in the web app."
+        items = [dict(i) for i in a.items]
+        for b in blurbs or []:
+            if not 0 <= b.index < len(items):
+                return f"Error: there's no item {b.index}."
+            items[b.index]["blurb"] = b.blurb.strip()
+        try:
+            announcements.update(db, actor, a, subject=subject.strip() or None, preheader=preheader.strip() or None,
+                                 intro=intro.strip() or None, closing=closing.strip() or None, items=items)
+            if a.status == "needs_claude":
+                a.status = "draft"
+            result = {"announcement_id": a.id, "status": a.status}
+            found = announcements.problems(db, a)
+            if found:
+                result["problems"] = found
+            elif submit_for_review:
+                announcements.submit(db, actor, a)
+                result["status"] = a.status
+        except announcements.AnnouncementError as exc:
+            db.rollback()
+            return f"Error: {exc}"
+        return json.dumps(result)
 
 
 @server.tool(structured_output=False)
@@ -215,6 +293,49 @@ def get_metrics(days: int = 90) -> str:
     with session_scope() as db:
         _actor(db)
         return json.dumps(metrics.summary(db, days=min(max(days, 7), 365)), indent=1, default=str)
+
+
+@server.tool()
+def get_music() -> str:
+    """The licensed music library, for request_render. Tracks with a credit line need it in every caption."""
+    with session_scope() as db:
+        _actor(db)
+        tracks = db.scalars(select(MusicTrack).order_by(MusicTrack.title)).all()
+        return json.dumps([{"music_track_id": t.id, "title": t.title, "artist": t.artist, "mood": t.mood,
+                            "seconds": round(t.duration_s or 0), "credit_line": t.credit_line} for t in tracks], indent=1)
+
+
+@server.tool()
+def request_render(
+    post_id: int,
+    media_id: int,
+    start: float = 0,
+    end: float | None = None,
+    shape: str = "9:16",
+    fit: str = "pad",
+    subtitles: bool = True,
+    music_track_id: int | None = None,
+    music_volume: float = 0.25,
+    end_card_text: str = "",
+) -> str:
+    """Queue a video edit for a post that isn't approved: trim to the best part (use the transcript and
+    frames), fit to 9:16 for Reels/Shorts/TikTok (pad = blurred background, crop = fill), burn in subtitles,
+    add a music bed from get_music (ducked under speech), logo and a 2-second end card. The edit replaces the
+    original in the post when done (a minute or two). Keep cuts honest: don't make it look like something
+    happened that didn't."""
+    with session_scope() as db:
+        actor = _actor(db)
+        post, source = db.get(Post, post_id), db.get(MediaAsset, media_id)
+        if post is None or source is None or source.id not in {m.id for m in post.media}:
+            return "Error: that media isn't in that post."
+        raw = {"start": start, "end": end, "shape": shape, "fit": fit, "subtitles": subtitles and bool(source.transcript),
+               "music_track_id": music_track_id, "music_volume": music_volume, "end_card_text": end_card_text}
+        try:
+            job = video.request(db, actor, source, raw, post=post)
+        except video.RenderError as exc:
+            return f"Error: {exc}"
+        note = "" if raw["subtitles"] == subtitles else " (no transcript, so no subtitles)"
+        return json.dumps({"render_id": job.id, "spec": job.spec, "note": "Queued" + note})
 
 
 @server.tool()

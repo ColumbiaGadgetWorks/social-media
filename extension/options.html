@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>CGW Studio extension options</title><link rel="stylesheet" href="sidepanel.css"></head>
+<body style="max-width:520px">
+  <h2>Connect to the Studio</h2>
+  <p class="muted">Use the Studio's local network address, not the public one (the extension API only answers on the LAN). Create the token in the Studio under Settings, type "For the browser extension".</p>
+  <label for="url">Studio address</label><br>
+  <input id="url" type="url" placeholder="http://192.168.1.50:8080" style="width:100%"><br><br>
+  <label for="token">Extension token</label><br>
+  <input id="token" type="password" placeholder="cgwx_…" style="width:100%"><br><br>
+  <button id="save" class="primary">Save and test</button>
+  <p id="msg" role="status"></p>
+  <script src="options.js"></script>
+</body>
+</html>

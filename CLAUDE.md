@@ -15,8 +15,11 @@ them. Never try to approve, publish, schedule on a platform, or send email by an
 - The approval rule lives in `studio/posts.py`: `approve()` (human approvers only, seen-hash
   check), `approval_hash()`, `is_publishable()`. Every publisher or exporter must call
   `is_publishable()` right before anything leaves the Studio. Edits after approval must clear it.
-- Email announcements are deliberately not a channel (`studio/channels.py`). Social posts must
-  never be emailable.
+- Email announcements are deliberately not a channel (`studio/channels.py`); they live in
+  `studio/announcements.py` with the same approval rule (`approve()` with seen hash,
+  `is_sendable()` right before sending, edits clear approval) and a 2-per-month cap. Social posts
+  must never be emailable. Dolibarr is the list and the unsubscribe source of truth.
+- Token scopes: `mcp` tokens only work for `/mcp`, `extension` tokens only for `/api/ext/`.
 - MCP tools (`studio/mcp_server.py`) may only read, create drafts, and edit non-approved posts.
   Don't add tools that approve, publish, or send.
 - Every state change gets an `audit(...)` entry.

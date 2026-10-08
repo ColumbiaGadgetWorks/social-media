@@ -5,25 +5,30 @@
 <div class="two">
 <div class="stack">
   <div class="card">
-    <h2 style="margin-top:0">Claude Code connection</h2>
-    <p class="small">Create a token, then run this once on the computer you use Claude Code on. The connection works only on the local network.</p>
+    <h2 style="margin-top:0">Claude Code and the browser extension</h2>
+    <p class="small">Create a token for each. Claude Code tokens only work for drafting over MCP; extension tokens only work for batch day. Both connect only on the local network.</p>
     {% if new_token %}
       <p><strong>Your new token. Copy it now; it won't be shown again.</strong></p>
       <div class="token" id="new-token">{{ new_token }}</div>
       <p><button type="button" data-copy="new-token">Copy token</button></p>
-      <pre class="caption mono" id="mcp-cmd">claude mcp add --transport http cgw-studio {{ base_url }}/mcp --header "Authorization: Bearer {{ new_token }}"</pre>
+      {% if new_scope == 'extension' %}
+      <p class="small">Paste it into the CGW Studio extension's options, with the Studio's LAN address (for example <span class="mono">http://192.168.1.50:8080</span>).</p>
+      {% else %}
+      <pre class="caption mono" id="mcp-cmd">claude mcp add --transport http cgw-studio http://&lt;unraid-lan-ip&gt;:8080/mcp --header "Authorization: Bearer {{ new_token }}"</pre>
       <p><button type="button" data-copy="mcp-cmd">Copy command</button></p>
+      {% endif %}
     {% endif %}
     <form method="post" action="/settings/tokens" class="row">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <input type="text" name="name" placeholder="Name, e.g. Adam's desktop" style="flex:1;min-width:180px" aria-label="Token name">
+      <select name="scope" aria-label="Token type"><option value="mcp">For Claude Code</option><option value="extension">For the browser extension</option></select>
       <button type="submit" class="primary">Create token</button>
     </form>
     {% if tokens %}
     <div class="table-wrap" style="margin-top:12px"><table>
-      <thead><tr><th>Name</th><th>Starts with</th><th>Last used</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>For</th><th>Starts with</th><th>Last used</th><th></th></tr></thead>
       <tbody>{% for t in tokens %}<tr>
-        <td>{{ t.name }}</td><td class="mono">{{ t.prefix }}…</td>
+        <td>{{ t.name }}</td><td class="small">{{ 'Extension' if t.scope == 'extension' else 'Claude Code' }}</td><td class="mono">{{ t.prefix }}…</td>
         <td class="small">{{ t.last_used_at | local if t.last_used_at else 'Never' }}</td>
         <td>{% if t.revoked_at %}<span class="tag">Revoked</span>{% else %}
           <form method="post" action="/settings/tokens/{{ t.id }}/revoke" data-confirm="Revoke this token?"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link danger" type="submit">Revoke</button></form>{% endif %}</td>

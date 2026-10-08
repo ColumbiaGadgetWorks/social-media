@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Insights · CGW Studio{% endblock %}
+{% block content %}
+<div class="row spread"><h1>Insights</h1>
+  <p class="row small">{% for d in (30, 90, 365) %}<a href="/insights?days={{ d }}" {% if d == days %}style="font-weight:700"{% endif %}>Last {{ d }} days</a>{% endfor %}</p></div>
+<p class="muted small">Average engagement per published post: likes + comments/replies + shares/reposts + saves, from the latest nightly numbers. {{ measured }} of {{ published }} published posts have numbers; batch-day channels (TikTok, YouTube, X, LinkedIn, Google Business Profile) only have links for now. With few posts, treat differences as hints, not findings.</p>
+{% if not measured %}
+  <div class="card"><p>No numbers yet. They arrive nightly for posts published automatically to Bluesky, Instagram, Facebook and Threads.</p></div>
+{% else %}
+<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr))">
+{% for title, rows in charts %}
+  <section class="card" aria-label="{{ title }}">
+    <h2 style="margin-top:0">{{ title }}</h2>
+    <div class="bars">
+    {% for r in rows %}
+      <div class="bar-row" title="{{ r.label }}: {{ r.value }} average engagement across {{ r.posts }} post(s)">
+        <span class="bar-label">{{ r.label }}</span>
+        <span class="bar-track"><span class="bar-fill" style="width:{{ r.pct }}%"></span></span>
+        <span class="bar-value">{{ r.value }} <span>· {{ r.posts }} post{{ 's' if r.posts != 1 }}</span></span>
+      </div>
+    {% endfor %}
+    </div>
+  </section>
+{% endfor %}
+</div>
+<h2>Top posts</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Post</th><th>Channel</th><th>Pillar</th><th>Format</th><th style="text-align:right">Engagement</th><th>Numbers</th></tr></thead>
+  <tbody>{% for p in top %}<tr>
+    <td><a href="/posts/{{ p.post_id }}">{{ p.title }}</a>{% if p.url %} · <a href="{{ p.url }}" rel="noopener" target="_blank">live</a>{% endif %}</td>
+    <td class="small">{{ channel_labels.get(p.channel, p.channel) }}</td>
+    <td class="small">{{ PILLAR_LABELS.get(p.pillar, p.pillar or '—') }}</td>
+    <td class="small">{{ p.format }}</td>
+    <td style="text-align:right;font-variant-numeric:tabular-nums">{{ p.engagement }}</td>
+    <td class="small muted mono">{% for k, v in p.metrics.items() if v is number %}{{ k }} {{ v }}{{ ' · ' if not loop.last }}{% endfor %}</td>
+  </tr>{% endfor %}</tbody>
+</table></div>
+{% endif %}
+{% endblock %}

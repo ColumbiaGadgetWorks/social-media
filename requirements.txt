@@ -9,3 +9,4 @@ itsdangerous==2.2.0
 python-multipart==0.0.32
 icalendar==7.3.0
 recurring-ical-events==3.8.2
+pywhispercpp==1.5.1

@@ -65,6 +65,8 @@ class ApiToken(Base):
     name: Mapped[str] = mapped_column(String(128))
     prefix: Mapped[str] = mapped_column(String(16))
     token_hash: Mapped[str] = mapped_column(String(128), unique=True)
+    # "mcp" for Claude Code, "extension" for the batch-day browser extension; never interchangeable
+    scope: Mapped[str] = mapped_column(String(16), default="mcp")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -91,6 +93,12 @@ class MediaAsset(Base):
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     description: Mapped[str] = mapped_column(Text, default="")
     alt_text: Mapped[str] = mapped_column(Text, default="")
+    # Videos: speech transcript as [{"start": s, "end": s, "text": ...}], filled by Whisper when enabled.
+    transcript: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    transcript_status: Mapped[str] = mapped_column(String(16), default="")  # "" | done | failed | off
+    # Renders: where it came from, and any credit line its music license requires.
+    source_media_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    credit: Mapped[str] = mapped_column(String(300), default="")
     processing_status: Mapped[str] = mapped_column(String(16), default="pending")
     processing_error: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -220,6 +228,7 @@ class Event(Base):
     url: Mapped[str] = mapped_column(String(512), default="")
     recurring: Mapped[bool] = mapped_column(Boolean, default=False)
     promote: Mapped[bool] = mapped_column(Boolean, default=True)
+    email_ok: Mapped[bool] = mapped_column(Boolean, default=True)  # "Email: no" in the description turns it off
     status: Mapped[str] = mapped_column(String(16), default="active")  # active | cancelled
     facts_hash: Mapped[str] = mapped_column(String(64), default="")
     missing_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -248,3 +257,93 @@ class Credential(Base):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class MusicTrack(Base):
+    """A track in the licensed music library. Only tracks with a recorded license are used."""
+
+    __tablename__ = "music_tracks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    artist: Mapped[str] = mapped_column(String(200), default="")
+    license: Mapped[str] = mapped_column(String(100))
+    credit_line: Mapped[str] = mapped_column(String(300), default="")  # must appear in captions when set
+    source_url: Mapped[str] = mapped_column(String(500), default="")
+    mood: Mapped[str] = mapped_column(String(100), default="")
+    path: Mapped[str] = mapped_column(String(512))
+    duration_s: Mapped[float | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class RenderJob(Base):
+    """A video edit: trim, fit, subtitles, music, logo, end card. Output is a new media item."""
+
+    __tablename__ = "render_jobs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_media_id: Mapped[int] = mapped_column(ForeignKey("media.id"))
+    post_id: Mapped[int | None] = mapped_column(ForeignKey("posts.id"), nullable=True)
+    spec: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(16), default="queued")  # queued | running | done | failed
+    output_media_id: Mapped[int | None] = mapped_column(ForeignKey("media.id"), nullable=True)
+    error: Mapped[str] = mapped_column(Text, default="")
+    note: Mapped[str] = mapped_column(Text, default="")
+    requested_by: Mapped[str] = mapped_column(String(128), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    source: Mapped[MediaAsset] = relationship(foreign_keys=[source_media_id])
+    output: Mapped[MediaAsset | None] = relationship(foreign_keys=[output_media_id])
+
+
+class Announcement(Base):
+    """An email to the "Email updates" list: classes, events and important news only.
+
+    Deliberately separate from Post: there is no way to turn a social post into an email.
+    """
+
+    __tablename__ = "announcements"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), default="monthly")  # monthly | special
+    month: Mapped[str] = mapped_column(String(7), default="")  # YYYY-MM for monthly ones
+    subject: Mapped[str] = mapped_column(String(200), default="")
+    preheader: Mapped[str] = mapped_column(String(200), default="")
+    intro: Mapped[str] = mapped_column(Text, default="")
+    # [{"event_id", "title", "when", "where", "link", "blurb"}]; facts come from the calendar
+    items: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    closing: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16), default="needs_claude")
+    send_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # naive UTC
+    override_cap: Mapped[bool] = mapped_column(Boolean, default=False)
+    review_comment: Mapped[str] = mapped_column(Text, default="")
+    approved_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    approved_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    recipient_count: Mapped[int] = mapped_column(Integer, default=0)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    approved_by: Mapped[User | None] = relationship()
+
+
+class AnnouncementRecipient(Base):
+    __tablename__ = "announcement_recipients"
+    __table_args__ = (UniqueConstraint("announcement_id", "email"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    announcement_id: Mapped[int] = mapped_column(ForeignKey("announcements.id", ondelete="CASCADE"))
+    email: Mapped[str] = mapped_column(String(256))
+    contact_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="sent")  # sent | failed
+    error: Mapped[str] = mapped_column(Text, default="")
+    sent_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Unsubscribe(Base):
+    """An unsubscribe request. Dolibarr is the source of truth; this row holds it until synced."""
+
+    __tablename__ = "unsubscribes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(256), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    error: Mapped[str] = mapped_column(Text, default="")

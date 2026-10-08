@@ -18,6 +18,9 @@
     {% endfor %}
     {% if not post.media %}<p class="muted small">Text-only post.</p>{% endif %}
     </div>
+    {% for m in post.media if m.kind == 'video' and post.status not in ('approved', 'done') %}
+      <p class="small"><a href="/media/{{ m.id }}?post={{ post.id }}#edit">Edit video</a>: trim, shape, subtitles, music, end card.</p>
+    {% endfor %}
     {% if post.event %}
       {% set day, time = event_when(post.event) %}
       <div class="problems small" style="background:var(--steel-soft);color:var(--fg)">

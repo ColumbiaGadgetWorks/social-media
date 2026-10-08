@@ -3,6 +3,7 @@
   --bg: #f6f4f3; --surface: #fff; --fg: #23201f; --muted: #6b6362; --line: #ddd5d4;
   --accent: #a4596f; --accent-soft: #f3e4e8; --steel: #3f5a6b; --steel-soft: #e3ebf0;
   --ok: #2f7a4d; --ok-soft: #e2f1e8; --warn: #9a6a12; --warn-soft: #f8edd6; --stop: #a63a2b; --stop-soft: #f8e2de;
+  --bar: #a4596f; /* chart fill; validated against the light surface */
   --font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
 }
@@ -10,6 +11,7 @@
   --bg: #171516; --surface: #211e1f; --fg: #ece6e5; --muted: #a59c9b; --line: #3a3435;
   --accent: #e39ab0; --accent-soft: #3b2a30; --steel: #9cc0d4; --steel-soft: #23313a;
   --ok: #7ccf9c; --ok-soft: #1f3328; --warn: #e6bb6a; --warn-soft: #3a2f1a; --stop: #f09484; --stop-soft: #3d2420;
+  --bar: #d26a92; /* deeper than --accent: the pale accent fails the mark lightness/chroma checks on dark */
   color-scheme: dark; } }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.55 var(--font); }
@@ -84,3 +86,14 @@ th { font: 500 11px/1.3 var(--mono); text-transform: uppercase; letter-spacing: 
   nav.main { order: 3; grid-column: 1 / -1; flex-wrap: nowrap; overflow-x: auto; gap: 16px; }
   nav.main a { padding: 8px 0 10px; white-space: nowrap; }
 }
+
+/* Insights: single-series horizontal bars. Values sit in text ink, identity is the row label. */
+.bars { display: grid; gap: 8px; }
+.bar-row { display: grid; grid-template-columns: minmax(0, 11rem) minmax(0, 1fr) 7rem; gap: 10px; align-items: center; font-size: 14px; }
+.bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-track { position: relative; height: 18px; border-left: 1px solid var(--line); }
+.bar-fill { position: absolute; left: 0; top: 2px; bottom: 2px; background: var(--bar); border-radius: 0 4px 4px 0; min-width: 2px; }
+.bar-row:hover .bar-fill { filter: brightness(1.12); }
+.bar-value { font-variant-numeric: tabular-nums; font-size: 13px; }
+.bar-value span { color: var(--muted); }
+@media (max-width: 560px) { .bar-row { grid-template-columns: minmax(0, 1fr) 6rem; } .bar-track { grid-column: 1 / -1; grid-row: 2; } }

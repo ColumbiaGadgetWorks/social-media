@@ -3,9 +3,9 @@ FROM python:3.12-slim
 LABEL org.opencontainers.image.source="https://github.com/ColumbiaGadgetWorks/social-media" \
       org.opencontainers.image.description="CGW Content Studio"
 
-# ffmpeg: video probing and key frames. tini: clean signal handling.
+# ffmpeg: video probing, frames and edits. fonts-dejavu-core: subtitle font. tini: clean signal handling.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg tini \
+    && apt-get install -y --no-install-recommends ffmpeg tini fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
