@@ -62,6 +62,6 @@
 </section>
 
 <script id="sort-config" type="application/json">{{ {"batch": batch, "csrf": csrf, "items": items} | tojson }}</script>
-<script src="/static/sort.js"></script>
+<script src="/static/sort.js?v={{ ASSET_V }}"></script>
 {% endif %}
 {% endblock %}

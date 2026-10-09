@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import time
 from collections import defaultdict
 from datetime import timedelta
@@ -91,6 +92,13 @@ PILLARS = [
     ("community", "Community & partners"),
 ]
 templates.env.globals["PILLARS"] = PILLARS
+# Static files get a version from their contents, so browsers fetch new styles after every update.
+templates.env.globals["ASSET_V"] = hashlib.sha256(b"".join(
+    p.read_bytes() for p in sorted((Path(__file__).parent / "static").glob("*.[jc]s*")))).hexdigest()[:10]
+THEMES = [("orange", "CGW orange"), ("blue", "Blue"), ("teal", "Teal"), ("graphite", "Graphite")]
+COLOR_MODES = [("auto", "Match my device"), ("light", "Light"), ("dark", "Dark")]
+templates.env.globals["THEMES"] = THEMES
+templates.env.globals["COLOR_MODES"] = COLOR_MODES
 templates.env.globals["PILLAR_LABELS"] = dict(PILLARS)
 
 _failed_logins: dict[str, list[float]] = defaultdict(list)
@@ -978,6 +986,20 @@ async def token_revoke(request: Request, token_id: int, db: Session = Depends(ge
         token.revoked_at = utcnow()
         audit(db, Actor("user", user), "token_revoked", "user", token.user_id, name=token.name)
         flash(request, "Token revoked.")
+    return back("/settings")
+
+
+@router.post("/settings/appearance")
+async def settings_appearance(request: Request, db: Session = Depends(get_db)):
+    user = require(request, db)
+    form = await form_with_csrf(request)
+    theme, mode = str(form.get("theme", "")), str(form.get("color_mode", ""))
+    if theme in dict(THEMES):
+        user.theme = theme
+    if mode in dict(COLOR_MODES):
+        user.color_mode = mode
+    audit(db, Actor("user", user), "appearance_changed", "user", user.id, theme=user.theme, mode=user.color_mode)
+    flash(request, "Appearance saved.")
     return back("/settings")
 
 

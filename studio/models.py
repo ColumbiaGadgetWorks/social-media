@@ -46,6 +46,8 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(16), default="contributor")
     proxy_username: Mapped[str | None] = mapped_column(String(128), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    theme: Mapped[str] = mapped_column(String(16), default="orange")  # colorway (Settings → Appearance)
+    color_mode: Mapped[str] = mapped_column(String(8), default="auto")  # auto | light | dark
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     @property

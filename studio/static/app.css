@@ -8,13 +8,31 @@
   --font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
 }
-@media (prefers-color-scheme: dark) { :root {
+/* Dark mode follows the device unless the person picked Light or Dark in Settings (data-mode). */
+@media (prefers-color-scheme: dark) { :root:not([data-mode="light"]) {
   --bg: #171412; --surface: #211c19; --fg: #f2ece6; --muted: #a99f97; --line: #3b322c;
   --accent: #f08a5d; --accent-ink: #f08a5d; --on-accent: #1a120e; --accent-soft: #3a2519;
   --steel: #9cc0d4; --steel-soft: #23313a;
   --ok: #7ccf9c; --on-ok: #10261a; --ok-soft: #1f3328; --warn: #e6bb6a; --warn-soft: #3a2f1a; --stop: #f09484; --stop-soft: #3d2420;
   --bar: #e0693a; /* deeper than --accent so bars pass the mark lightness/chroma checks on dark */
   color-scheme: dark; } }
+:root[data-mode="dark"] {
+  --bg: #171412; --surface: #211c19; --fg: #f2ece6; --muted: #a99f97; --line: #3b322c;
+  --accent: #f08a5d; --accent-ink: #f08a5d; --on-accent: #1a120e; --accent-soft: #3a2519;
+  --steel: #9cc0d4; --steel-soft: #23313a;
+  --ok: #7ccf9c; --on-ok: #10261a; --ok-soft: #1f3328; --warn: #e6bb6a; --warn-soft: #3a2f1a; --stop: #f09484; --stop-soft: #3d2420;
+  --bar: #e0693a; /* deeper than --accent so bars pass the mark lightness/chroma checks on dark */
+  color-scheme: dark; }
+/* Colorways (Settings → Appearance). CGW orange is the default above; chart bars validated per mode. */
+:root[data-theme="blue"] { --accent: #2b6a9e; --accent-ink: #1f4f78; --on-accent: #fff; --accent-soft: #e1ecf5; --bar: #2b6a9e; }
+@media (prefers-color-scheme: dark) { :root[data-theme="blue"]:not([data-mode="light"]) { --accent: #7fb3e0; --accent-ink: #7fb3e0; --on-accent: #0d1a26; --accent-soft: #1c2b38; --bar: #4a90c8; } }
+:root[data-theme="blue"][data-mode="dark"] { --accent: #7fb3e0; --accent-ink: #7fb3e0; --on-accent: #0d1a26; --accent-soft: #1c2b38; --bar: #4a90c8; }
+:root[data-theme="teal"] { --accent: #1d7a72; --accent-ink: #155a55; --on-accent: #fff; --accent-soft: #dcefec; --bar: #0f9488; }
+@media (prefers-color-scheme: dark) { :root[data-theme="teal"]:not([data-mode="light"]) { --accent: #6cc7bf; --accent-ink: #6cc7bf; --on-accent: #0d1f1d; --accent-soft: #16302e; --bar: #119e91; } }
+:root[data-theme="teal"][data-mode="dark"] { --accent: #6cc7bf; --accent-ink: #6cc7bf; --on-accent: #0d1f1d; --accent-soft: #16302e; --bar: #119e91; }
+:root[data-theme="graphite"] { --accent: #454f5a; --accent-ink: #2b333c; --on-accent: #fff; --accent-soft: #e6e8eb; --bar: #2b6a9e; }
+@media (prefers-color-scheme: dark) { :root[data-theme="graphite"]:not([data-mode="light"]) { --accent: #c0c9d2; --accent-ink: #c0c9d2; --on-accent: #15191d; --accent-soft: #2a3036; --bar: #4a90c8; } }
+:root[data-theme="graphite"][data-mode="dark"] { --accent: #c0c9d2; --accent-ink: #c0c9d2; --on-accent: #15191d; --accent-soft: #2a3036; --bar: #4a90c8; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.55 var(--font); }

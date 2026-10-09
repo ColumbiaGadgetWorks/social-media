@@ -83,6 +83,16 @@
   <p class="small muted">Right now there's nothing for it to say, so it wouldn't be sent.</p>
   {% endif %}
 </div>
+<form method="post" action="/settings/appearance" class="card">
+  <h2 style="margin-top:0">Appearance</h2>
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label for="theme">Colorway</label>
+  <select id="theme" name="theme">{% for key, label in THEMES %}<option value="{{ key }}"{% if user.theme == key %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+  <label for="color_mode">Light or dark</label>
+  <select id="color_mode" name="color_mode">{% for key, label in COLOR_MODES %}<option value="{{ key }}"{% if user.color_mode == key %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+  <p class="small muted">Just for you, in this Studio. Posts, emails and event cards always use CGW orange.</p>
+  <p><button type="submit">Save</button></p>
+</form>
 <form method="post" action="/settings/password" class="card">
   <h2 style="margin-top:0">Password</h2>
   <input type="hidden" name="csrf" value="{{ csrf }}">

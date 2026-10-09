@@ -15,7 +15,7 @@
       <span class="small muted" id="done-note"></span></p>
   </div>
   <script id="upload-config" type="application/json">{{ {"batch": batch, "csrf": csrf} | tojson }}</script>
-  <script src="/static/upload.js"></script>
+  <script src="/static/upload.js?v={{ ASSET_V }}"></script>
 
   <details class="card">
     <summary>Quick upload instead (one post, no sorting)</summary>
