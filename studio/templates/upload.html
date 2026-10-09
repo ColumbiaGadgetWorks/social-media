@@ -2,29 +2,67 @@
 {% block title %}Upload · CGW Studio{% endblock %}
 {% block content %}
 <h1>Upload</h1>
-<form class="card" method="post" action="/upload" enctype="multipart/form-data" style="max-width:640px">
-  <input type="hidden" name="csrf" value="{{ csrf }}">
-  <label for="files">Photos and videos</label>
-  <input type="file" id="files" name="files" accept="image/*,video/*" multiple required>
-  <label for="note">One line about it</label>
-  <input type="text" id="note" name="note" placeholder="Sam's walnut ukulele, first laser-engraved rosette">
-  <p class="small muted">Who made it, what it is, anything worth mentioning. Claude writes the captions from this and the media.</p>
-  {% if recent_events %}
-  <label for="event_id">Taken at (optional)</label>
-  <select id="event_id" name="event_id"><option value="">Not at an event</option>
-    {% for e in recent_events %}<option value="{{ e.id }}"{% if loop.first and e.is_now %} selected{% endif %}>{{ e.title }}, {{ e.label }}</option>{% endfor %}
-  </select>
-  <p class="small muted" style="margin:4px 0 0">Photos from Open Hack Night and other weekly events go into next week's post.</p>
+<div class="two">
+<div class="stack">
+  <div class="card">
+    <div id="drop" class="dropzone" tabindex="0" role="button" aria-describedby="drop-help">
+      <strong>Drop photos, videos or a .zip here</strong>
+      <span class="small muted" id="drop-help">or click to choose files. Up to {{ max_mb }} MB per file. Next you'll see them all and group them into posts.</span>
+    </div>
+    <input type="file" id="pick" accept="image/*,video/*,.zip,application/zip" multiple hidden>
+    <ul id="queue" class="upload-queue" aria-live="polite"></ul>
+    <p id="done-row" hidden><a class="btn primary" id="sort-link" href="/upload/batch/{{ batch }}">Sort them into posts</a>
+      <span class="small muted" id="done-note"></span></p>
+  </div>
+  <script id="upload-config" type="application/json">{{ {"batch": batch, "csrf": csrf} | tojson }}</script>
+  <script src="/static/upload.js"></script>
+
+  <details class="card">
+    <summary>Quick upload instead (one post, no sorting)</summary>
+    <form method="post" action="/upload" enctype="multipart/form-data" style="margin-top:10px">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label for="files">Photos and videos</label>
+      <input type="file" id="files" name="files" accept="image/*,video/*" multiple required>
+      <label for="note">One line about it</label>
+      <input type="text" id="note" name="note" placeholder="Sam's walnut ukulele, first laser-engraved rosette">
+      {% if recent_events %}
+      <label for="event_id">Taken at (optional)</label>
+      <select id="event_id" name="event_id"><option value="">Not at an event</option>
+        {% for e in recent_events %}<option value="{{ e.id }}"{% if loop.first and e.is_now %} selected{% endif %}>{{ e.title }}, {{ e.label }}</option>{% endfor %}
+      </select>
+      {% endif %}
+      <label for="pillar">Kind of post (optional)</label>
+      <select id="pillar" name="pillar"><option value="">Let Claude suggest</option>
+        {% for key, label in PILLARS %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
+      <label for="mode">These files are</label>
+      <select id="mode" name="mode">
+        <option value="together">One post (a carousel or one video)</option>
+        <option value="separate">Separate posts, one per file</option>
+        <option value="library">Just for the library, no post yet</option>
+      </select>
+      <p><button class="primary" type="submit">Upload</button></p>
+    </form>
+  </details>
+</div>
+<div class="stack">
+  {% if open_batches %}
+  <div class="card">
+    <h2 style="margin-top:0">Still to sort</h2>
+    <ul class="plain">{% for b in open_batches %}
+      <li class="row" style="margin-bottom:8px">{% if b.thumb %}<img src="{{ b.thumb }}" alt="" class="mini">{% endif %}
+        <a href="/upload/batch/{{ b.batch }}">{{ b.count }} file(s)</a><span class="small muted">from {{ b.started | local }}</span></li>
+    {% endfor %}</ul>
+  </div>
   {% endif %}
-  <label for="pillar">Kind of post (optional)</label>
-  <select id="pillar" name="pillar"><option value="">Let Claude suggest</option>
-    {% for key, label in PILLARS %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
-  <label for="mode">These files are</label>
-  <select id="mode" name="mode">
-    <option value="together">One post (a carousel or one video)</option>
-    <option value="separate">Separate posts, one per file</option>
-    <option value="library">Just for the library, no post yet</option>
-  </select>
-  <p><button class="primary" type="submit">Upload</button></p>
-</form>
+  <div class="card small">
+    <h2 style="margin-top:0">Tips</h2>
+    <ul>
+      <li>Group the photos of one project into a carousel (up to 10). Each video is its own post.</li>
+      <li>One line per post is enough: who made it, what it is, what's special. Claude writes the captions.</li>
+      <li>Set "Taken at" for Hack Night photos; they feed next week's Hack Night post.</li>
+      <li>Phone photos also work through the Discord uploads channel.</li>
+    </ul>
+  </div>
+</div>
+</div>
 {% endblock %}

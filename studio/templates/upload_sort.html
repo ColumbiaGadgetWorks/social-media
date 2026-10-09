@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Sort uploads · CGW Studio{% endblock %}
+{% block content %}
+<div class="row spread">
+  <h1 style="margin:0">Sort uploads</h1>
+  <div class="row" role="group" aria-label="View">
+    <button type="button" id="view-grid" class="seg on">All at once</button>
+    <button type="button" id="view-step" class="seg">One at a time</button>
+  </div>
+</div>
+<p class="small muted">Select files and group them into a carousel, add one line per post, then save. Each post goes to Claude for captions; "Library only" files wait in the media library. Your notes are kept in this browser until you save.</p>
+
+{% if not items %}
+  <div class="card"><p>Nothing left to sort in this batch. <a href="/upload">Upload more</a> or see <a href="/posts?status=needs_claude">posts waiting for Claude</a>.</p></div>
+{% else %}
+<div class="sort-bar" id="bar">
+  <div class="row">
+    <span id="sel-count" class="small muted">Click files to select them</span>
+    <button type="button" id="b-group" disabled>Group as carousel</button>
+    <button type="button" id="b-split" disabled>Split apart</button>
+    <button type="button" id="b-library" disabled>Library only</button>
+    <button type="button" id="b-post" disabled>Make post</button>
+    <button type="button" id="b-discard" class="danger" disabled>Discard</button>
+    <button type="button" id="b-clear" class="link">Clear selection</button>
+  </div>
+  <div class="row">
+    <span id="summary" class="small"></span>
+    <button type="button" id="b-save" class="primary">Save</button>
+  </div>
+</div>
+<p id="sort-error" class="flash error" hidden></p>
+
+<div id="grid" class="sort-grid" aria-label="Posts"></div>
+<div id="discarded" class="small muted" style="margin-top:16px"></div>
+
+<section id="step" class="step" hidden aria-label="One post at a time">
+  <div class="step-media">
+    <div id="stage" class="stage"></div>
+    <div id="strip" class="filmstrip" aria-label="Files in this post"></div>
+    <div class="row small" id="slide-tools"></div>
+  </div>
+  <div class="step-form card">
+    <div class="row spread"><strong id="step-pos"></strong><span id="step-kind" class="tag"></span></div>
+    <label for="f-note">Description for this post</label>
+    <textarea id="f-note" placeholder="Who made it, what it is, the tool or trick, anything worth mentioning"></textarea>
+    <label for="f-slide">Note for this photo only <span class="muted">(optional)</span></label>
+    <input type="text" id="f-slide" placeholder="e.g. the rosette close-up">
+    <label for="f-event">Taken at</label>
+    <select id="f-event"><option value="">Not at an event</option>
+      {% for e in recent_events %}<option value="{{ e.id }}">{{ e.title }}, {{ e.label }}</option>{% endfor %}</select>
+    <label for="f-pillar">Kind of post</label>
+    <select id="f-pillar"><option value="">Let Claude suggest</option>
+      {% for key, label in PILLARS %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
+    <label class="check"><input type="checkbox" id="f-library"> Library only (no post yet)</label>
+    <div class="row spread" style="margin-top:14px">
+      <button type="button" id="s-prev">‹ Previous</button>
+      <button type="button" id="s-discard" class="danger link">Discard this post</button>
+      <button type="button" id="s-next" class="primary">Next ›</button>
+    </div>
+    <p class="small muted" style="margin-bottom:0">← → keys move between posts when you're not typing.</p>
+  </div>
+</section>
+
+<script id="sort-config" type="application/json">{{ {"batch": batch, "csrf": csrf, "items": items} | tojson }}</script>
+<script src="/static/sort.js"></script>
+{% endif %}
+{% endblock %}

@@ -8,14 +8,20 @@ from datetime import timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from . import announcements as ann_mod
 from . import batch as batch_mod
-from . import calendar_sync, publishers
+from . import calendar_sync, publishers, upload_batch
 from . import channels as ch
 from . import metrics as metrics_mod
 from . import posts as post_svc
@@ -46,6 +52,7 @@ from .security import (
     Actor,
     audit,
     create_api_token,
+    csrf_ok,
     csrf_token,
     hash_password,
     verify_password,
@@ -176,6 +183,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     return render(
         request, "dashboard.html", user, counts=counts, claude=queue_summary(db), upcoming=upcoming,
         failed=failed, batches=batch_mod.overview(db), cycle=batch_mod.cycle_info(),
+        open_batches=upload_batch.open_batches(db),
     )
 
 
@@ -192,10 +200,10 @@ def taken_at_choices(db: Session, asset: MediaAsset) -> list[dict]:
     return [{"id": e.id, "title": e.title, "label": f"{to_local(e.start):%a %b} {to_local(e.start).day}"} for e in rows]
 
 
-def recent_events(db: Session) -> list[dict]:
-    """Events from the last 8 days up to tonight, newest first, for the upload form's "Taken at"."""
+def recent_events(db: Session, days: int = 8) -> list[dict]:
+    """Events from the last few days up to tonight, newest first, for "Taken at"."""
     now = utcnow()
-    rows = db.scalars(select(Event).where(Event.start >= now - timedelta(days=8), Event.start <= now + timedelta(hours=12),
+    rows = db.scalars(select(Event).where(Event.start >= now - timedelta(days=days), Event.start <= now + timedelta(hours=12),
                                           Event.status == "active").order_by(Event.start.desc())).all()
     out = []
     for e in rows:
@@ -208,7 +216,66 @@ def recent_events(db: Session) -> list[dict]:
 @router.get("/upload")
 def upload_page(request: Request, db: Session = Depends(get_db)):
     user = require(request, db)
-    return render(request, "upload.html", user, recent_events=recent_events(db))
+    return render(request, "upload.html", user, recent_events=recent_events(db), batch=upload_batch.new_batch_id(),
+                  open_batches=upload_batch.open_batches(db), max_mb=settings().max_upload_mb)
+
+
+@router.post("/upload/files")
+async def upload_files(request: Request, db: Session = Depends(get_db)):
+    """One dropped file (or zip) at a time, so big batches show progress and survive proxy limits."""
+    user = require(request, db)
+    form = await form_with_csrf(request)
+    f = form.get("file")
+    if not getattr(f, "filename", ""):
+        return JSONResponse({"error": "No file."}, status_code=400)
+    try:
+        stored, problems = upload_batch.add_file(db, Actor("user", user), str(form.get("batch", "")), f.file,
+                                                 f.filename, f.content_type)
+    except upload_batch.BatchError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    db.commit()
+    if any(a.kind == "video" for a in stored):
+        kick_media()
+    return JSONResponse({"media": [upload_batch.item(a) for a in stored], "problems": problems})
+
+
+@router.get("/upload/batch/{batch}")
+def batch_sort_page(request: Request, batch: str, db: Session = Depends(get_db)):
+    user = require(request, db)
+    items = [upload_batch.item(a) for a in upload_batch.unsorted(db, batch)]
+    return render(request, "upload_sort.html", user, batch=batch, items=items, recent_events=recent_events(db, days=35))
+
+
+@router.get("/upload/batch/{batch}/items")
+def batch_items(request: Request, batch: str, db: Session = Depends(get_db)):
+    require(request, db)
+    return JSONResponse({"items": [upload_batch.item(a) for a in upload_batch.unsorted(db, batch)]})
+
+
+@router.post("/upload/batch/{batch}/save")
+async def batch_save(request: Request, batch: str, db: Session = Depends(get_db)):
+    user = require(request, db)
+    try:
+        body = await request.json()
+    except ValueError:
+        return JSONResponse({"error": "Bad request."}, status_code=400)
+    if not csrf_ok(request.session, body.get("csrf")):
+        return JSONResponse({"error": "The page expired. Reload it (your notes are kept in this browser)."}, status_code=403)
+    try:
+        result = upload_batch.save(db, Actor("user", user), batch, body.get("groups") or [], body.get("discard") or [])
+    except upload_batch.BatchError as exc:
+        db.rollback()
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    db.commit()
+    parts = [f"{len(result['posts'])} post(s) queued for Claude"]
+    if result["library"]:
+        parts.append(f"{result['library']} file(s) filed in the library")
+    if result["discarded"]:
+        parts.append(f"{result['discarded']} discarded")
+    if result["left"]:
+        parts.append(f"{result['left']} still to sort")
+    flash(request, "Saved: " + ", ".join(parts) + ".")
+    return JSONResponse({**result, "redirect": f"/upload/batch/{batch}" if result["left"] else "/posts?status=needs_claude"})
 
 
 @router.post("/upload")

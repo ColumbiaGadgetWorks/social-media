@@ -101,6 +101,9 @@ class MediaAsset(Base):
     credit: Mapped[str] = mapped_column(String(300), default="")
     # The calendar event it was taken at ("Taken at" on upload), so weekly promos can find fresh photos.
     event_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Batch uploads: files wait in their batch, unsorted, until they're grouped into posts on the sort page.
+    upload_batch: Mapped[str] = mapped_column(String(24), default="")
+    unsorted: Mapped[bool] = mapped_column(Boolean, default=False)
     processing_status: Mapped[str] = mapped_column(String(16), default="pending")
     processing_error: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

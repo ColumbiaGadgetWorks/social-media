@@ -67,6 +67,19 @@ The full plan is in [`docs/plan.html`](docs/plan.html). This is **Phase 1**.
 
 The roadmap and long-term ideas are in the plan.
 
+## Batch uploads
+
+**Upload** takes a pile of files or a zip (photos and videos inside; other files are skipped).
+Next comes the sort page: select files and **Group as carousel** (up to 10, one video per post),
+**Split apart**, **Library only**, or **Discard**. **One at a time** steps through each post with a
+big preview (and every photo in a carousel) to write its description, an optional note per
+photo, "Taken at" and the kind of post. **Save** turns each group into a post for Claude. Unsaved
+files stay in the batch (the dashboard links back to it) and notes are kept in the browser.
+
+Behind a reverse proxy, raise its request size limit to at least the per-file limit
+(`STUDIO_MAX_UPLOAD_MB`, default 500), e.g. nginx `client_max_body_size 500m;`, or big videos and
+zips fail with "too big for the proxy".
+
 ## Install on Unraid
 
 The image is published to `ghcr.io/columbiagadgetworks/social-media:latest` on every push. Add the
@@ -122,7 +135,7 @@ the address and token in the MCP setup (Settings shows the command).
 
 | When | What |
 |---|---|
-| Any time | Upload media (phone works fine), or drop photos in the Discord uploads channel |
+| Any time | Upload: drag in photos, videos or a zip, group them into posts/carousels, add a line each (phone works too), or drop photos in the Discord uploads channel |
 | Monday digest email (only if something needs you) | Approve what goes out this week, run `/cgw-session` if it says so, batch day every 2 weeks, the Google Business Profile post on its day |
 | "Last call" email (rare) | Something goes out within 2 days unapproved: approve it or move it |
 | Alert email (rare) | A post failed to publish, the monthly email failed, or an announced event changed |
