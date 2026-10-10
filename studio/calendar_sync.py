@@ -495,6 +495,19 @@ def _retire_old_promos(db: Session, event: Event) -> None:
         event.promos_created = False
 
 
+def retire_past_posts(db: Session) -> int:
+    """An event post nobody drafted before the event started is no use any more: take it out of Claude's
+    queue. Drafts, posts in review and approved posts are left to the people who own them."""
+    posts = db.scalars(select(Post).join(Event, Post.event_id == Event.id)
+                       .where(Post.status == "needs_claude", Event.start < utcnow())).all()
+    for post in posts:
+        post.status = "rejected"
+        post.review_comment = "The event already happened before this was drafted."
+        _clear_approval(post)
+        audit(db, SYSTEM, "rejected", "post", post.id, reason="event already happened")
+    return len(posts)
+
+
 def weekly_promos(db: Session) -> int:
     """Create each weekly event's post once it's within weekly_promo_days, so it can use the latest photos."""
     now = utcnow()
@@ -600,6 +613,8 @@ def sync(db: Session, text: str) -> dict:
             result["cancelled"] += 1
             reminders.event_cancelled(db, event, pulled, announced)
     result["promoted"] += weekly_promos(db)
+    if retired := retire_past_posts(db):
+        result["retired"] = retired
     return result
 
 

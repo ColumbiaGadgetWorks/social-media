@@ -390,6 +390,23 @@ def test_sync_redraws_a_stale_event_card_and_reopens_approved_posts(app2):
         assert "refreshed" not in calendar_sync.sync(s, calendar_text())
 
 
+def test_undrafted_posts_for_past_events_leave_claudes_queue(app2):
+    with db_mod.session_scope() as s:
+        calendar_sync.sync(s, calendar_text())
+    with db_mod.session_scope() as s:
+        event = s.scalar(select(Event).where(Event.uid == "solder@cgw"))
+        announce, reminder = event.posts
+        reminder.status = "in_review"  # already drafted, so the reviewer decides
+        announce_id, reminder_id = announce.id, reminder.id
+        event.start = db_mod.utcnow() - timedelta(hours=1)
+        assert calendar_sync.retire_past_posts(s) == 1
+    with db_mod.session_scope() as s:
+        announce, reminder = s.get(Post, announce_id), s.get(Post, reminder_id)
+        assert announce.status == "rejected" and "already happened" in announce.review_comment
+        assert reminder.status == "in_review"
+        assert calendar_sync.retire_past_posts(s) == 0
+
+
 def test_deleted_event_is_cancelled_after_two_missing_syncs(app2):
     with db_mod.session_scope() as s:
         calendar_sync.sync(s, calendar_text())
