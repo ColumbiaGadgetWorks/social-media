@@ -377,6 +377,25 @@ def test_event_card_renders(app2, tmp_path):
     img.save(tmp_path / "card.jpg")
 
 
+def test_cancelled_event_card_drops_time_and_kicker(app2, monkeypatch):
+    start = db_mod.utcnow() + timedelta(days=10)
+    event = Event(title="Cancelled: Open Hack Night (Thanksgiving)", start=start, end=start + timedelta(hours=2),
+                  location="Columbia Gadget Works", description="Closed for Thanksgiving.")
+    assert calendar_sync.is_cancelled(event)
+    assert not calendar_sync.is_cancelled(Event(title="Open Hack Night", start=start, status="active"))
+    texts = []
+    real_text = calendar_sync.ImageDraw.ImageDraw.text
+
+    def spy(self, xy, text, *a, **kw):
+        texts.append(text)
+        return real_text(self, xy, text, *a, **kw)
+
+    monkeypatch.setattr(calendar_sync.ImageDraw.ImageDraw, "text", spy)
+    calendar_sync.render_card(event)
+    assert "COLUMBIA GADGET WORKS" in texts and not any("EVENT" in t for t in texts)
+    assert not any(" to " in t and "M" in t for t in texts)
+
+
 # --- planning and reminders ------------------------------------------------------------
 
 

@@ -169,14 +169,20 @@ def event_when(event: Event) -> tuple[str, str]:
     return day, t
 
 
+def is_cancelled(event: Event) -> bool:
+    return event.status == "cancelled" or event.title.strip().lower().startswith(("cancelled", "canceled"))
+
+
 def render_card(event: Event, price: str = "") -> bytes:
     """A plain, on-brand event graphic: facts only, straight from the calendar."""
     img = Image.new("RGB", CARD_SIZE, ACCENT)
     d = ImageDraw.Draw(img)
     margin, width = 90, CARD_SIZE[0] - 180
     label_font = ImageFont.load_default(size=40)
+    cancelled = is_cancelled(event)
     kind = "CLASS" if "class" in (event.title + event.description).lower() else "EVENT"
-    d.text((margin, 110), f"{kind} AT COLUMBIA GADGET WORKS", font=label_font, fill=PAPER)
+    label = "COLUMBIA GADGET WORKS" if cancelled else f"{kind} AT COLUMBIA GADGET WORKS"
+    d.text((margin, 110), label, font=label_font, fill=PAPER)
     d.rectangle((margin, 172, margin + 120, 180), fill=PAPER)
 
     size = 104
@@ -196,7 +202,9 @@ def render_card(event: Event, price: str = "") -> bytes:
     info_font, small_font = ImageFont.load_default(size=56), ImageFont.load_default(size=42)
     day, when = event_when(event)
     iy = panel_top + 50
-    for text, font in ((day, info_font), (when, info_font), (event.location or "The shop, on The Loop", small_font)):
+    rows = [(day, info_font)] + ([] if cancelled else [(when, info_font)])
+    rows.append((event.location or "The shop, on The Loop", small_font))
+    for text, font in rows:
         for line in _wrap(d, text, font, width - 40)[:2]:
             d.text((margin + 20, iy), line, font=font, fill=INK)
             iy += int(font.size * 1.3)
