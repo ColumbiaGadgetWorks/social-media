@@ -222,10 +222,15 @@ def _make_card(db: Session, event: Event, price: str):
         db, io.BytesIO(data), f"event-{event.id}.jpg", "image/jpeg", None,
         note=f"Event card: {event.title}",
     )
-    asset.tags = ["event-card"]
+    asset.tags = ["event-card", _card_tag(data)]
     media_mod.process(asset)
     event.card_media_id = asset.id
     return asset
+
+
+def _card_tag(data: bytes) -> str:
+    """Fingerprint of a rendered card, kept in the media tags so a design change can be spotted later."""
+    return "card:" + hashlib.sha256(data).hexdigest()[:16]
 
 
 # --- promos and changes --------------------------------------------------
@@ -312,6 +317,31 @@ def handle_change(db: Session, event: Event, price: str, changes: list[str]) -> 
         touched.append(post)
     audit(db, SYSTEM, "event_changed", "event", event.id, changes=changes, posts=[p.id for p in touched])
     return touched
+
+
+def refresh_card(db: Session, event: Event, price: str = "") -> list[Post]:
+    """Rebuild an event's card when the card design (or the rules for drawing it) changed since it was made,
+    and swap the new one into the event's open posts. A post that was approved goes back to review."""
+    if not event.promos_created or not event.card_media_id or event.status != "active" or event.start <= utcnow():
+        return []
+    old = db.get(MediaAsset, event.card_media_id)
+    if old is None:
+        return []
+    posts = [p for p in _open_posts(event) if any(link.media_id == old.id for link in p.media_links)]
+    if not posts or _card_tag(render_card(event, price)) in (old.tags or []):
+        return []
+    new_card = _make_card(db, event, price)
+    for post in posts:
+        for link in post.media_links:
+            if link.media_id == old.id:
+                link.media = new_card
+        if post.status == "approved":
+            post.status = "in_review"
+            post.review_comment = "The event card was redrawn with the current design. Check it before approving again."
+            _clear_approval(post)
+            audit(db, SYSTEM, "approval_cleared", "post", post.id, reason="event card refreshed")
+        audit(db, SYSTEM, "card_refreshed", "post", post.id, event=event.id, media=new_card.id)
+    return posts
 
 
 def handle_cancel(db: Session, event: Event) -> tuple[list[Post], bool]:
@@ -531,6 +561,8 @@ def sync(db: Session, text: str) -> dict:
                 touched = handle_change(db, event, price, changes or ["details"])
                 result["changed"] += 1
                 reminders.event_changed(db, event, touched, changes)
+            if refresh_card(db, event, price):
+                result["refreshed"] = result.get("refreshed", 0) + 1
         seen.add(event.id)
 
     # An occurrence that vanished from the feed twice in a row was deleted (or moved).

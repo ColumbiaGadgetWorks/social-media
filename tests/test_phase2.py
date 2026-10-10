@@ -14,7 +14,7 @@ from studio import calendar_sync, mailer, public_media, publishers, reminders
 from studio import db as db_mod
 from studio import posts as post_svc
 from studio.media import process, store_upload
-from studio.models import Event, PendingAlert, Post, User
+from studio.models import Event, MediaAsset, PendingAlert, Post, User
 from studio.publishers.meta import FacebookClient, InstagramClient, ThreadsClient
 from studio.publishers.website import WebsiteClient, build_files, description_from
 from studio.security import Actor
@@ -313,7 +313,8 @@ def test_sync_creates_promos_for_one_off_and_weekly_events(app2):
         assert event.url == "https://givebutter.com/solder" and "Signup" not in event.description
         assert [p.purpose for p in event.posts] == ["announce", "reminder"]
         post = event.posts[0]
-        assert post.status == "needs_claude" and post.media[0].tags == ["event-card"]
+        assert post.status == "needs_claude" and post.media[0].tags[0] == "event-card"
+        assert post.media[0].tags[1].startswith("card:")
         assert post.media[0].processing_status == "ready"
         assert (to_local(event.start) - to_local(post.target_at)).days == 14
         hack = s.scalars(select(Event).where(Event.uid == "hack@cgw", Event.series != "").order_by(Event.start)).all()
@@ -362,6 +363,31 @@ def test_cancelled_event_pulls_posts(app2):
         assert {p.status for p in event.posts} == {"rejected"}
         alert = s.scalar(select(PendingAlert).where(PendingAlert.kind == "event_cancelled"))
         assert alert and not alert.urgent  # nothing was announced or approved yet
+
+
+def test_sync_redraws_a_stale_event_card_and_reopens_approved_posts(app2):
+    with db_mod.session_scope() as s:
+        calendar_sync.sync(s, calendar_text())
+    with db_mod.session_scope() as s:
+        event = s.scalar(select(Event).where(Event.uid == "solder@cgw"))
+        post, actor = event.posts[0], adam(s)
+        post_svc.update_post(s, actor, post, versions=[{"channel": "facebook", "enabled": True, "body": "Solder!",
+                                                         "scheduled_at": db_mod.utcnow() + timedelta(days=5)}])
+        post_svc.submit_for_review(s, actor, post)
+        post_svc.approve(s, actor, post, post_svc.approval_hash(post))
+        post_id, old_card = post.id, event.card_media_id
+        s.get(MediaAsset, old_card).tags = ["event-card"]  # a card drawn before the tag existed, i.e. an older design
+    with db_mod.session_scope() as s:
+        assert calendar_sync.sync(s, calendar_text()).get("refreshed") == 1
+    with db_mod.session_scope() as s:
+        event = s.scalar(select(Event).where(Event.uid == "solder@cgw"))
+        assert event.card_media_id != old_card
+        post = s.get(Post, post_id)
+        assert [m.id for m in post.media] == [event.card_media_id]
+        assert post.status == "in_review" and post.approved_hash is None and "redrawn" in post.review_comment
+        assert all([m.id for m in p.media] == [event.card_media_id] for p in event.posts)
+    with db_mod.session_scope() as s:  # the new card is current, so nothing more happens
+        assert "refreshed" not in calendar_sync.sync(s, calendar_text())
 
 
 def test_deleted_event_is_cancelled_after_two_missing_syncs(app2):

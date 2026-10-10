@@ -124,7 +124,7 @@ def test_no_photos_means_card_and_a_non_photo_angle(app3):
     with db_mod.session_scope() as s:
         post = s.scalars(select(Post).where(Post.purpose == "weekly")).first()
         assert post.angle in ("first_timer", "tool_spotlight", "fix_it", "question", "humor")
-        assert [m.tags for m in post.media] == [["event-card"]]
+        assert [m.tags[0] for m in post.media] == ["event-card"]
         assert calendar_sync.series_context(s, post)["needs_photos"] is True
 
 
