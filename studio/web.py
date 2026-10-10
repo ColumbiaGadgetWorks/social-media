@@ -530,8 +530,21 @@ def post_page(request: Request, post_id: int, db: Session = Depends(get_db)):
     return render(
         request, "post_edit.html", user, post=post, problems=found,
         history=history, compatible=compatible, seen_hash=post_svc.approval_hash(post),
-        snapshots=snapshots, event_when=calendar_sync.event_when,
+        snapshots=snapshots, event_when=calendar_sync.event_when, preview=_preview_data(post),
     )
+
+
+def _preview_data(post: Post) -> dict:
+    """What the platform previews on the post page need: the media (as the viewer would flip through them) and
+    each channel's limits. The captions come from the form itself, so the preview follows what's being typed."""
+    media = []
+    for m in post.media:
+        src = f"/files/{m.id}/preview" if m.preview_path else (f"/files/{m.id}/thumb" if m.thumb_path else "")
+        media.append({"kind": m.kind, "src": src, "alt": m.alt_text or m.description,
+                      "video": f"/files/{m.id}/original" if m.kind == "video" else ""})
+    channels = {k: {"label": c.label, "max_chars": c.max_chars, "max_images": c.max_images, "title_chars": c.title_chars}
+                for k, c in ch.CHANNELS.items()}
+    return {"media": media, "channels": channels, "name": "Columbia Gadget Works", "logo": "/static/cgw-logo.png"}
 
 
 @router.post("/posts/{post_id}")

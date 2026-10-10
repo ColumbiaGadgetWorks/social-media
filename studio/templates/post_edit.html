@@ -62,7 +62,8 @@
         {% if v.scheduled_at %}<span class="small muted">{{ v.scheduled_at | local }}</span>{% endif %}
         {% if problems.get(key) %}<span class="tag warn">{{ problems[key] | length }} to fix</span>{% endif %}
       </summary>
-      <div class="body">
+      <div class="body chan-grid">
+       <div class="fields">
         <input type="hidden" name="{{ key }}.present" value="1">
         <label class="row" style="font-weight:600"><input type="checkbox" name="{{ key }}.enabled" value="1" {{ 'checked' if v.enabled }} {{ 'disabled' if locked }}> Post to {{ c.label }}</label>
         {% if c.title_chars %}
@@ -78,6 +79,8 @@
         <input type="datetime-local" id="{{ key }}-when" name="{{ key }}.scheduled_at" value="{{ v.scheduled_at | input_dt }}" {{ 'disabled' if locked }}>
         <p class="small muted">{{ c.tips }}</p>
         {% if problems.get(key) %}<div class="problems small"><ul>{% for p in problems[key] %}<li>{{ p }}</li>{% endfor %}</ul></div>{% endif %}
+       </div>
+       <div class="sm-slot" data-channel="{{ key }}" aria-label="{{ c.label }} preview"></div>
       </div>
     </details>
     {% endif %}
@@ -170,4 +173,8 @@
   </div>
 </aside>
 </div>
+{% endblock %}
+{% block scripts %}
+<script type="application/json" id="preview-data">{{ preview | tojson }}</script>
+<script src="/static/preview.js?v={{ ASSET_V }}"></script>
 {% endblock %}

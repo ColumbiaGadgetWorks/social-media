@@ -161,3 +161,53 @@ img.mini { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; }
 .filmstrip .tile { width: 72px; height: 72px; flex: none; border-radius: 4px; }
 .filmstrip .tile.current { outline: 3px solid var(--fg); outline-offset: -3px; box-shadow: inset 0 0 0 5px var(--surface); }
 label.check { display: flex; gap: 8px; align-items: center; font-weight: 500; margin-top: 12px; }
+
+/* Platform previews: an approximation of each channel's feed, always drawn light so it reads like the real app. */
+.chan-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, 340px); gap: 18px; align-items: start; }
+@media (max-width: 900px) { .chan-grid { grid-template-columns: minmax(0, 1fr); } }
+.sm-slot { position: sticky; top: 64px; }
+.sm-note { margin-top: 6px; }
+.sm { --ink: #111; --mute: #65676b; --line: #dbdbdb; --link: #0b57d0;
+  background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  font: 14px/1.4 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 340px; }
+.sm .lnk { color: var(--link); }
+.sm-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
+.sm-avatar { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: #fff; display: grid; place-items: center; flex: none; overflow: hidden; }
+.sm-avatar img { width: 24px; height: 24px; object-fit: contain; filter: none; }
+.sm-who { display: grid; line-height: 1.2; min-width: 0; }
+.sm-sub { color: var(--mute); font-size: 12px; }
+.sm-text { padding: 8px 12px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sm-over { background: #fbd5d0; color: #8a1c10; }
+.sm-more { border: 0; background: none; padding: 0; font: inherit; color: var(--mute); cursor: pointer; }
+.sm-media { position: relative; background: #f0f2f5; overflow: hidden; width: 100%; }
+.sm-stage, .sm-stage img, .sm-stage video { width: 100%; height: 100%; display: block; }
+.sm-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; border-radius: 50%; border: 0;
+  background: rgba(255, 255, 255, .92); color: #111; font: 600 20px/1 sans-serif; padding: 0 0 3px; cursor: pointer; box-shadow: 0 1px 4px rgba(0, 0, 0, .35); }
+.sm-arrow[hidden] { display: none; }
+.sm-prev { left: 8px; } .sm-next { right: 8px; }
+.sm-count { position: absolute; top: 8px; right: 8px; background: rgba(0, 0, 0, .65); color: #fff; font-size: 12px; border-radius: 10px; padding: 2px 8px; }
+.sm-dots { display: flex; gap: 5px; justify-content: center; padding: 8px 0 0; }
+.sm-dots span { width: 6px; height: 6px; border-radius: 50%; background: #c7c7c7; }
+.sm-dots span.on { background: #0095f6; }
+.sm-actions { display: flex; gap: 14px; padding: 8px 12px; color: var(--ink); }
+.sm-labels { justify-content: space-around; border-top: 1px solid var(--line); color: var(--mute); font-weight: 600; margin-top: 4px; }
+.sm-instagram .sm-text { padding-top: 0; }
+.sm-instagram .sm-dots { padding-bottom: 0; }
+.sm-x, .sm-bluesky, .sm-threads { border-radius: 16px; }
+.sm-x .sm-media, .sm-bluesky .sm-media, .sm-threads .sm-media { width: calc(100% - 24px); margin: 0 12px; border-radius: 14px; }
+.sm-x .sm-dots, .sm-bluesky .sm-dots, .sm-threads .sm-dots { padding-bottom: 2px; }
+.sm-linkedin .sm-sub { font-size: 11px; }
+.sm-gbp .sm-head { padding-bottom: 0; }
+.sm-article { padding: 14px 16px 6px; }
+.sm-article h3 { margin: 0 0 2px; font-size: 18px; line-height: 1.25; }
+.sm-article p { margin: 10px 0; overflow-wrap: anywhere; }
+.sm-reel { background: #000; border: 0; max-width: 260px; margin: 0 auto; border-radius: 18px; }
+.sm-phone { position: relative; aspect-ratio: 9 / 16; color: #fff; background: #111; }
+.sm-phone .sm-stage { position: absolute; inset: 0; }
+.sm-over-text { position: absolute; left: 0; right: 52px; bottom: 0; padding: 40px 12px 14px; background: linear-gradient(transparent, rgba(0, 0, 0, .75)); font-size: 13px; }
+.sm-over-text .lnk { color: #9ec5ff; }
+.sm-reel-title { font-weight: 600; margin-top: 4px; }
+.sm-reel-cap { margin-top: 2px; max-height: 3.9em; overflow: hidden; }
+.sm-reel .sm-more { color: #ddd; }
+.sm-rail { position: absolute; right: 8px; bottom: 70px; display: grid; gap: 16px; color: #fff; }
+.sm-pill { position: absolute; top: 10px; left: 10px; background: rgba(0, 0, 0, .55); border-radius: 10px; font-size: 11px; padding: 2px 8px; }

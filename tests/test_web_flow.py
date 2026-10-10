@@ -1,4 +1,5 @@
 import io
+import json
 import zipfile
 from datetime import timedelta
 
@@ -185,3 +186,12 @@ def test_token_page_shows_new_token_once(approver_client):
     first = approver_client.get("/settings").text
     assert "cgw_" in first and "claude mcp add" in first and "be shown again" in first
     assert "be shown again" not in approver_client.get("/settings").text
+
+
+def test_post_page_has_a_preview_for_each_channel(approver_client):
+    post_id = upload(approver_client, [("a.jpg", jpeg_bytes(), "image/jpeg")])
+    html = approver_client.get(f"/posts/{post_id}").text
+    assert 'data-channel="instagram"' in html and 'data-channel="bluesky"' in html and "/static/preview.js" in html
+    data = json.loads(html.split('id="preview-data">')[1].split("</script>")[0])
+    assert data["media"][0]["kind"] == "image" and data["media"][0]["src"].startswith("/files/")
+    assert data["channels"]["bluesky"]["max_chars"] == 300 and data["channels"]["bluesky"]["max_images"] == 4
