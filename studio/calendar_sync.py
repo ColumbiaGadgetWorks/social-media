@@ -27,7 +27,7 @@ from pathlib import Path
 import httpx
 import icalendar
 import recurring_ical_events
-from PIL import Image, ImageChops, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -171,27 +171,24 @@ def event_when(event: Event) -> tuple[str, str]:
     return day, t
 
 
-LOGO_PATH = Path(__file__).parent / "static" / "logo.png"
-LOGO_HEIGHT = 175
+LOGO_PATH = Path(__file__).parent / "static" / "cgw-logo.png"  # the CGW logo: orange artwork, transparent background
+LOGO_HEIGHT = 150
 
 
 @functools.lru_cache(maxsize=1)
-def _logo_glyph() -> Image.Image | None:
-    """The white gear and lettering from the logo, cut out so they sit straight on the card's orange
-    (the logo's own background is the same orange, so pasting it whole would show nothing)."""
+def _logo_mark() -> Image.Image | None:
+    """The CGW logo as a white silhouette. The artwork is the same orange as the card, so it is
+    drawn in white (its shape comes from the file's transparency) to stand out."""
     if not LOGO_PATH.exists():
         return None
     with Image.open(LOGO_PATH) as src:
-        rgba = src.convert("RGBA")
-    floor = ACCENT[1]  # the green channel runs from the orange's value up to white's 255
-    alpha = rgba.getchannel("G").point(lambda g: max(0, min(255, (g - floor) * 255 // (255 - floor))))
-    alpha = ImageChops.multiply(alpha, rgba.getchannel("A"))
-    alpha = alpha.crop(alpha.getbbox())  # the file has a wide margin around the artwork
+        alpha = src.convert("RGBA").getchannel("A")
+    alpha = alpha.crop(alpha.getbbox())
     width = round(alpha.width * LOGO_HEIGHT / alpha.height)
     alpha = alpha.resize((width, LOGO_HEIGHT), Image.Resampling.LANCZOS)
-    glyph = Image.new("RGBA", alpha.size, (*PAPER, 0))
-    glyph.putalpha(alpha)
-    return glyph
+    mark = Image.new("RGBA", alpha.size, (*PAPER, 0))
+    mark.putalpha(alpha)
+    return mark
 
 
 def is_cancelled(event: Event) -> bool:
@@ -209,8 +206,6 @@ def render_card(event: Event, price: str = "") -> bytes:
     label = "COLUMBIA GADGET WORKS" if cancelled else f"{kind} AT COLUMBIA GADGET WORKS"
     d.text((margin, 110), label, font=label_font, fill=PAPER)
     d.rectangle((margin, 172, margin + 120, 180), fill=PAPER)
-    if (glyph := _logo_glyph()) is not None:
-        img.paste(glyph, (CARD_SIZE[0] - margin - glyph.width, 55), glyph)
 
     size = 104
     while size > 56:
@@ -225,7 +220,7 @@ def render_card(event: Event, price: str = "") -> bytes:
         y += int(size * 1.15)
 
     panel_top = max(y + 60, 760)
-    d.rounded_rectangle((60, panel_top, CARD_SIZE[0] - 60, CARD_SIZE[1] - 170), radius=28, fill=PAPER)
+    d.rounded_rectangle((60, panel_top, CARD_SIZE[0] - 60, CARD_SIZE[1] - 200), radius=28, fill=PAPER)
     info_font, small_font = ImageFont.load_default(size=56), ImageFont.load_default(size=42)
     day, when = event_when(event)
     iy = panel_top + 50
@@ -238,6 +233,8 @@ def render_card(event: Event, price: str = "") -> bytes:
     if price:
         d.text((margin + 20, iy + 10), price, font=info_font, fill=ACCENT)
     d.text((margin, CARD_SIZE[1] - 120), "columbiagadgetworks.org", font=small_font, fill=PAPER)
+    if (mark := _logo_mark()) is not None:  # footer, opposite the web address
+        img.paste(mark, (CARD_SIZE[0] - margin - mark.width, CARD_SIZE[1] - 20 - mark.height), mark)
     buf = io.BytesIO()
     img.save(buf, "JPEG", quality=92)
     return buf.getvalue()
