@@ -162,18 +162,12 @@ def test_queue_puts_uploads_before_far_off_event_posts(app3):
         assert [p.note for p in queue.claude_queue(s)] == ["soon", "upload", "event"]
 
 
-def test_photo_nudge_on_the_day(app3):
-    from studio.timeutil import local_day_bounds_utc, local_now
-
-    now = db_mod.utcnow()
-    today_end = local_day_bounds_utc(local_now().date())[1]
+def test_digest_reminds_about_weekly_event_photos(app3):
     with db_mod.session_scope() as s:
-        s.add(Event(uid="t@site", start=now + min(timedelta(hours=3), (today_end - now) / 2), title="Open Hack Night",
+        s.add(Event(uid="t@site", start=db_mod.utcnow() + timedelta(days=2), title="Open Hack Night",
                     series="open hack night|Thu|18:00", promote=True))
         s.flush()
-        assert reminders.photo_nudge(s) is True
-        assert "Taken at: Open Hack Night" in mailer.outbox[-1].get_content()
-        assert reminders.photo_nudge(s) is False  # once per event
+        assert "Taken at" in reminders.digest(s)[1]
 
 
 def test_upload_taken_at_and_settings_snippets(app3):
@@ -212,3 +206,20 @@ def test_favicon_and_theme(app3):
         assert c.get("/static/favicon.ico").status_code == 200
         assert "--accent: #bf4d28" in c.get("/static/app.css").text
         assert 'rel="icon"' in c.get("/login").text
+
+
+def test_colorway_setting_and_asset_versions(app3):
+    from .conftest import csrf_of, login
+
+    with TestClient(app3, client=("192.168.1.20", 50000)) as c:
+        login(c, "adam")
+        page = c.get("/").text
+        assert 'data-theme="orange"' in page and "data-mode" not in page.split("<head>")[0]
+        assert "/static/app.css?v=" in page
+        c.post("/settings/appearance", data={"csrf": csrf_of(c, "/settings"), "theme": "teal", "color_mode": "dark"})
+        page = c.get("/").text
+        assert 'data-theme="teal" data-mode="dark"' in page
+        c.post("/settings/appearance", data={"csrf": csrf_of(c, "/settings"), "theme": "pink", "color_mode": "auto"})
+        page = c.get("/").text
+        assert 'data-theme="teal"' in page and 'data-mode=' not in page.split("<head>")[0]
+        assert ':root[data-theme="teal"][data-mode="dark"]' in c.get("/static/app.css").text

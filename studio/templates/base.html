@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="{{ user.theme if user and user.theme else 'orange' }}"{% if user and user.color_mode in ('light', 'dark') %} data-mode="{{ user.color_mode }}"{% endif %}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,7 +8,7 @@
 <link rel="icon" type="image/png" href="/static/favicon-32.png" sizes="32x32">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <meta name="theme-color" content="#bf4d28">
-<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/app.css?v={{ ASSET_V }}">
 </head>
 <body>
 {% if user %}
@@ -39,6 +39,6 @@
   {% for f in flashes %}<div class="flash {{ f.kind }}" role="status">{{ f.text }}</div>{% endfor %}
   {% block content %}{% endblock %}
 </main>
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v={{ ASSET_V }}"></script>
 </body>
 </html>

@@ -95,7 +95,41 @@ onto a blurred background instead of cropping them. Videos post as Reels.
 4. Sending goes through the same SMTP2GO login as reminders. Make sure the From address
    (STUDIO_ANNOUNCE_FROM, default `mail@columbiagadgetworks.org`) is a verified sender in SMTP2GO.
 
-## 6. Apply for the remaining APIs (free, takes weeks)
+## 6. Discord uploads (optional)
+
+Anyone in the uploads channel can drop photos or videos there; they land in the media library and,
+unless the message says `library`, a post is queued for the next Claude session. The message text
+becomes the note. The bot only reads the channel (it checks every minute), so nothing new has to be
+reachable from the internet.
+
+1. https://discord.com/developers/applications → **New Application** (e.g. "CGW Studio").
+2. **General Information**: set the app icon to `docs/img/discord-bot-icon.png` (also on the
+   **Bot** tab as its avatar). **Bot** tab: **Reset Token**, copy it (that's `STUDIO_DISCORD_BOT_TOKEN`). Turn on **Message
+   Content Intent** (free for bots in fewer than 100 servers; without it the bot sees empty
+   messages). Leave "Public Bot" off.
+3. **OAuth2 → URL Generator**: scope **bot**; permissions **View Channels**, **Read Message
+   History**, **Add Reactions**, and **Send Messages** (only used to say why a file couldn't be
+   taken). Open the generated link and add the bot to the CGW server.
+4. Create a channel such as `#studio-uploads` and make sure the bot's role can see it. Who can post
+   there is up to the channel's permissions.
+5. Discord settings → Advanced → **Developer Mode** on. Right-click the channel → **Copy Channel
+   ID** (that's `STUDIO_DISCORD_CHANNEL_IDS`; several channels: separate with commas).
+6. Set both in the Unraid template and apply. Settings → Connections shows "Discord uploads".
+   The bot starts with messages posted after it first runs; it doesn't import the channel's history.
+
+In the channel:
+
+- Photos/videos with a line of text → one post (a carousel for several photos; each video on its
+  own). The bot reacts ✅ when they're in.
+- Add `library` to the message to file the media without a post; `separate` for one post per file.
+- Photos sent during an event (from two hours before to six after) are marked "Taken at" that
+  event, so Hack Night photos feed next week's Hack Night post.
+- Too big or not a photo/video: the bot reacts ⚠️ and replies with the reason. Discord's own size
+  limit (10 MB without Nitro) applies before ours.
+- The sender's Discord name is recorded in the note ("sent by Sam on Discord"). That's who shared
+  it, not necessarily who made it; captions credit makers only when the text says so.
+
+## 7. Apply for the remaining APIs (free, takes weeks)
 
 These move channels from batch day to automatic when approved:
 

@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Dashboard</h1>
+{% if open_batches %}<p class="flash">{{ open_batches | sum(attribute='count') }} uploaded file(s) are waiting to be sorted into posts.
+  {% for b in open_batches[:3] %}<a href="/upload/batch/{{ b.batch }}">Sort {{ b.count }}</a>{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
 <div class="grid">
   <div class="card">
     <span class="tag accent">Needs Claude</span>

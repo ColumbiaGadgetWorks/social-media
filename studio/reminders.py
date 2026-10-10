@@ -1,21 +1,43 @@
-"""Reminder emails: when a Claude session is due, approvals are waiting, or it's batch day."""
+"""Reminder emails, kept rare on purpose.
+
+- One weekly digest (Monday morning by default), only when something needs a person: posts to
+  approve this week with their deadlines, a Claude session when work is due soon, batch day, the
+  Google Business Profile post, empty days, the monthly email, Hack Night photos, event changes.
+- A "last call" when an unapproved post goes out within 48 hours: at most one every 3 days, and
+  each post gets at most one.
+- Problem alerts (a post failed to publish, the monthly email failed, an announced event was
+  cancelled or changed), bundled into at most one email a day.
+- Nothing in the first 24 hours after the Studio starts on a new database.
+"""
 
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from . import batch, mailer
+from . import batch, mailer, timeutil
 from . import channels as ch
 from .db import settings
-from .models import ChannelVersion, Post, ReminderLog, User
-from .queue import approved_in_next, gaps, queue_summary
-from .timeutil import local_day_bounds_utc, local_now, to_local
+from .models import ChannelVersion, PendingAlert, Post, ReminderLog, User
+from .queue import approved_in_next, claude_queue, gaps
+from .timeutil import local_now, to_local
+
+
+def utcnow():
+    return timeutil.utcnow()  # looked up each call, so tests can move the clock
 
 log = logging.getLogger(__name__)
+
+QUIET_START = timedelta(hours=24)
+LAST_CALL_WINDOW = timedelta(hours=48)
+LAST_CALL_GAP = timedelta(days=3)
+ALERT_GAP = timedelta(hours=23)
+DIGEST_DAYS = 8  # what the digest looks at
+EVENING_HOUR = 21  # no reminder email after this local hour
 
 
 def recipients(db: Session) -> list[str]:
@@ -30,7 +52,7 @@ def _once(db: Session, kind: str, key: str) -> bool:
     """Record a reminder; False if this one was already sent."""
     if db.scalar(select(ReminderLog).where(ReminderLog.kind == kind, ReminderLog.key == key)):
         return False
-    db.add(ReminderLog(kind=kind, key=key))
+    db.add(ReminderLog(kind=kind, key=key, sent_at=utcnow()))
     try:
         db.flush()
     except IntegrityError:
@@ -39,12 +61,15 @@ def _once(db: Session, kind: str, key: str) -> bool:
     return True
 
 
-def _send(db: Session, kind: str, key: str, subject: str, body: str) -> bool:
+def _last_sent(db: Session, kind: str) -> datetime | None:
+    return db.scalar(select(ReminderLog.sent_at).where(ReminderLog.kind == kind).order_by(ReminderLog.sent_at.desc()).limit(1))
+
+
+def _send(db: Session, kind: str, key: str, subject: str, body: str, to: list[str] | None = None) -> bool:
     if not _once(db, kind, key):
         return False
-    to = recipients(db)
     try:
-        mailer.send(to, subject, body + _footer())
+        mailer.send(to or recipients(db), subject, body + _footer())
     except Exception:
         log.exception("sending %s reminder failed", kind)
         db.rollback()  # try again next loop
@@ -54,174 +79,290 @@ def _send(db: Session, kind: str, key: str, subject: str, body: str) -> bool:
 
 
 def _footer() -> str:
-    return f"\n\n-- \nCGW Content Studio\n{settings().base_url}\n"
+    return (f"\n\n-- \nCGW Content Studio\n{settings().base_url}\n"
+            "You get one digest a week, a last call when something goes out within two days unapproved, "
+            "and an alert if something breaks.")
 
 
-def claude_session(db: Session, force: bool = False) -> bool:
-    s = settings()
-    summary = queue_summary(db)
-    due = summary["count"] >= s.claude_queue_threshold or (
-        summary["count"] > 0 and summary["oldest_days"] >= s.claude_max_age_days
-    )
-    if not (due or (force and summary["count"])):
+def started_at(db: Session) -> datetime:
+    """When this database first ran the reminder loop (a fresh install, or the upgrade to digests)."""
+    row = db.scalar(select(ReminderLog).where(ReminderLog.kind == "installed", ReminderLog.key == "first_start"))
+    if row is None:
+        row = ReminderLog(kind="installed", key="first_start", sent_at=utcnow())
+        db.add(row)
+        db.commit()
+    return row.sent_at
+
+
+def quiet(db: Session) -> bool:
+    return utcnow() - started_at(db) < QUIET_START
+
+
+def _when(dt: datetime) -> str:
+    local = to_local(dt)
+    return f"{local:%a %b} {local.day}, {local:%I:%M %p}".replace(", 0", ", ")
+
+
+def _day(dt: datetime) -> str:
+    local = to_local(dt)
+    return f"{local:%a %b} {local.day}"
+
+
+# --- problem alerts ------------------------------------------------------
+
+
+def alert(db: Session, kind: str, key: str, line: str, urgent: bool) -> None:
+    """Queue something to tell people. Urgent: next alert email (max one a day). Otherwise: the digest."""
+    if db.scalar(select(PendingAlert).where(PendingAlert.kind == kind, PendingAlert.key == key)):
+        return
+    db.add(PendingAlert(kind=kind, key=key[:96], line=line, urgent=urgent))
+    db.flush()
+
+
+def flush_alerts(db: Session) -> bool:
+    pending = db.scalars(select(PendingAlert).where(PendingAlert.urgent.is_(True), PendingAlert.sent_at.is_(None))
+                         .order_by(PendingAlert.created_at)).all()
+    if not pending:
         return False
-    today = local_now().date().isoformat()
-    body = (
-        f"{summary['count']} item(s) are waiting for Claude ({summary['media_count']} photo/video files"
-        f"{', ' + str(summary['emails']) + ' email draft(s)' if summary.get('emails') else ''}). "
-        f"The oldest has waited {summary['oldest_days']} day(s).\n"
-        f"Estimated time: about {summary['minutes']} minutes.\n\n"
-        "On your computer, open Claude Code in the social-media repo and run:\n\n"
-        "    /cgw-session\n\n"
-        f"Then review the drafts at {s.base_url}/review"
-    )
-    return _send(db, "claude_session", today, f"Claude session needed: {summary['count']} items, ~{summary['minutes']} min", body)
-
-
-def approvals(db: Session) -> bool:
-    from .models import Announcement
-
-    waiting = db.scalars(select(Post).where(Post.status == "in_review").order_by(Post.submitted_at)).all()
-    emails = db.scalars(select(Announcement).where(Announcement.status == "in_review")).all()
-    if not waiting and not emails:
+    last = _last_sent(db, "alerts")
+    if last and utcnow() - last < ALERT_GAP:
         return False
-    lines = [f"- {p.display_title} ({', '.join(ch.CHANNELS[v.channel].label for v in p.enabled_versions)})" for p in waiting[:20]]
-    lines += [f"- EMAIL: {a.subject} (sends {to_local(a.send_at):%a %b %-d, %-I:%M %p}) -> {settings().base_url}/announcements/{a.id}"
-              for a in emails]
-    total = len(waiting) + len(emails)
-    body = f"{total} item(s) are waiting for your approval:\n\n" + "\n".join(lines) + f"\n\nReview: {settings().base_url}/review"
-    return _send(db, "approvals", local_now().date().isoformat(), f"{total} item(s) waiting for approval", body)
-
-
-def batch_day(db: Session) -> bool:
-    info = batch.cycle_info()
-    if not info["is_batch_day"]:
+    body = "Something needs a look:\n\n" + "\n\n".join(a.line for a in pending)
+    subject = pending[0].line.split("\n")[0][:90] if len(pending) == 1 else f"{len(pending)} problems need a look"
+    if not _send(db, "alerts", utcnow().isoformat(timespec="minutes"), f"CGW Studio: {subject}", body):
         return False
-    rows = [r for r in batch.overview(db) if r["count"]]
-    if not rows:
-        return False
-    counts = ", ".join(f"{r['channel'].label} {r['count']}" for r in rows)
-    total = sum(r["count"] for r in rows)
-    lines = [f"- {r['channel'].label}: {r['count']} post(s) -> {settings().base_url}/batch/{r['channel'].key}" for r in rows]
-    body = (
-        "It's batch day. Schedule the next two weeks in each platform's own scheduler.\n\n"
-        + "\n".join(lines)
-        + f"\n\nAbout {total * 2} minutes by hand. TikTok only accepts posts up to 10 days ahead; "
-        "the rest wait for the next batch."
-    )
-    return _send(db, "batch_day", info["start"].isoformat(), f"Batch day: {counts}", body)
-
-
-def on_day_posts(db: Session) -> bool:
-    """Channels that can't schedule ahead (Google Business Profile): remind on the day."""
-    start, end = local_day_bounds_utc(local_now().date())
-    keys = [c.key for c in ch.CHANNELS.values() if ch.mode(c) == "on_day"]
-    due = db.scalars(
-        select(ChannelVersion).join(Post).where(
-            ChannelVersion.channel.in_(keys), ChannelVersion.enabled.is_(True),
-            ChannelVersion.publish_state == "pending", Post.status == "approved",
-            ChannelVersion.scheduled_at >= start, ChannelVersion.scheduled_at < end,
-        )
-    ).all()
-    if not due:
-        return False
-    lines = [f"- {ch.CHANNELS[v.channel].label} at {to_local(v.scheduled_at):%I:%M %p}: {v.post.display_title} -> {settings().base_url}/batch/{v.channel}" for v in due]
-    body = "Post these by hand today, then tap \"Mark posted\":\n\n" + "\n".join(lines)
-    return _send(db, "on_day", local_now().date().isoformat(), f"Post today: {len(due)} item(s)", body)
+    for a in pending:
+        a.sent_at = utcnow()
+    db.commit()
+    return True
 
 
 def publish_failures(db: Session, failed: list[ChannelVersion]) -> None:
     for v in failed:
-        body = (
-            f"{ch.CHANNELS[v.channel].label} didn't publish \"{v.post.display_title}\".\n\n"
-            f"Error: {v.last_error}\n\nOpen the post to retry: {settings().base_url}/posts/{v.post_id}"
-        )
-        _send(db, "publish_failed", f"{v.id}:{v.attempts}:{v.last_error[:20]}", f"Publishing failed: {v.post.display_title}", body)
-
-
-def schedule_dry(db: Session) -> bool:
-    """Fewer than two posts lined up for the next week: ask for a planning session."""
-    if approved_in_next(db, 7) >= 2:
-        return False
-    found = gaps(db, weeks=2)
-    lines = [f"- Week of {w['week_of']}: {w['planned']} of {w['target']} posts planned" for w in found["weeks"]]
-    if found["gbp_this_cycle"] < found["gbp_target"]:
-        lines.append("- Google Business Profile: no post yet this cycle")
-    body = (
-        "The schedule is running dry: fewer than two posts are approved or in review for the next 7 days.\n\n"
-        + "\n".join(lines)
-        + "\n\nIn Claude Code, run:\n\n    /cgw-plan\n\nClaude will suggest posts from unused media and upcoming events."
-    )
-    year, week, _ = local_now().isocalendar()
-    return _send(db, "schedule_dry", f"{year}-W{week}", "Schedule running dry: run /cgw-plan", body)
-
-
-def photo_nudge(db: Session) -> bool:
-    """On a weekly event's day: ask for a few photos, so next week's post has something real."""
-    from datetime import timedelta
-
-    from .db import utcnow
-    from .models import Event
-
-    if not settings().photo_nudges:
-        return False
-    now = utcnow()
-    today_end = local_day_bounds_utc(local_now().date())[1]
-    events = db.scalars(select(Event).where(Event.series != "", Event.promote.is_(True), Event.status == "active",
-                                            Event.start > now, Event.start < min(today_end, now + timedelta(hours=12)))).all()
-    sent = False
-    for e in events:
-        start = to_local(e.start)
-        body = (
-            f"{e.title} is tonight at {start:%I:%M %p}".replace(" at 0", " at ") + ".\n\n"
-            "Grab 3-5 photos or a short clip while you're there: a project in progress, something that works for "
-            "the first time, people at the tools, anything funny. Ask before photographing someone's face.\n\n"
-            f"Upload them at {settings().base_url}/upload and choose \"Taken at: {e.title}\". Next week's "
-            "post will use them instead of the plain event card. A one-line note helps (\"Sam's first laser "
-            "cut\", \"fixed a 1970s lamp\")."
-        )
-        sent = _send(db, "photo_nudge", str(e.id), f"{e.title} tonight: grab a few photos", body) or sent
-    return sent
-
-
-def run_daily(db: Session) -> None:
-    if local_now().hour < settings().reminder_hour:
-        return
-    photo_nudge(db)
-    claude_session(db)
-    schedule_dry(db)
-    approvals(db)
-    batch_day(db)
-    on_day_posts(db)
-
+        line = (f"Publishing failed: {v.post.display_title} on {ch.CHANNELS[v.channel].label}\n"
+                f"  Error: {v.last_error}\n  Retry: {settings().base_url}/posts/{v.post_id}")
+        alert(db, "publish_failed", f"{v.id}:{v.attempts}", line, urgent=True)
+    db.commit()
 
 
 def event_changed(db: Session, event, posts, changes: list[str]) -> bool:
     if not posts:
         return False
-    lines = [f"- {p.display_title} ({p.status.replace('_', ' ')}): {settings().base_url}/posts/{p.id}" for p in posts]
-    body = (f"\"{event.title}\" changed in the calendar ({', '.join(changes)}). Posts about it need another look; "
-            "any approval was cleared:\n\n" + "\n".join(lines))
-    return _send(db, "event_changed", f"{event.id}:{event.facts_hash[:12]}", f"Event changed: {event.title}", body)
+    soon = utcnow() + timedelta(days=3)
+    urgent = any(v.publish_state == "published" or (v.enabled and v.scheduled_at and v.scheduled_at < soon)
+                 for p in posts for v in p.versions)
+    lines = "\n".join(f"  - {p.display_title} ({p.status.replace('_', ' ')}): {settings().base_url}/posts/{p.id}"
+                      for p in posts)
+    line = (f"Event changed: \"{event.title}\" ({', '.join(changes)}). Posts about it need another look; "
+            f"any approval was cleared:\n{lines}")
+    alert(db, "event_changed", f"{event.id}:{event.facts_hash[:12]}", line, urgent=urgent)
+    return True
 
 
 def event_cancelled(db: Session, event, pulled, announced: bool) -> bool:
-    lines = [f"- {p.display_title}: {settings().base_url}/posts/{p.id}" for p in pulled]
-    body = f"\"{event.title}\" was cancelled or removed from the calendar."
-    if lines:
-        body += " These posts were pulled and won't publish:\n\n" + "\n".join(lines)
+    line = f"Event cancelled: \"{event.title}\" was cancelled or removed from the calendar."
+    if pulled:
+        line += " These posts were pulled and won't publish:\n" + "\n".join(
+            f"  - {p.display_title}: {settings().base_url}/posts/{p.id}" for p in pulled)
     if announced:
-        body += ("\n\nIt had already been announced, so a cancellation notice is queued for the next Claude "
-                 "session. Also delete any copies already scheduled on batch-day platforms.")
-    return _send(db, "event_cancelled", str(event.id), f"Event cancelled: {event.title}", body)
+        line += ("\n  It was already announced, so a cancellation notice is queued for the next Claude session. "
+                 "Also delete any copies already scheduled on batch-day platforms.")
+    urgent = announced or any(p.approved_at for p in pulled)
+    alert(db, "event_cancelled", str(event.id), line, urgent=urgent)
+    return True
 
 
 def announcement_sent(db: Session, ann) -> bool:
-    body = f"\"{ann.subject}\" went to {ann.recipient_count} people.\n\n{settings().base_url}/announcements/{ann.id}"
-    return _send(db, "announcement_sent", str(ann.id), f"Email sent: {ann.subject}", body)
+    """Shown in the app; no email."""
+    return False
 
 
 def announcement_failed(db: Session, ann) -> bool:
-    body = (f"\"{ann.subject}\" couldn't be sent (attempt {ann.attempts} of 3).\n\nError: {ann.last_error}\n\n"
-            f"{settings().base_url}/announcements/{ann.id}")
-    return _send(db, "announcement_failed", f"{ann.id}:{ann.attempts}", f"Email not sent: {ann.subject}", body)
+    line = (f"Monthly email not sent: \"{ann.subject}\" (attempt {ann.attempts} of 3)\n  Error: {ann.last_error}\n"
+            f"  {settings().base_url}/announcements/{ann.id}")
+    alert(db, "announcement_failed", f"{ann.id}:{ann.attempts}", line, urgent=True)
+    db.commit()
+    return True
+
+
+# --- weekly digest -------------------------------------------------------
+
+
+def _first_slot(post: Post) -> datetime | None:
+    times = [v.scheduled_at for v in post.versions if v.enabled and v.scheduled_at and v.publish_state == "pending"]
+    return min(times) if times else None
+
+
+def digest(db: Session) -> tuple[str, str]:
+    """(subject, body) of the weekly email; an empty subject means there's nothing to say."""
+    from .models import Announcement, Event
+
+    s = settings()
+    now = utcnow()
+    horizon = now + timedelta(days=DIGEST_DAYS)
+    sections: list[str] = []
+    subject_bits: list[str] = []
+
+    # Posts to approve this week, with a deadline the day before each goes out.
+    waiting = db.scalars(select(Post).where(Post.status.in_(("in_review", "draft")))).all()
+    dated = sorted(((p, _first_slot(p)) for p in waiting), key=lambda x: x[1] or horizon + timedelta(days=999))
+    soon = [(p, t) for p, t in dated if t and t < horizon]
+    later = len(dated) - len(soon)
+    if soon:
+        lines = [f"- Approve by {_day(t - timedelta(days=1)) if t - now > timedelta(days=1) else 'today'}: "
+                 f"{p.display_title} ({', '.join(ch.CHANNELS[v.channel].label for v in p.enabled_versions)}), "
+                 f"goes out {_when(t)}" for p, t in soon]
+        more = f"\n{later} more in review for later dates." if later else ""
+        sections.append("TO APPROVE THIS WEEK\n" + "\n".join(lines) + more + f"\nReview: {s.base_url}/review")
+        subject_bits.append(f"{len(soon)} to approve")
+    emails = db.scalars(select(Announcement).where(Announcement.status == "in_review")).all()
+    if emails:
+        sections.append("MONTHLY EMAIL\n" + "\n".join(
+            f"- Approve \"{a.subject}\" before it sends {_when(a.send_at)}: {s.base_url}/announcements/{a.id}" for a in emails))
+        subject_bits.append("monthly email to approve")
+
+    # A Claude session, only when the work is due soon or uploads have waited a while.
+    queued = claude_queue(db)
+    due = [p for p in queued if (p.target_at and p.target_at < now + timedelta(days=10))
+           or (not p.target_at and now - p.created_at >= timedelta(days=s.claude_max_age_days))]
+    drafts = db.scalars(select(Announcement).where(Announcement.status == "needs_claude")).all()
+    if due or drafts:
+        minutes = max(5, round(len(queued) * 1.5) + 5 * len(drafts))
+        what = f"{len(queued)} item(s) waiting" + (", including the monthly email draft" if drafts else "")
+        sections.append(f"CLAUDE SESSION (~{minutes} min)\n{what}; {len(due)} due in the next 10 days.\n"
+                        "In Claude Code (or the Code tab in Claude Desktop), open the social-media folder and run "
+                        "/cgw-session.")
+        subject_bits.append(f"Claude session ~{minutes} min")
+
+    # Batch day this week.
+    info = batch.cycle_info()
+    today = local_now().date()
+    next_batch = info["start"] if info["start"] >= today else info["next"]
+    if (next_batch - today).days < 7:
+        rows = [r for r in batch.overview(db) if r["count"]]
+        if rows:
+            lines = [f"- {r['channel'].label}: {r['count']} post(s): {s.base_url}/batch/{r['channel'].key}" for r in rows]
+            sections.append(f"BATCH DAY {next_batch:%a %b} {next_batch.day}\nSchedule these in each platform's own "
+                            "scheduler (the browser extension fills the forms):\n" + "\n".join(lines))
+            subject_bits.append("batch day")
+
+    # Posts that have to go up by hand on the day (Google Business Profile).
+    on_day = [c.key for c in ch.CHANNELS.values() if ch.mode(c) == "on_day"]
+    by_hand = db.scalars(select(ChannelVersion).join(Post).where(
+        ChannelVersion.channel.in_(on_day), ChannelVersion.enabled.is_(True), ChannelVersion.publish_state == "pending",
+        Post.status == "approved", ChannelVersion.scheduled_at >= now, ChannelVersion.scheduled_at < horizon)).all()
+    if by_hand:
+        sections.append("POST BY HAND\n" + "\n".join(
+            f"- {_day(v.scheduled_at)}: {ch.CHANNELS[v.channel].label}: {v.post.display_title}: {s.base_url}/batch/{v.channel}"
+            for v in by_hand))
+
+    # Empty days, only when the next week is thin.
+    if approved_in_next(db, 7) < 2:
+        found = gaps(db, weeks=2)
+        lines = [f"- Week of {w['week_of']}: {w['planned']} of {w['target']} posts planned" for w in found["weeks"] if w["missing"]]
+        if found["gbp_this_cycle"] < found["gbp_target"]:
+            lines.append("- Google Business Profile: no post yet this cycle")
+        if lines:
+            sections.append("SCHEDULE GAPS\n" + "\n".join(lines) + "\nRun /cgw-plan for ideas from unused photos.")
+
+    # Photos at this week's weekly events.
+    if s.photo_nudges:
+        weekly = db.scalars(select(Event).where(Event.series != "", Event.promote.is_(True), Event.status == "active",
+                                                Event.start > now, Event.start < now + timedelta(days=7))
+                            .order_by(Event.start)).all()
+        if weekly:
+            names = ", ".join(f"{e.title} {_day(e.start)}" for e in weekly)
+            sections.append(f"PHOTOS\n{names}: grab 3-5 photos or a short clip (projects, people at the tools, "
+                            "anything funny; ask before photographing faces). Upload with \"Taken at\" set, or drop "
+                            "them in the Discord uploads channel. Next week's post uses them.")
+
+    # Event changes and cancellations that aren't urgent.
+    notes = db.scalars(select(PendingAlert).where(PendingAlert.urgent.is_(False), PendingAlert.sent_at.is_(None))
+                       .order_by(PendingAlert.created_at)).all()
+    if notes:
+        sections.append("CALENDAR CHANGES\n" + "\n\n".join(n.line for n in notes))
+
+    needs_you = bool(subject_bits) or bool(notes) or any(x.startswith(("SCHEDULE GAPS", "POST BY HAND")) for x in sections)
+    if not needs_you:
+        return "", ""
+    subject = "CGW Studio this week: " + (", ".join(subject_bits) if subject_bits else "a few things to check")
+    return subject, "\n\n".join(sections)
+
+
+def weekly_digest(db: Session, force_to: list[str] | None = None) -> bool:
+    subject, body = digest(db)
+    if not subject:
+        return False
+    if force_to:
+        mailer.send(force_to, "[TEST] " + subject, body + _footer())
+        return True
+    if not _send(db, "digest", local_now().date().isoformat(), subject, body):
+        return False
+    for n in db.scalars(select(PendingAlert).where(PendingAlert.urgent.is_(False), PendingAlert.sent_at.is_(None))):
+        n.sent_at = utcnow()
+    db.commit()
+    return True
+
+
+def next_digest_date():
+    s = settings()
+    now = local_now()
+    days = (s.digest_day - now.weekday()) % 7
+    if days == 0 and now.hour >= s.reminder_hour:
+        days = 7
+    return (now + timedelta(days=days)).date()
+
+
+# --- last call -----------------------------------------------------------
+
+
+def last_call(db: Session) -> bool:
+    """Unapproved posts that go out (or should) within 48 hours. Max one email every 3 days; one per post."""
+    if not settings().last_call_alerts:
+        return False
+    last = _last_sent(db, "last_call")
+    if last and utcnow() - last < LAST_CALL_GAP:
+        return False
+    now = utcnow()
+    cutoff = now + LAST_CALL_WINDOW
+    found = []
+    for p in db.scalars(select(Post).where(Post.status.in_(("needs_claude", "draft", "in_review")))).all():
+        when = _first_slot(p) or p.target_at
+        if when and now < when < cutoff:
+            seen = db.scalar(select(ReminderLog).where(ReminderLog.kind == "last_call_post", ReminderLog.key == str(p.id)))
+            if not seen:
+                found.append((p, when))
+    if not found:
+        return False
+    s = settings()
+    lines = []
+    for p, when in sorted(found, key=lambda x: x[1]):
+        state = "still needs drafting (run /cgw-session)" if p.status == "needs_claude" else "not approved yet"
+        lines.append(f"- {p.display_title}: goes out {_when(when)}, {state}: {s.base_url}/posts/{p.id}")
+    body = ("These go out within two days but aren't approved, so they won't publish:\n\n" + "\n".join(lines)
+            + f"\n\nReview: {s.base_url}/review")
+    if not _send(db, "last_call", now.isoformat(timespec="minutes"), f"Last call: {len(found)} post(s) go out within 2 days", body):
+        return False
+    for p, _ in found:
+        _once(db, "last_call_post", str(p.id))
+    db.commit()
+    return True
+
+
+# --- the loop ------------------------------------------------------------
+
+
+def run(db: Session) -> None:
+    """Called every scheduler loop."""
+    if quiet(db):
+        return
+    hour = local_now().hour
+    if not (settings().reminder_hour <= hour < EVENING_HOUR):
+        return
+    flush_alerts(db)
+    if local_now().weekday() == settings().digest_day:
+        weekly_digest(db)
+    last_call(db)
+
+
+run_daily = run  # older name

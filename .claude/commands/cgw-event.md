@@ -1,7 +1,10 @@
 ---
 description: Draft promo posts for upcoming calendar events
 ---
-Use the `cgw-studio` MCP server. Call `get_guidelines`, then `get_events` and `get_work_queue`.
+Use the `cgw-studio` MCP server. If its tools aren't available, stop and tell me: "The Studio
+isn't connected. Run /mcp, pick cgw-studio and Reconnect (or quit and reopen Claude Desktop). If it
+still fails, check the Studio opens in a browser at its LAN address." Don't draft anything without
+the tools. Call `get_guidelines`, then `get_events` and `get_work_queue`.
 
 For each queued post that has an `event` (announce, reminder, weekly, or cancellation):
 1. `get_work_item` to see the event facts, the attached event card, and `aim_for`.

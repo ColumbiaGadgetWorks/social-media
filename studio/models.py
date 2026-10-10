@@ -46,6 +46,8 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(16), default="contributor")
     proxy_username: Mapped[str | None] = mapped_column(String(128), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    theme: Mapped[str] = mapped_column(String(16), default="orange")  # colorway (Settings → Appearance)
+    color_mode: Mapped[str] = mapped_column(String(8), default="auto")  # auto | light | dark
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     @property
@@ -101,6 +103,9 @@ class MediaAsset(Base):
     credit: Mapped[str] = mapped_column(String(300), default="")
     # The calendar event it was taken at ("Taken at" on upload), so weekly promos can find fresh photos.
     event_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Batch uploads: files wait in their batch, unsorted, until they're grouped into posts on the sort page.
+    upload_batch: Mapped[str] = mapped_column(String(24), default="")
+    unsorted: Mapped[bool] = mapped_column(Boolean, default=False)
     processing_status: Mapped[str] = mapped_column(String(16), default="pending")
     processing_error: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -213,6 +218,21 @@ class ReminderLog(Base):
     kind: Mapped[str] = mapped_column(String(32))
     key: Mapped[str] = mapped_column(String(64))
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class PendingAlert(Base):
+    """Something to tell people about: urgent ones go out in at most one email a day, the rest in the
+    weekly digest."""
+
+    __tablename__ = "pending_alerts"
+    __table_args__ = (UniqueConstraint("kind", "key"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    key: Mapped[str] = mapped_column(String(96))
+    urgent: Mapped[bool] = mapped_column(Boolean, default=False)
+    line: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class Event(Base):

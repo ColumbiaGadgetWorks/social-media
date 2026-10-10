@@ -8,7 +8,7 @@ from sqlalchemy import select
 from studio import db as db_mod
 from studio import mailer, publishers, reminders, timeutil
 from studio import posts as post_svc
-from studio.models import Post, User
+from studio.models import Post, ReminderLog, User
 from studio.publishers.bluesky import BlueskyClient, facets
 from studio.security import Actor
 
@@ -103,7 +103,11 @@ def test_failures_retry_then_email(approved_post):
     with db_mod.session_scope() as s:
         v = s.get(Post, approved_post).version("bluesky")
         assert v.publish_state == "failed" and v.attempts == 3
-    assert any("Publishing failed" in m["Subject"] for m in mailer.outbox)
+    with db_mod.session_scope() as s:  # bundled into one alert email, at most one a day
+        started_two_days_ago(s)
+        assert reminders.flush_alerts(s) is True
+        assert reminders.flush_alerts(s) is False
+    assert sum("Publishing failed" in m["Subject"] for m in mailer.outbox) == 1
 
 
 def at_local(monkeypatch, when: datetime):
@@ -111,19 +115,60 @@ def at_local(monkeypatch, when: datetime):
     monkeypatch.setattr(timeutil, "utcnow", lambda: utc)
 
 
-def test_claude_session_reminder_once_per_day(app, monkeypatch):
+def started_two_days_ago(s):
+    reminders.started_at(s)
+    s.scalar(select(ReminderLog).where(ReminderLog.kind == "installed")).sent_at = timeutil.utcnow() - timedelta(days=2)
+
+
+def test_weekly_digest_once_on_monday_with_claude_session(app, monkeypatch):
     make_user("adam", "admin")
     from studio.models import Post as P
+    at_local(monkeypatch, datetime(2026, 10, 12, 9, 0))  # a Monday
     with db_mod.session_scope() as s:
         for i in range(10):
-            s.add(P(note=f"upload {i}", status="needs_claude"))
-    at_local(monkeypatch, datetime(2026, 10, 14, 9, 0))
+            s.add(P(note=f"upload {i}", status="needs_claude", created_at=timeutil.utcnow() - timedelta(days=4)))
+        started_two_days_ago(s)
     with db_mod.session_scope() as s:
-        assert reminders.claude_session(s) is True
-        assert reminders.claude_session(s) is False  # already sent today
+        reminders.run(s)
+        reminders.run(s)  # once a day, however often the loop runs
+    assert len(mailer.outbox) == 1
     msg = mailer.outbox[-1]
-    assert "Claude session needed: 10 items" in msg["Subject"]
+    assert msg["Subject"].startswith("CGW Studio this week:") and "Claude session" in msg["Subject"]
     assert "/cgw-session" in msg.get_content()
+    at_local(monkeypatch, datetime(2026, 10, 13, 9, 0))  # Tuesday: nothing
+    with db_mod.session_scope() as s:
+        reminders.run(s)
+    assert len(mailer.outbox) == 1
+
+
+def test_quiet_first_day(app, monkeypatch):
+    make_user("adam", "admin")
+    from studio.models import Post as P
+    at_local(monkeypatch, datetime(2026, 10, 12, 9, 0))
+    with db_mod.session_scope() as s:
+        for i in range(12):
+            s.add(P(note=f"upload {i}", status="needs_claude", created_at=timeutil.utcnow() - timedelta(days=5)))
+    with db_mod.session_scope() as s:
+        reminders.run(s)  # first start: nothing for 24 hours
+    assert mailer.outbox == []
+
+
+def test_last_call_at_most_every_three_days(approved_post, monkeypatch):
+    at_local(monkeypatch, datetime(2026, 10, 14, 10, 0))  # a Wednesday
+    with db_mod.session_scope() as s:
+        started_two_days_ago(s)
+        p = s.get(Post, approved_post)
+        p.status, p.approved_hash = "in_review", None
+        p.version("bluesky").scheduled_at = timeutil.utcnow() + timedelta(hours=30)
+    with db_mod.session_scope() as s:
+        reminders.run(s)
+    assert [m["Subject"] for m in mailer.outbox] == ["Last call: 1 post(s) go out within 2 days"]
+    with db_mod.session_scope() as s:  # a second post the next day: still inside the 3-day gap
+        s.add(Post(note="another", status="in_review", target_at=timeutil.utcnow() + timedelta(days=1)))
+        s.flush()
+        at_local(monkeypatch, datetime(2026, 10, 15, 10, 0))
+        reminders.last_call(s)
+    assert len(mailer.outbox) == 1
 
 
 def test_batch_day_reminder_only_on_cycle_start(approved_post, monkeypatch):
@@ -138,11 +183,10 @@ def test_batch_day_reminder_only_on_cycle_start(approved_post, monkeypatch):
     at_local(monkeypatch, datetime(2026, 10, 13, 9, 0))  # the day after the anchor batch day
     schedule_instagram_in_3_days()
     with db_mod.session_scope() as s:
-        assert reminders.batch_day(s) is False
+        assert "BATCH DAY" not in reminders.digest(s)[1]
 
-    at_local(monkeypatch, datetime(2026, 10, 26, 9, 0))  # two weeks after the anchor
+    at_local(monkeypatch, datetime(2026, 10, 26, 9, 0))  # two weeks after the anchor (a Monday)
     schedule_instagram_in_3_days()
     with db_mod.session_scope() as s:
-        assert reminders.batch_day(s) is True
-        assert reminders.batch_day(s) is False  # once per cycle
-    assert "Batch day: Instagram 1" in mailer.outbox[-1]["Subject"]
+        subject, body = reminders.digest(s)
+    assert "batch day" in subject and "Instagram: 1 post(s)" in body

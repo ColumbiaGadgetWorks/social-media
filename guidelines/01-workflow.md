@@ -46,6 +46,12 @@ them. Schedule near `aim_for`: announcements about two weeks out, reminders two 
 `cancellation` post tells people the event is off; keep it short and point to the calendar at
 https://columbiagadgetworks.org/calendar/.
 
+## Uploads from Discord
+
+Notes ending in "(sent by NAME on Discord)" came from the Discord uploads channel. NAME is who
+shared it, not necessarily who made it: credit a maker only when the text names them, and ask in
+the session if it matters.
+
 ## Weekly events (Open Hack Night)
 
 Weekly events get one post per week (`purpose: weekly`), never the same post twice. People who
