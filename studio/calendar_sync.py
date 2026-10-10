@@ -12,6 +12,7 @@ week instead of an announcement and a reminder, each with a different angle and 
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import html
 import io
@@ -21,11 +22,12 @@ import re
 from collections import defaultdict
 from datetime import UTC, date, datetime, time, timedelta
 from itertools import pairwise
+from pathlib import Path
 
 import httpx
 import icalendar
 import recurring_ical_events
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -169,6 +171,29 @@ def event_when(event: Event) -> tuple[str, str]:
     return day, t
 
 
+LOGO_PATH = Path(__file__).parent / "static" / "logo.png"
+LOGO_HEIGHT = 175
+
+
+@functools.lru_cache(maxsize=1)
+def _logo_glyph() -> Image.Image | None:
+    """The white gear and lettering from the logo, cut out so they sit straight on the card's orange
+    (the logo's own background is the same orange, so pasting it whole would show nothing)."""
+    if not LOGO_PATH.exists():
+        return None
+    with Image.open(LOGO_PATH) as src:
+        rgba = src.convert("RGBA")
+    floor = ACCENT[1]  # the green channel runs from the orange's value up to white's 255
+    alpha = rgba.getchannel("G").point(lambda g: max(0, min(255, (g - floor) * 255 // (255 - floor))))
+    alpha = ImageChops.multiply(alpha, rgba.getchannel("A"))
+    alpha = alpha.crop(alpha.getbbox())  # the file has a wide margin around the artwork
+    width = round(alpha.width * LOGO_HEIGHT / alpha.height)
+    alpha = alpha.resize((width, LOGO_HEIGHT), Image.Resampling.LANCZOS)
+    glyph = Image.new("RGBA", alpha.size, (*PAPER, 0))
+    glyph.putalpha(alpha)
+    return glyph
+
+
 def is_cancelled(event: Event) -> bool:
     return event.status == "cancelled" or event.title.strip().lower().startswith(("cancelled", "canceled"))
 
@@ -184,6 +209,8 @@ def render_card(event: Event, price: str = "") -> bytes:
     label = "COLUMBIA GADGET WORKS" if cancelled else f"{kind} AT COLUMBIA GADGET WORKS"
     d.text((margin, 110), label, font=label_font, fill=PAPER)
     d.rectangle((margin, 172, margin + 120, 180), fill=PAPER)
+    if (glyph := _logo_glyph()) is not None:
+        img.paste(glyph, (CARD_SIZE[0] - margin - glyph.width, 55), glyph)
 
     size = 104
     while size > 56:

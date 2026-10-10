@@ -407,6 +407,8 @@ def test_event_card_renders(app2, tmp_path):
                   description="A beginner class.")
     img = Image.open(io.BytesIO(calendar_sync.render_card(event, "$20")))
     assert img.size == (1080, 1350)
+    corner = img.crop((860, 60, 990, 225))  # the logo's white gear sits here on the orange
+    assert max(sum(px) for px in corner.getdata()) > 720
     img.save(tmp_path / "card.jpg")
 
 
