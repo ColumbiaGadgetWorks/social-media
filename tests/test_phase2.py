@@ -390,6 +390,49 @@ def test_sync_redraws_a_stale_event_card_and_reopens_approved_posts(app2):
         assert "refreshed" not in calendar_sync.sync(s, calendar_text())
 
 
+def test_event_badge_goes_on_a_real_photo_and_follows_event_changes(app2):
+    from studio.models import PostMedia
+
+    with db_mod.session_scope() as s:
+        calendar_sync.sync(s, calendar_text())
+    with db_mod.session_scope() as s:
+        event = s.scalar(select(Event).where(Event.uid == "solder@cgw"))
+        post = event.posts[0]
+        photo = store_upload(s, io.BytesIO(jpeg_bytes((1200, 1600))), "bots.jpg", "image/jpeg", None, "cardboard bots")
+        process(photo)
+        post.media_links.clear()
+        s.flush()
+        post.media_links.append(PostMedia(media=photo, position=0))
+        badge = calendar_sync.apply_badge(s, post)
+        assert badge is not None and "event-badge" in badge.tags and badge.source_media_id == photo.id
+        assert [m.id for m in post.media] == [badge.id] and badge.width == 1080 and badge.height == 1350
+        assert calendar_sync.apply_badge(s, post) is None  # the cover already has its badge
+        post_id, first = post.id, badge.id
+        # a plain event card is left alone, and so is a post with no media
+        assert calendar_sync.apply_badge(s, event.posts[1]) is None
+    with db_mod.session_scope() as s:  # the class moves two days: the badge on the photo is redrawn
+        calendar_sync.sync(s, calendar_text(class_offset=32, class_time="1700"))
+    with db_mod.session_scope() as s:
+        post = s.get(Post, post_id)
+        assert len(post.media) == 1 and post.media[0].id != first and "event-badge" in post.media[0].tags
+        assert post.media[0].source_media_id == photo_id_of(s, first)
+
+
+def photo_id_of(s, badge_id):
+    from studio.models import MediaAsset
+
+    return s.get(MediaAsset, badge_id).source_media_id
+
+
+def test_event_when_formats_without_platform_specific_codes(app2):
+    start = db_mod.utcnow() + timedelta(days=10)
+    event = Event(title="Class", start=start, end=start + timedelta(hours=2))
+    day, when = calendar_sync.event_when(event)
+    assert day == f"{to_local(start):%A, %B} {to_local(start).day}" and " to " in when
+    assert calendar_sync._clock(to_local(start).replace(hour=0, minute=5)) == "12:05 AM"
+    assert calendar_sync._clock(to_local(start).replace(hour=18, minute=0)) == "6 PM"
+
+
 def test_undrafted_posts_for_past_events_leave_claudes_queue(app2):
     with db_mod.session_scope() as s:
         calendar_sync.sync(s, calendar_text())

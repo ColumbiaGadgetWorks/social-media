@@ -27,7 +27,7 @@ from pathlib import Path
 import httpx
 import icalendar
 import recurring_ical_events
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -160,14 +160,18 @@ def _wrap(draw: ImageDraw.ImageDraw, text: str, font, width: int) -> list[str]:
     return lines
 
 
+def _clock(dt: datetime) -> str:
+    return f"{dt.hour % 12 or 12}:{dt.minute:02d} {'AM' if dt.hour < 12 else 'PM'}".replace(":00 ", " ")
+
+
 def event_when(event: Event) -> tuple[str, str]:
     local = to_local(event.start)
-    day = local.strftime("%A, %B %-d")
+    day = f"{local:%A, %B} {local.day}"
     if event.all_day:
         return day, "All day"
-    t = local.strftime("%-I:%M %p").replace(":00 ", " ")
+    t = _clock(local)
     if event.end:
-        t += " to " + to_local(event.end).strftime("%-I:%M %p").replace(":00 ", " ")
+        t += " to " + _clock(to_local(event.end))
     return day, t
 
 
@@ -238,6 +242,151 @@ def render_card(event: Event, price: str = "") -> bytes:
     buf = io.BytesIO()
     img.save(buf, "JPEG", quality=92)
     return buf.getvalue()
+
+
+# --- event badges on real photos ---------------------------------------------
+
+BADGE_WIDTH = 1080
+BADGE_RATIOS = (0.8, 1.91)  # the tallest (4:5) and widest (1.91:1) shapes feeds show without cropping further
+
+
+def _badge_lines(event: Event) -> tuple[str, str, str]:
+    local = to_local(event.start)
+    day = f"{local:%a}, {local:%b} {local.day}"
+    title = event.title.strip()
+    if is_cancelled(event):
+        return "CANCELLED", day, ""
+    kind = title.upper() if len(title) <= 24 else ("CLASS" if "class" in (title + event.description).lower() else "EVENT")
+    return kind, day, "" if event.all_day else event_when(event)[1]
+
+
+def render_badge_photo(event: Event, photo: Image.Image) -> bytes:
+    """A real photo with the event's date in a badge, top right, so the picture stays the story and the
+    announcement rides on top of it. Cropped to a shape feeds accept."""
+    photo = photo.convert("RGB")
+    ratio = min(max(photo.width / photo.height, BADGE_RATIOS[0]), BADGE_RATIOS[1])
+    w, h = photo.size
+    if w / h > ratio:  # too wide: trim the sides
+        crop_w = round(h * ratio)
+        photo = photo.crop(((w - crop_w) // 2, 0, (w - crop_w) // 2 + crop_w, h))
+    elif w / h < ratio:  # too tall: trim top and bottom
+        crop_h = round(w / ratio)
+        photo = photo.crop((0, (h - crop_h) // 2, w, (h - crop_h) // 2 + crop_h))
+    img = photo.resize((BADGE_WIDTH, round(BADGE_WIDTH / ratio)), Image.Resampling.LANCZOS).convert("RGBA")
+
+    kind, day, when = _badge_lines(event)
+    d = ImageDraw.Draw(img)
+    f_kind, f_day, f_when = (ImageFont.load_default(size=n) for n in (26, 47, 30))
+    rows = [(kind, f_kind), (day, f_day)] + ([(when, f_when)] if when else [])
+    text_w = max(round(d.textlength(t, font=f)) for t, f in rows)
+    mark = _logo_mark()
+    logo = mark.resize((round(mark.width * 64 / mark.height), 64), Image.Resampling.LANCZOS) if mark else None
+    pad, gap = 24, 18
+    heights = [round(f.size * 1.25) for _, f in rows]
+    bw = pad * 2 + text_w + (logo.width + gap if logo else 0)
+    bh = pad * 2 + sum(heights)
+    x0, y0 = img.width - 36 - bw, 36
+    shadow = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    ImageDraw.Draw(shadow).rounded_rectangle((x0 + 4, y0 + 6, x0 + bw + 4, y0 + bh + 6), radius=26, fill=(0, 0, 0, 90))
+    img = Image.alpha_composite(img, shadow)
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle((x0, y0, x0 + bw, y0 + bh), radius=26, fill=ACCENT)
+    tx = x0 + pad
+    if logo:
+        img.paste(logo, (x0 + pad, y0 + (bh - logo.height) // 2), logo)
+        tx += logo.width + gap
+    y = y0 + pad
+    for (text, font), height in zip(rows, heights, strict=True):
+        d.text((tx, y), text, font=font, fill=PAPER)
+        y += height
+    buf = io.BytesIO()
+    img.convert("RGB").save(buf, "JPEG", quality=90)
+    return buf.getvalue()
+
+
+def _badge_tag(data: bytes) -> str:
+    return "badge:" + hashlib.sha256(data).hexdigest()[:16]
+
+
+def _open_source_photo(asset: MediaAsset) -> Image.Image:
+    for rel in (asset.path, asset.preview_path):
+        if not rel:
+            continue
+        try:
+            with Image.open(media_mod.abs_path(rel)) as raw:
+                return ImageOps.exif_transpose(raw).copy()  # phone photos come in sideways otherwise
+        except OSError:
+            continue
+    raise OSError(f"can't open media {asset.id}")
+
+
+def _make_badge(db: Session, event: Event, source: MediaAsset, data: bytes) -> MediaAsset:
+    tag = _badge_tag(data)
+    for existing in db.scalars(select(MediaAsset).where(MediaAsset.source_media_id == source.id)):
+        if tag in (existing.tags or []):
+            return existing
+    asset = media_mod.store_upload(db, io.BytesIO(data), f"event-badge-{event.id}-{source.id}.jpg", "image/jpeg", None,
+                                   note=f"{source.note} (with the {event.title} date badge)".strip())
+    asset.tags = ["event-badge", tag]
+    asset.source_media_id = source.id
+    asset.description, asset.alt_text = source.description, source.alt_text
+    media_mod.process(asset)
+    return asset
+
+
+def apply_badge(db: Session, post: Post, event: Event | None = None) -> MediaAsset | None:
+    """Put the event badge on a post's cover photo (its first media), leaving the other photos plain.
+    Does nothing if the cover is a video, is already the plain event card, or already has the badge."""
+    event = event or post.event
+    links = sorted(post.media_links, key=lambda link: link.position)
+    if event is None or not links:
+        return None
+    cover = links[0].media
+    if cover.kind != "image" or "event-card" in (cover.tags or []) or "event-badge" in (cover.tags or []):
+        return None
+    try:
+        data = render_badge_photo(event, _open_source_photo(cover))
+    except OSError:
+        log.warning("couldn't build the event badge for media %s", cover.id)
+        return None
+    badge = _make_badge(db, event, cover, data)
+    links[0].media = badge
+    audit(db, SYSTEM, "event_badge_applied", "post", post.id, event=event.id, source=cover.id, media=badge.id)
+    return badge
+
+
+def refresh_badges(db: Session, event: Event) -> list[Post]:
+    """Redraw badges whose event details (or design) changed since they were made, in the event's open
+    posts. An approved post goes back to review, since its picture changed."""
+    if event.status != "active" or event.start <= utcnow():
+        return []
+    touched = []
+    for post in _open_posts(event):
+        changed = False
+        for link in post.media_links:
+            old = link.media
+            if "event-badge" not in (old.tags or []) or old.source_media_id is None:
+                continue
+            source = db.get(MediaAsset, old.source_media_id)
+            if source is None:
+                continue
+            try:
+                data = render_badge_photo(event, _open_source_photo(source))
+            except OSError:
+                continue
+            if _badge_tag(data) in (old.tags or []):
+                continue
+            link.media = _make_badge(db, event, source, data)
+            changed = True
+        if changed:
+            if post.status == "approved":
+                post.status = "in_review"
+                post.review_comment = "The event badge on the photo was redrawn. Check it before approving again."
+                _clear_approval(post)
+                audit(db, SYSTEM, "approval_cleared", "post", post.id, reason="event badge refreshed")
+            audit(db, SYSTEM, "badge_refreshed", "post", post.id, event=event.id)
+            touched.append(post)
+    return touched
 
 
 def _make_card(db: Session, event: Event, price: str):
@@ -437,8 +586,11 @@ def candidate_media(db: Session, event: Event, limit: int = 8) -> list[MediaAsse
     now = utcnow()
     since = now - timedelta(days=PHOTO_WINDOW_DAYS)
     used = select(PostMedia.media_id).join(Post).where(Post.status != "rejected")
+    badged = (select(MediaAsset.source_media_id).join(PostMedia, PostMedia.media_id == MediaAsset.id).join(Post)
+              .where(Post.status != "rejected", MediaAsset.source_media_id.is_not(None)))
     past = db.scalars(select(Event).where(Event.series == event.series, Event.start < now, Event.start >= since)).all()
-    base = (select(MediaAsset).where(MediaAsset.processing_status == "ready", MediaAsset.id.not_in(used))
+    base = (select(MediaAsset).where(MediaAsset.processing_status == "ready", MediaAsset.id.not_in(used),
+                                     MediaAsset.id.not_in(badged))
             .order_by(MediaAsset.created_at.desc()))
     found: list[MediaAsset] = []
     if past:
@@ -449,8 +601,8 @@ def candidate_media(db: Session, event: Event, limit: int = 8) -> list[MediaAsse
     recent = db.scalars(base.where(MediaAsset.created_at >= since, or_(
         MediaAsset.note.ilike(f"%{words}%"), MediaAsset.description.ilike(f"%{words}%"), *windows))).all()
     seen = {m.id for m in found}
-    found += [m for m in recent if m.id not in seen and "event-card" not in (m.tags or [])]
-    return [m for m in found if "event-card" not in (m.tags or [])][:limit]
+    found += [m for m in recent if m.id not in seen]
+    return [m for m in found if not {"event-card", "event-badge"} & set(m.tags or [])][:limit]
 
 
 def create_weekly_promo(db: Session, event: Event, price: str = "") -> Post:
@@ -471,6 +623,7 @@ def create_weekly_promo(db: Session, event: Event, price: str = "") -> Post:
     post.event_id, post.purpose, post.angle = event.id, "weekly", angle
     post.target_at = promo_targets(event)["weekly"]
     post.title = f"{event.title}: {ANGLES[angle][0]}"[:200]
+    apply_badge(db, post, event)
     event.promos_created = True
     audit(db, SYSTEM, "event_promos_created", "event", event.id, posts=[post.id], title=event.title, angle=angle,
           media=[m.id for m in media])
@@ -598,7 +751,7 @@ def sync(db: Session, text: str) -> dict:
                 touched = handle_change(db, event, price, changes or ["details"])
                 result["changed"] += 1
                 reminders.event_changed(db, event, touched, changes)
-            if refresh_card(db, event, price):
+            if refresh_card(db, event, price) or refresh_badges(db, event):
                 result["refreshed"] = result.get("refreshed", 0) + 1
         seen.add(event.id)
 

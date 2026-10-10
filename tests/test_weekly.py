@@ -96,7 +96,8 @@ def test_weekly_post_uses_fresh_photos_and_shows_history(app3):
     with db_mod.session_scope() as s:
         post = s.scalar(select(Post).where(Post.purpose == "weekly", Post.status == "needs_claude"))
         assert post.angle in ("project_spotlight", "photo_recap")
-        media = [m.id for m in post.media]
+        media = [m.source_media_id or m.id for m in post.media]  # the cover is a copy carrying the date badge
+        assert "event-badge" in post.media[0].tags
         assert set(media) <= set(tagged + [during]) and media[0] in tagged  # tagged photos rank first
         context = calendar_sync.series_context(s, post)
         assert context["needs_photos"] is False

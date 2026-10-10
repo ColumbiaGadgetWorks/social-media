@@ -41,10 +41,17 @@ every caption for that post. Never cut a clip so it misrepresents what happened.
 ## Event promos
 
 Posts created from the events calendar carry an `event` block in `get_work_item`. Its facts (date,
-time, place, price, link) are the only facts you may use; the attached event card already shows
-them. Schedule near `aim_for`: announcements about two weeks out, reminders two days out. A
-`cancellation` post tells people the event is off; keep it short and point to the calendar at
-https://columbiagadgetworks.org/calendar/.
+time, place, price, link) are the only facts you may use. Schedule near `aim_for`: announcements
+about two weeks out, reminders two days out. A `cancellation` post tells people the event is off;
+keep it short and point to the calendar at https://columbiagadgetworks.org/calendar/.
+
+The plain orange event card is only a placeholder, and a feed full of identical cards is dull. Lead
+with a real photo instead: a project someone is working on, a past session, the tool or the people
+behind the event. Use `search_media` and `view_media` to find one, then `attach_media` with
+`replace: true`. The Studio adds the event's date badge to the photo's top-right corner, so the
+photo tells the story and the badge carries the facts (the first photo gets the badge; the rest stay
+plain). If nothing fits, ask in the session for a photo or a story, and only fall back to the card
+when there's truly nothing. Write the caption around the story, and keep the facts to one line.
 
 ## Uploads from Discord
 
@@ -62,7 +69,7 @@ follow us see every one of them, so each week has to earn the scroll on its own.
   with their angles and opening lines. Don't reuse a hook, an opening line, or a photo from them.
   Use the hook bank for starting points and rewrite them.
 - Lead with a real photo. `candidate_media` lists fresh photos from recent sessions (their previews
-  come with the work item); attach the best with `attach_media` (`replace: true` drops the card).
+  come with the work item); attach the best with `attach_media` (`replace: true` drops the card; the Studio puts the date badge on the photo).
   The plain event card is a last resort; if you do use it, the caption has to carry the post.
 - When there's no good photo or nothing specific to say (`needs_photos: true`, or the candidates
   are weak), stop and ask the person in this session before drafting, for example: "Hack Night is

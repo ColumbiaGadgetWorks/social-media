@@ -102,7 +102,9 @@ def _post_summary(p: Post, db: Session | None = None) -> dict:
         summary["aim_for"] = input_value(p.target_at)
         summary["event_instructions"] = (
             "Facts (date, time, place, price, link) come only from `event`. Schedule close to `aim_for`. "
-            "The attached event card shows the facts; swap in or add real photos with attach_media if any fit."
+            "The attached event card shows the facts. Better: lead with a real photo (a project, a past session, the "
+            "people or tools involved) via attach_media with replace=true. The Studio adds the event's date badge "
+            "to the photo's top-right corner, so the photo carries the post and the badge carries the facts."
         )
         if p.event.series and p.purpose == "weekly" and db is not None:
             summary["weekly"] = calendar_sync.series_context(db, p)
@@ -111,7 +113,7 @@ def _post_summary(p: Post, db: Session | None = None) -> dict:
                 "`other_angles` if the media clearly suits it better, and say so in notes). It must read differently "
                 "from every `weekly.recent_posts` entry: a new hook and opening line, a different photo. Prefer real "
                 "photos from `weekly.candidate_media` (previews below) over the event card; use attach_media with "
-                "replace=true. The card is a last resort. If `weekly.needs_photos` is true or nothing fits, ask the "
+                "replace=true, and the Studio adds the date badge to the photo's corner. The card is a last resort. If `weekly.needs_photos` is true or nothing fits, ask the "
                 "person in this session before drafting: for photos from the last session (they can upload them in "
                 "the Studio with 'Taken at' set) or one thing that happened there worth telling. Facts (date, time, "
                 "place, price, link) still come only from `event`."
@@ -379,6 +381,8 @@ def attach_media(post_id: int, media_ids: list[int], replace: bool = False) -> s
         for asset in assets:
             if asset.id not in have:
                 post.media_links.append(PostMedia(media=asset, position=len(post.media_links)))
+        badge = calendar_sync.apply_badge(db, post) if post.event is not None and post.event.status == "active" else None
+        db.flush()
         post_svc.ensure_versions(post)
         for v in post.versions:  # drop channels that can no longer take this media
             if v.enabled and v.channel not in {c.key for c in post_svc.compatible_channels(post)}:
@@ -386,9 +390,13 @@ def attach_media(post_id: int, media_ids: list[int], replace: bool = False) -> s
         if post.status == "in_review":
             post.status = "draft"
         audit(db, actor, "media_changed", "post", post.id, media=[link.media_id for link in post.media_links])
-        return json.dumps({"post_id": post.id, "media": [link.media_id for link in post.media_links],
-                           "channels_available": [c.key for c in post_svc.compatible_channels(post)],
-                           "status": post.status})
+        result = {"post_id": post.id, "media": [link.media_id for link in post.media_links],
+                  "channels_available": [c.key for c in post_svc.compatible_channels(post)],
+                  "status": post.status}
+        if badge is not None:
+            result["note"] = (f"The event's date badge was added to the cover photo (now media {badge.id}); "
+                              "the other photos are unchanged.")
+        return json.dumps(result)
 
 
 @server.tool()
