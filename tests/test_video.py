@@ -157,8 +157,9 @@ def test_video_page_shows_editor_and_queues_render(app, clip):
 def test_music_zip_adds_every_track_with_the_shared_license(app, tmp_path):
     from starlette.testclient import TestClient
 
-    from .conftest import csrf_of, login
     from studio.models import MusicTrack
+
+    from .conftest import csrf_of, login
 
     make_user("adam", "admin")
     names = {"01_Workshop_Groove.mp3": 220, "02 - Chill Loop.mp3": 330}

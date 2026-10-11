@@ -10,7 +10,7 @@ import pytest
 from PIL import Image
 from sqlalchemy import select
 
-from studio import calendar_sync, mailer, public_media, publishers, reminders
+from studio import calendar_sync, mailer, public_media, publishers
 from studio import db as db_mod
 from studio import posts as post_svc
 from studio.media import process, store_upload

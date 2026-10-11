@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import select
 from starlette.testclient import TestClient
 
-from studio import calendar_sync, mailer, queue, reminders
+from studio import calendar_sync, mailer, queue
 from studio import db as db_mod
 from studio.media import process, store_upload
 from studio.models import Event, MediaAsset, Post, User
