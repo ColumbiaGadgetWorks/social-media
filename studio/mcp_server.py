@@ -67,7 +67,7 @@ def _actor(db) -> Actor:
     return Actor("mcp", user)
 
 
-def _media_summary(m: MediaAsset) -> dict:
+def _media_summary(m: MediaAsset, db: Session | None = None, post_id: int | None = None) -> dict:
     out = {
         "media_id": m.id, "kind": m.kind, "status": m.processing_status,
         "width": m.width, "height": m.height,
@@ -81,6 +81,10 @@ def _media_summary(m: MediaAsset) -> dict:
             out["edited_from"] = m.source_media_id
     if m.credit:
         out["credit_required"] = m.credit
+    if db is not None:
+        elsewhere = sorted({c["post_id"] for c in post_svc.media_conflicts(db, [m.id], exclude_post_id=post_id)})
+        if elsewhere:
+            out["already_in_posts"] = elsewhere  # don't reuse it without a real reason
     return out
 
 
@@ -88,7 +92,7 @@ def _post_summary(p: Post, db: Session | None = None) -> dict:
     summary = {
         "post_id": p.id, "status": p.status, "title": p.title, "note": p.note, "pillar": p.pillar,
         "review_comment": p.review_comment,
-        "media": [_media_summary(m) for m in p.media],
+        "media": [_media_summary(m, db, p.id) for m in p.media],
         "channels_available": [c.key for c in post_svc.compatible_channels(p)],
         "versions": [
             {"channel": v.channel, "enabled": v.enabled, "title": v.title, "body": v.body,
@@ -261,7 +265,7 @@ def view_media(media_ids: list[int]) -> list:
             if m is None or not m.preview_path:
                 content.append(f"media {media_id}: not available")
                 continue
-            content.append(json.dumps(_media_summary(m)))
+            content.append(json.dumps(_media_summary(m, db)))
             content.append(Image(path=abs_path(m.preview_path)))
         return content
 
@@ -284,7 +288,7 @@ def search_media(query: str = "", kind: str = "", unused_only: bool = False, lim
             if kind in ("image", "video"):
                 stmt = stmt.where(MediaAsset.kind == kind)
             found = db.scalars(stmt).all()
-        return json.dumps([_media_summary(m) for m in found], indent=1)
+        return json.dumps([_media_summary(m, db) for m in found], indent=1)
 
 
 @server.tool()
@@ -362,9 +366,18 @@ def request_render(
         return json.dumps({"render_id": job.id, "spec": job.spec, "note": "Queued" + note})
 
 
+def _reuse_error(conflicts: list[dict]) -> str:
+    where = "; ".join(f"media {c['media_id']} is already in post {c['post_id']} ({c['post']}, {c['status']})"
+                      for c in conflicts)
+    return (f"Error: {where}. The same photo or clip shouldn't go out in more than one post (an announcement and "
+            "its reminder should lead with different photos). Pick another one (search_media with unused_only), or "
+            "pass allow_reuse=true if there's a real reason, and say why in your notes.")
+
+
 @server.tool()
-def attach_media(post_id: int, media_ids: list[int], replace: bool = False) -> str:
-    """Add library photos/videos to a post that isn't approved yet (or replace its media with replace=true)."""
+def attach_media(post_id: int, media_ids: list[int], replace: bool = False, allow_reuse: bool = False) -> str:
+    """Add library photos/videos to a post that isn't approved yet (or replace its media with replace=true).
+    A photo or clip that's already in another post is refused unless allow_reuse=true."""
     with session_scope() as db:
         actor = _actor(db)
         post = db.get(Post, post_id)
@@ -375,6 +388,9 @@ def attach_media(post_id: int, media_ids: list[int], replace: bool = False) -> s
         assets = [db.get(MediaAsset, i) for i in media_ids]
         if any(a is None for a in assets):
             return "Error: one of those media ids doesn't exist."
+        conflicts = post_svc.media_conflicts(db, media_ids, exclude_post_id=post.id)
+        if conflicts and not allow_reuse:
+            return _reuse_error(conflicts)
         if replace:
             post.media_links.clear()
             db.flush()
@@ -401,11 +417,15 @@ def attach_media(post_id: int, media_ids: list[int], replace: bool = False) -> s
 
 
 @server.tool()
-def create_post(media_ids: list[int], note: str, pillar: str = "") -> str:
+def create_post(media_ids: list[int], note: str, pillar: str = "", allow_reuse: bool = False) -> str:
     """Start a new post from library media (e.g. unused photos to fill a schedule gap).
-    Then fill it with submit_drafts."""
+    Then fill it with submit_drafts. A photo or clip that's already in another post is refused unless
+    allow_reuse=true."""
     with session_scope() as db:
         actor = _actor(db)
+        conflicts = post_svc.media_conflicts(db, media_ids)
+        if conflicts and not allow_reuse:
+            return _reuse_error(conflicts)
         try:
             post = post_svc.create_post(db, actor, media_ids, note=note, pillar=pillar, for_claude=False, source="claude")
         except post_svc.PostError as exc:

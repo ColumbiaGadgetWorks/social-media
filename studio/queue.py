@@ -74,16 +74,20 @@ def schedule(db: Session, days: int = 21) -> dict:
 
 
 def unused_media(db: Session, limit: int = 30) -> list[MediaAsset]:
-    """Ready media that isn't attached to any post that went out or is on its way."""
+    """Ready photos and clips that aren't in any post that hasn't been rejected (nor the source of an edited
+    or badged copy that is). Event cards and the badged copies themselves aren't offered."""
     from .models import PostMedia
 
-    used = select(PostMedia.media_id).join(Post).where(Post.status.in_(("in_review", "approved", "done")))
-    return db.scalars(
+    used = select(PostMedia.media_id).join(Post).where(Post.status != "rejected")
+    used_sources = (select(MediaAsset.source_media_id).join(PostMedia, PostMedia.media_id == MediaAsset.id).join(Post)
+                    .where(Post.status != "rejected", MediaAsset.source_media_id.is_not(None)))
+    rows = db.scalars(
         select(MediaAsset)
-        .where(MediaAsset.processing_status == "ready", MediaAsset.id.not_in(used))
+        .where(MediaAsset.processing_status == "ready", MediaAsset.id.not_in(used), MediaAsset.id.not_in(used_sources))
         .order_by(MediaAsset.created_at.desc())
-        .limit(limit)
+        .limit(limit * 4)
     ).all()
+    return [m for m in rows if not {"event-card", "event-badge"} & set(m.tags or [])][:limit]
 
 
 def channel_rules_text() -> str:

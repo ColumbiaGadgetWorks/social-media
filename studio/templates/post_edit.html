@@ -21,6 +21,11 @@
     {% for m in post.media if m.kind == 'video' and post.status not in ('approved', 'done') %}
       <p class="small"><a href="/media/{{ m.id }}?post={{ post.id }}#edit">Edit video</a>: trim, shape, subtitles, music, end card.</p>
     {% endfor %}
+    {% if reuse %}
+      <div class="problems small"><strong>Same picture in another post:</strong>
+        {% for r in reuse %}media {{ r.media_id }} is also in <a href="/posts/{{ r.post_id }}">{{ r.post }}</a> ({{ r.status | replace('_', ' ') }}){{ '; ' if not loop.last }}{% endfor %}.
+        The same photo or clip in two posts reads as spam; swap one out.</div>
+    {% endif %}
     {% if post.event %}
       {% set day, time = event_when(post.event) %}
       <div class="problems small" style="background:var(--steel-soft);color:var(--fg)">

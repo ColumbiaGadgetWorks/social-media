@@ -12,6 +12,7 @@ import json
 from datetime import timedelta
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import channels as ch
@@ -294,6 +295,29 @@ def create_post(
     db.flush()
     audit(db, actor, "post_created", "post", post.id, media=media_ids, status=post.status)
     return post
+
+
+def media_conflicts(db: Session, media_ids: list[int], exclude_post_id: int | None = None) -> list[dict]:
+    """Where these photos and videos are already in use: another post that wasn't rejected, directly or through
+    an edited or badged copy of the same file. The same picture in two posts reads as spam (an announcement and
+    its reminder should lead with different photos), so callers warn or refuse. Event cards are exempt."""
+    from .models import MediaAsset, PostMedia
+
+    found = []
+    for media_id in dict.fromkeys(media_ids):
+        asset = db.get(MediaAsset, media_id)
+        if asset is None or "event-card" in (asset.tags or []):
+            continue
+        family = {media_id} | set(db.scalars(select(MediaAsset.id).where(MediaAsset.source_media_id == media_id)))
+        if asset.source_media_id:
+            family.add(asset.source_media_id)
+        stmt = (select(Post).join(PostMedia, PostMedia.post_id == Post.id)
+                .where(PostMedia.media_id.in_(family), Post.status != "rejected"))
+        if exclude_post_id is not None:
+            stmt = stmt.where(Post.id != exclude_post_id)
+        for post in db.scalars(stmt).unique():
+            found.append({"media_id": media_id, "post_id": post.id, "post": post.display_title, "status": post.status})
+    return found
 
 
 def send_to_claude(db: Session, actor: Actor, post: Post) -> None:

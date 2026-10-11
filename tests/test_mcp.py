@@ -165,3 +165,53 @@ def test_phase2_tools(setup):
         library_id = s.scalars(sel(MediaAsset.id).order_by(MediaAsset.id.desc())).first()
     result = json.loads(mcp.call("attach_media", post_id=post_id, media_ids=[library_id])["content"][0]["text"])
     assert len(result["media"]) == 2 and "website" in result["channels_available"]
+
+
+def test_same_photo_cant_go_in_a_second_post_without_allow_reuse(setup):
+    web, token, post_id = setup
+    mcp = MCP(web, token).init()
+    with db_mod.session_scope() as s:
+        media_id = s.get(Post, post_id).media[0].id
+    text = lambda result: result["content"][0]["text"]  # noqa: E731
+
+    refused = text(mcp.call("create_post", media_ids=[media_id], note="again"))
+    assert refused.startswith("Error") and f"already in post {post_id}" in refused and "allow_reuse" in refused
+    unused = json.loads(text(mcp.call("search_media", unused_only=True)))
+    assert media_id not in [m["media_id"] for m in unused]  # taken, so not offered
+
+    other = json.loads(text(mcp.call("create_post", media_ids=[media_id], note="again", allow_reuse=True)))["post_id"]
+    shown = json.loads(text(mcp.call("get_work_item", post_id=other)))
+    assert shown["media"][0]["already_in_posts"] == [post_id]
+
+    third = upload(web, [("b.jpg", jpeg_bytes(), "image/jpeg")])
+    assert text(mcp.call("attach_media", post_id=third, media_ids=[media_id], replace=True)).startswith("Error")
+    page = web.get(f"/posts/{other}").text
+    assert "Same picture in another post" in page
+
+    with db_mod.session_scope() as s:  # rejecting both posts frees the photo again
+        s.get(Post, post_id).status = "rejected"
+        s.get(Post, other).status = "rejected"
+    freed = json.loads(text(mcp.call("attach_media", post_id=third, media_ids=[media_id], replace=True)))
+    assert freed["media"] == [media_id]
+
+
+def test_unused_media_skips_event_cards_and_photos_behind_badged_copies(setup):
+    from sqlalchemy import select
+
+    from studio import queue
+    from studio.models import MediaAsset
+
+    _web, _token, post_id = setup
+    with db_mod.session_scope() as s:
+        photo = s.get(Post, post_id).media[0]
+        card = MediaAsset(kind="image", original_name="c.jpg", path="x", mime="image/jpeg", size_bytes=1, sha256="0" * 64,
+                          processing_status="ready", tags=["event-card"], frames=[])
+        s.add(card)
+        s.flush()
+        assert card.id not in [m.id for m in queue.unused_media(s)]
+        assert photo.id not in [m.id for m in queue.unused_media(s)]  # it's in a live post
+        s.get(Post, post_id).status = "rejected"
+        s.flush()
+        assert photo.id in [m.id for m in queue.unused_media(s)]
+        assert s.scalar(select(MediaAsset.id).where(MediaAsset.id == card.id)) == card.id
+

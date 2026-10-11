@@ -53,7 +53,7 @@ with a real photo instead: a project someone is working on, a past session, the 
 behind the event. Use `search_media` and `view_media` to find one, then `attach_media` with
 `replace: true`. The Studio adds the event's date badge to the photo's top-right corner, so the
 photo tells the story and the badge carries the facts (the first photo gets the badge; the rest stay
-plain). If nothing fits, ask in the session for a photo or a story, and only fall back to the card
+plain). The announcement and the reminder for one event get different photos. If nothing fits, ask in the session for a photo or a story, and only fall back to the card
 when there's truly nothing. Write the caption around the story, and keep the facts to one line.
 
 ## Uploads from Discord
@@ -105,6 +105,15 @@ headline-style `title` and a Markdown `body` of a few short paragraphs; link to 
 - Google Business Profile: at most one post every 2 weeks, chosen for local search value (an
   upcoming class or event, or a standout project). It's posted by hand on the day.
 - Social posts are never emailed. Email drafts are separate (see Email announcements).
+
+## One picture, one post
+
+Don't use the same photo or clip in more than one post. An announcement and its reminder should lead
+with different photos, and so should consecutive weeks of the same series. `search_media` with
+`unused_only: true` lists what's free, `get_work_item` and `view_media` show `already_in_posts` when a
+file is taken, and `attach_media` and `create_post` refuse a taken file. Pass `allow_reuse: true` only
+for a real reason (say why in `notes`), for example a milestone photo that deserves a second showing
+months later. Ask for another photo or story rather than reusing one.
 
 ## Never
 

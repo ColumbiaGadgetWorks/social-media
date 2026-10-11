@@ -422,23 +422,34 @@ async def music_upload(request: Request, db: Session = Depends(get_db)):
     upload = form.get("file")
     license_ = str(form.get("license", ""))
     if not getattr(upload, "filename", "") or license_ not in MUSIC_LICENSES:
-        flash(request, "Choose an audio file and its license.", "error")
+        flash(request, "Choose an audio file (or a zip of them) and its license.", "error")
         return back("/music")
     credit = str(form.get("credit_line", "")).strip()
     if MUSIC_LICENSES[license_] and not credit:
         flash(request, f"{license_} requires a credit line, e.g. \"Music: Title by Artist (CC BY 4.0)\".", "error")
         return back("/music")
+    shared = dict(artist=str(form.get("artist", "")).strip(), license=license_,
+                  source_url=str(form.get("source_url", "")).strip(), mood=str(form.get("mood", "")).strip())
     try:
-        track = video_mod.store_music(
-            db, upload.file, upload.filename, title=str(form.get("title", "")).strip() or upload.filename,
-            artist=str(form.get("artist", "")).strip(), license=license_, credit_line=credit,
-            source_url=str(form.get("source_url", "")).strip(), mood=str(form.get("mood", "")).strip())
+        if upload.filename.lower().endswith(".zip"):
+            tracks, notes = video_mod.store_music_pack(db, upload.file, credit_template=credit, **shared)
+        else:
+            tracks = [video_mod.store_music(db, upload.file, upload.filename, credit_line=credit,
+                                            title=str(form.get("title", "")).strip() or upload.filename, **shared)]
+            notes = []
     except video_mod.RenderError as exc:
         db.rollback()
         flash(request, str(exc), "error")
         return back("/music")
-    audit(db, Actor("user", user), "music_added", "music", track.id, title=track.title, license=license_)
-    flash(request, f"Added {track.title}.")
+    if not tracks:
+        flash(request, "Nothing was added. " + "; ".join(notes[:5]), "error")
+        return back("/music")
+    audit(db, Actor("user", user), "music_added", "music", tracks[0].id, count=len(tracks), license=license_,
+          title=tracks[0].title, skipped=len(notes))
+    message = f"Added {tracks[0].title}." if len(tracks) == 1 else f"Added {len(tracks)} tracks."
+    if notes:
+        message += f" Skipped {len(notes)}: " + "; ".join(notes[:5]) + ("; ..." if len(notes) > 5 else "")
+    flash(request, message)
     return back("/music")
 
 
@@ -531,6 +542,7 @@ def post_page(request: Request, post_id: int, db: Session = Depends(get_db)):
         request, "post_edit.html", user, post=post, problems=found,
         history=history, compatible=compatible, seen_hash=post_svc.approval_hash(post),
         snapshots=snapshots, event_when=calendar_sync.event_when, preview=_preview_data(post),
+        reuse=post_svc.media_conflicts(db, [m.id for m in post.media], exclude_post_id=post.id),
     )
 
 
