@@ -94,7 +94,8 @@ def test_full_approval_flow_and_edit_clears_approval(approver_client):
     r = approver_client.post(f"/posts/{post_id}/submit", data={"csrf": csrf_of(approver_client, f"/posts/{post_id}")})
     assert status_of(post_id) == "in_review", r.text
 
-    assert approve(approver_client, post_id).status_code == 303
+    r = approve(approver_client, post_id)
+    assert r.status_code == 303 and r.headers["location"] == f"/posts/{post_id}/schedule"  # Instagram is posted by hand
     assert status_of(post_id) == "approved"
     with db_mod.session_scope() as s:
         assert post_svc.is_publishable(s.get(Post, post_id)) == (True, "")
@@ -108,6 +109,22 @@ def test_full_approval_flow_and_edit_clears_approval(approver_client):
         assert post_svc.is_publishable(post)[0] is False
         actions = s.scalars(select(AuditLog.action).where(AuditLog.entity_id == post_id)).all()
         assert "approval_cleared" in actions
+
+
+def test_approving_leads_to_a_page_for_the_channels_done_by_hand(approver_client):
+    post_id = upload(approver_client, [("a.jpg", jpeg_bytes(), "image/jpeg")])
+    fill_post(approver_client, post_id, bluesky="Sam built a walnut ukulele.", gbp="Sam built a walnut ukulele.")
+    approver_client.post(f"/posts/{post_id}/submit", data={"csrf": csrf_of(approver_client, f"/posts/{post_id}")})
+    assert approve(approver_client, post_id).headers["location"] == f"/posts/{post_id}/schedule"
+    page = approver_client.get(f"/posts/{post_id}/schedule").text
+    assert "Google Business Profile" in page and "google.com/search?q=Columbia+Gadget+Works" in page
+    assert "Bluesky" not in page  # published automatically, nothing to do by hand
+    assert "/versions/" in page and "Mark posted" in page  # Google can't schedule ahead
+
+    only_auto = upload(approver_client, [("b.jpg", jpeg_bytes(), "image/jpeg")])
+    fill_post(approver_client, only_auto, bluesky="Just Bluesky.")
+    approver_client.post(f"/posts/{only_auto}/submit", data={"csrf": csrf_of(approver_client, f"/posts/{only_auto}")})
+    assert approve(approver_client, only_auto).headers["location"] == f"/posts/{only_auto}"
 
 
 def test_approval_fails_if_post_changed_since_page_load(approver_client):

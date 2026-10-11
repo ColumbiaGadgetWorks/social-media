@@ -100,6 +100,26 @@ _DIRECT_WHEN = {
 }
 
 
+# Where to go to schedule or post by hand on each manual channel.
+POST_LINKS = {
+    "instagram": "https://business.facebook.com/latest/composer",
+    "facebook": "https://business.facebook.com/latest/composer",
+    "threads": "https://www.threads.net/",
+    "youtube_shorts": "https://studio.youtube.com/",
+    "tiktok": "https://www.tiktok.com/tiktokstudio/upload",
+    "linkedin": "https://www.linkedin.com/feed/",
+    "x": "https://x.com/compose/post",
+}
+
+
+def post_link(channel: Channel | str) -> str:
+    """The page where a person schedules or posts this channel's content by hand ('' if none)."""
+    from .db import settings
+
+    key = channel if isinstance(channel, str) else channel.key
+    return settings().gbp_url if key == "gbp" else POST_LINKS.get(key, "")
+
+
 def mode(channel: Channel | str) -> str:
     """The channel's mode right now: direct when the Studio can publish it, else its default."""
     from .db import settings

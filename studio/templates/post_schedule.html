@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Schedule · CGW Studio{% endblock %}
+{% block content %}
+<div class="row spread"><h1>Schedule it</h1><a href="/posts/{{ post.id }}">Back to the post</a></div>
+<p class="muted"><strong>{{ post.display_title }}</strong> is approved. Some channels can't be scheduled by the Studio, so do these by hand: open the link, paste the caption, add the pictures, set the time, then mark it done.</p>
+{% if not ok %}<div class="problems small">Not ready to post: {{ reason }}</div>{% endif %}
+{% if not items %}<div class="card"><p>Nothing left to schedule by hand. Automatic channels will publish on time.</p></div>{% endif %}
+<div class="stack">
+{% for v in items %}
+  <div class="card">
+    <div class="row spread">
+      <h3>{{ CHANNELS[v.channel].label }} · {{ v.scheduled_at | local }}</h3>
+      {% if post_link(v.channel) %}<a class="btn primary" href="{{ post_link(v.channel) }}" target="_blank" rel="noopener">Open {{ CHANNELS[v.channel].label }}</a>{% endif %}
+    </div>
+    <p class="small muted">{% if mode_of(v.channel) == 'on_day' %}Can't schedule ahead: post it on the day.{% else %}Schedule it for the time above.{% endif %}</p>
+    <div class="thumbs">{% for m in post.media %}<a href="/files/{{ m.id }}/export" download><img src="/files/{{ m.id }}/thumb" alt="{{ m.alt_text }}"></a>{% endfor %}</div>
+    {% if v.title %}<label>Title <button type="button" class="link small" data-copy="title-{{ v.id }}">Copy</button></label><div class="caption" id="title-{{ v.id }}">{{ v.title }}</div>{% endif %}
+    <label>Caption <button type="button" class="link small" data-copy="cap-{{ v.id }}">Copy</button></label>
+    <div class="caption" id="cap-{{ v.id }}">{{ v.full_text }}</div>
+    {% if ok %}
+    <form method="post" action="/versions/{{ v.id }}/posted" class="row" style="margin-top:10px">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="next" value="/posts/{{ post.id }}/schedule">
+      <input type="url" name="url" placeholder="Post link, if you have it" style="flex:1;min-width:180px">
+      <button type="submit" class="primary">{{ 'Mark posted' if mode_of(v.channel) == 'on_day' else 'Mark scheduled' }}</button>
+    </form>
+    {% endif %}
+  </div>
+{% endfor %}
+</div>
+{% endblock %}

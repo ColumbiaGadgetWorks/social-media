@@ -105,6 +105,7 @@
   <div class="card">
     <h3>Status</h3>
     <p>{{ st(post.status) }}</p>
+    {% if post.status == 'approved' %}<p class="small"><a href="/posts/{{ post.id }}/schedule">Schedule it by hand where needed</a></p>{% endif %}
     {% if post.approved_by %}<p class="small muted">Approved by {{ post.approved_by.label }}, {{ post.approved_at | local }}</p>{% endif %}
     {% if problems.get('') %}<div class="problems small"><ul>{% for p in problems[''] %}<li>{{ p }}</li>{% endfor %}</ul></div>{% endif %}
 

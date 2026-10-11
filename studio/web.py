@@ -67,6 +67,7 @@ templates.env.filters["input_dt"] = input_value
 templates.env.filters["size"] = human_size
 templates.env.globals["CHANNELS"] = ch.CHANNELS
 templates.env.globals["mode_of"] = ch.mode
+templates.env.globals["post_link"] = ch.post_link
 templates.env.globals["STATUS_LABELS"] = STATUS_LABELS
 
 # License name -> does it require a credit line in captions?
@@ -634,10 +635,36 @@ async def post_submit(request: Request, post_id: int, db: Session = Depends(get_
 
 @router.post("/posts/{post_id}/approve")
 async def post_approve(request: Request, post_id: int, db: Session = Depends(get_db)):
-    def fn(actor, post, form):
-        post_svc.approve(db, actor, post, str(form.get("seen_hash", "")))
-        return "Approved. Automatic channels will publish on time; the rest are on the batch pages."
-    return await _post_action(request, post_id, db, "approver", fn)
+    user = require(request, db, "approver")
+    form = await form_with_csrf(request)
+    post = _load_post(db, post_id)
+    try:
+        post_svc.approve(db, Actor("user", user), post, str(form.get("seen_hash", "")))
+    except post_svc.PostError as exc:
+        db.rollback()
+        flash(request, str(exc), "error")
+        return back(f"/posts/{post_id}")
+    if _by_hand(post):  # straight on to scheduling the ones a person posts on the platform itself
+        flash(request, "Approved. Now schedule it on the channels below.")
+        return back(f"/posts/{post_id}/schedule")
+    flash(request, "Approved. Automatic channels will publish on time.")
+    return back(_next(form, f"/posts/{post_id}"))
+
+
+def _by_hand(post: Post) -> list[ChannelVersion]:
+    """Versions of this post that a person still has to schedule or post on the platform itself."""
+    return [v for v in post.versions if v.enabled and v.publish_state == "pending" and ch.mode(v.channel) in ch.MANUAL_MODES]
+
+
+@router.get("/posts/{post_id}/schedule")
+def post_schedule(request: Request, post_id: int, db: Session = Depends(get_db)):
+    user = require(request, db)
+    post = _load_post(db, post_id)
+    if post is None:
+        return render(request, "error.html", user, message="That post doesn't exist.")
+    ok, reason = post_svc.is_publishable(post)
+    items = sorted(_by_hand(post), key=lambda v: v.scheduled_at or utcnow())
+    return render(request, "post_schedule.html", user, post=post, items=items, ok=ok, reason=reason)
 
 
 @router.post("/posts/{post_id}/changes")
