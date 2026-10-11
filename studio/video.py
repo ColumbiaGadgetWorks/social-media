@@ -10,9 +10,11 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import shutil
 import subprocess
 import tempfile
+import zipfile
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -364,12 +366,23 @@ def run_pending(db: Session, limit: int = 1) -> int:
     return len(jobs)
 
 
+MUSIC_EXTENSIONS = (".mp3", ".m4a", ".aac", ".wav", ".ogg", ".flac")
+MAX_PACK_TRACKS = 500
+MAX_TRACK_MB = 80
+
+
+class DuplicateTrack(RenderError):
+    """This exact audio file is already in the library."""
+
+
 def store_music(db: Session, stream, filename: str, **fields) -> MusicTrack:
     suffix = Path(filename).suffix.lower()
-    if suffix not in (".mp3", ".m4a", ".aac", ".wav", ".ogg", ".flac"):
+    if suffix not in MUSIC_EXTENSIONS:
         raise RenderError("Music must be an MP3, M4A, AAC, WAV, OGG or FLAC file.")
     data = stream.read()
     rel = f"music/{hashlib.sha256(data).hexdigest()[:16]}{suffix}"
+    if db.scalar(select(MusicTrack.id).where(MusicTrack.path == rel)):
+        raise DuplicateTrack("That track is already in the library.")
     path = media_mod.abs_path(rel)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
@@ -386,3 +399,53 @@ def store_music(db: Session, stream, filename: str, **fields) -> MusicTrack:
     db.flush()
     return track
 
+
+def track_title(filename: str) -> str:
+    """A readable title from a file name: no folder, extension, leading track number or underscores."""
+    stem = Path(filename).stem
+    cleaned = re.sub(r"^\d+[\s._-]+", "", stem).replace("_", " ").strip()
+    return cleaned or stem
+
+
+class _Capped:
+    """Reads a zip entry, refusing to inflate past the limit (a zip's stated sizes can't be trusted)."""
+
+    def __init__(self, f, limit: int):
+        self.f, self.limit = f, limit
+
+    def read(self) -> bytes:
+        data = self.f.read(self.limit + 1)
+        if len(data) > self.limit:
+            raise RenderError(f"larger than {MAX_TRACK_MB} MB")
+        return data
+
+
+def store_music_pack(db: Session, stream, *, credit_template: str = "", **fields) -> tuple[list[MusicTrack], list[str]]:
+    """Add every audio file in a zip with the same license, source and mood. The credit line can use {title}
+    and {artist}. Returns the new tracks and a note for anything skipped (duplicates, bad files)."""
+    try:
+        pack = zipfile.ZipFile(stream)
+    except zipfile.BadZipFile:
+        raise RenderError("That doesn't look like a zip file.") from None
+    entries = [i for i in pack.infolist()
+               if not i.is_dir() and Path(i.filename).suffix.lower() in MUSIC_EXTENSIONS
+               and not any(part.startswith(("__MACOSX", "._")) for part in Path(i.filename).parts)]
+    if not entries:
+        raise RenderError("No audio files (MP3, M4A, AAC, WAV, OGG, FLAC) found in that zip.")
+    if len(entries) > MAX_PACK_TRACKS:
+        raise RenderError(f"That zip has {len(entries)} tracks; add up to {MAX_PACK_TRACKS} at a time.")
+    added: list[MusicTrack] = []
+    notes: list[str] = []
+    for info in sorted(entries, key=lambda i: i.filename.lower()):
+        title = track_title(info.filename)
+        if info.flag_bits & 0x1:
+            notes.append(f"{title}: password-protected")
+            continue
+        credit = credit_template.replace("{title}", title).replace("{artist}", str(fields.get("artist", "")))
+        try:
+            with pack.open(info) as f:
+                added.append(store_music(db, _Capped(f, MAX_TRACK_MB * 1024 * 1024), info.filename,
+                                         title=title, credit_line=credit, **fields))
+        except RenderError as exc:
+            notes.append(f"{title}: {exc}")
+    return added, notes

@@ -1,6 +1,7 @@
 import io
 import json
 import subprocess
+import zipfile
 from types import SimpleNamespace
 
 import pytest
@@ -151,3 +152,51 @@ def test_video_page_shows_editor_and_queues_render(app, clip):
     with db_mod.session_scope() as s:
         assert s.get(MediaAsset, clip).transcript[0]["text"] == "The laser is warming up!"
         assert s.scalar(select(RenderJob)).status == "queued"
+
+
+def test_music_zip_adds_every_track_with_the_shared_license(app, tmp_path):
+    from starlette.testclient import TestClient
+
+    from .conftest import csrf_of, login
+    from studio.models import MusicTrack
+
+    make_user("adam", "admin")
+    names = {"01_Workshop_Groove.mp3": 220, "02 - Chill Loop.mp3": 330}
+    pack = tmp_path / "pack.zip"
+    with zipfile.ZipFile(pack, "w") as z:
+        for name, hz in names.items():
+            src = tmp_path / "t.mp3"
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"sine=frequency={hz}:duration=1",
+                            "-c:a", "libmp3lame", str(src)], check=True)
+            z.write(src, f"album/{name}")
+        z.writestr("album/cover.jpg", b"not audio")
+        z.writestr("__MACOSX/album/._01_Workshop_Groove.mp3", b"junk")
+        z.writestr("album/notes.txt", "hello")
+    with TestClient(app, client=("192.168.1.20", 50000)) as c:
+        login(c, "adam")
+
+        def upload(data=None):
+            form = {"csrf": csrf_of(c, "/music"), "license": "CC BY 4.0", "artist": "Kevin", "mood": "upbeat",
+                    "credit_line": "Music: {title} by {artist} (CC BY 4.0)", **(data or {})}
+            return c.post("/music", data=form, files={"file": ("pack.zip", pack.read_bytes(), "application/zip")},
+                          follow_redirects=True)
+
+        assert "Added 2 tracks" in upload().text
+        with db_mod.session_scope() as s:
+            tracks = s.scalars(select(MusicTrack).order_by(MusicTrack.title)).all()
+            assert [t.title for t in tracks] == ["Chill Loop", "Workshop Groove"]
+            assert {t.license for t in tracks} == {"CC BY 4.0"} and {t.mood for t in tracks} == {"upbeat"}
+            assert tracks[0].credit_line == "Music: Chill Loop by Kevin (CC BY 4.0)"
+        again = upload().text  # the same pack again: everything is already there
+        assert "Nothing was added" in again and "already in the library" in again
+        assert "requires a credit line" in upload({"credit_line": ""}).text
+        bad = c.post("/music", data={"csrf": csrf_of(c, "/music"), "license": "CC0 / public domain"},
+                     files={"file": ("x.zip", b"not a zip", "application/zip")}, follow_redirects=True)
+        assert "look like a zip file" in bad.text
+
+
+def test_track_titles_come_from_file_names():
+    assert video.track_title("album/01_Workshop_Groove.mp3") == "Workshop Groove"
+    assert video.track_title("02 - Chill Loop.WAV") == "Chill Loop"
+    assert video.track_title("7.mp3") == "7"
+
