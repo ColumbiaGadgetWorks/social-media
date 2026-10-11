@@ -163,14 +163,6 @@ def test_queue_puts_uploads_before_far_off_event_posts(app3):
         assert [p.note for p in queue.claude_queue(s)] == ["soon", "upload", "event"]
 
 
-def test_digest_reminds_about_weekly_event_photos(app3):
-    with db_mod.session_scope() as s:
-        s.add(Event(uid="t@site", start=db_mod.utcnow() + timedelta(days=2), title="Open Hack Night",
-                    series="open hack night|Thu|18:00", promote=True))
-        s.flush()
-        assert "Taken at" in reminders.digest(s)[1]
-
-
 def test_upload_taken_at_and_settings_snippets(app3):
     with db_mod.session_scope() as s:
         event = Event(uid="now@site", start=db_mod.utcnow() - timedelta(minutes=30), title="Open Hack Night",

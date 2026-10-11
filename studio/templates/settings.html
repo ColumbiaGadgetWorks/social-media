@@ -69,20 +69,24 @@
   {% endfor %}</table>
   {% if is_admin %}<p class="small muted">Meta fetches approved photos and videos from <span class="mono">{{ media_base }}/m/…</span>. That path must be reachable from the internet without proxy sign-in.</p>{% endif %}
 </div>
-<div class="card">
-  <h2 style="margin-top:0">Email reminders</h2>
-  <p class="small">One digest a week ({{ digest_day }}s at {{ reminder_hour }}:00, only if something needs you), a last call when an unapproved post goes out within two days{% if not last_call %} (turned off){% endif %}, and an alert if something breaks. Sent to {{ reminder_to | join(', ') or 'nobody yet: add an email address to your account' }}.</p>
-  <p class="small"><strong>Next digest:</strong> {{ next_digest }}{% if quiet %} (quiet for the first 24 hours after the Studio starts){% endif %}</p>
-  {% if digest_subject %}
-  <details><summary class="small">What it would say right now</summary>
-    <pre class="caption small" style="margin-top:8px">{{ digest_subject }}
-
-{{ digest_body }}</pre></details>
-  <form method="post" action="/settings/digest-test" style="margin-top:10px"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit">Send me a test</button></form>
-  {% else %}
-  <p class="small muted">Right now there's nothing for it to say, so it wouldn't be sent.</p>
-  {% endif %}
-</div>
+<form method="post" action="/settings/emails" class="card">
+  <h2 style="margin-top:0">Emails from the Studio</h2>
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <p class="small">Every reason the Studio emails the team, and nothing else. Sent to {{ reminder_to | join(', ') or 'nobody yet: add an email address to your account' }}. Emails go out between {{ reminder_hour }}:00 and 9 PM, never in the first 24 hours after the Studio starts.</p>
+  <p class="small"><strong>Posts left scheduled:</strong> {{ runway_left }}{% if runway_last %} (the last goes out {{ runway_last | local('%a %b %-d') }}){% endif %}.
+    {% if runway_left <= runway_low %}That's low, so the running-low email is active (one now, then one a week).{% else %}Plenty: the running-low email waits until {{ runway_low }} or fewer are left.{% endif %}
+    Claude sessions plan {{ plan_weeks }} weeks at a time.</p>
+  {% for k in email_kinds %}
+  <label class="row" style="align-items:flex-start;gap:10px;margin:10px 0;font-weight:400">
+    <input type="checkbox" name="email.{{ k.key }}" value="1" {{ 'checked' if k.on }} {{ 'disabled' if not is_admin }} style="margin-top:4px">
+    <span><strong>{{ k.name }}</strong><br><span class="small muted">{{ k.what }}</span></span>
+  </label>
+  {% endfor %}
+  <div class="row">
+    {% if is_admin %}<button type="submit" class="primary">Save</button>{% else %}<span class="small muted">Only an admin can change these.</span>{% endif %}
+    <button type="submit" formaction="/settings/runway-test">Send me the running-low email as a test</button>
+  </div>
+</form>
 <form method="post" action="/settings/appearance" class="card">
   <h2 style="margin-top:0">Appearance</h2>
   <input type="hidden" name="csrf" value="{{ csrf }}">

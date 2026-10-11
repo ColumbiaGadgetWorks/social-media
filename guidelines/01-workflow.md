@@ -8,7 +8,10 @@ shouldn't try to work around that.
 2. For each item, call `get_work_item` to see the media previews (photos, and 5 frames per video)
    and the uploader's note.
 3. Call `get_schedule` once per session to see what's already planned, so you can pick open slots
-   and avoid stacking several posts on one day.
+   and avoid stacking several posts on one day. It looks eight weeks ahead, and that's how far to
+   plan: schedule roughly eight weeks of posts per session when the material supports it (about
+   three main posts a week), so the team only needs another session when the runway is nearly gone.
+   Event promos are the exception: they stay close to their event.
 4. Call `submit_drafts` with:
    - `media`: a factual description and 1-2 sentence alt text for each file.
    - `pillar`: the best pillar key.
@@ -18,7 +21,7 @@ shouldn't try to work around that.
    - `notes`: one or two lines for the reviewer: why these channels and times, anything uncertain
      (names you couldn't confirm, a claim you couldn't check).
 5. If `submit_drafts` returns `problems`, fix them and call it again.
-6. Finish with a short summary: what you drafted, which days are still empty in the next two
+6. Finish with a short summary: what you drafted, which days are still empty in the next eight
    weeks, and any unused media worth turning into posts (`search_media` with `unused_only`).
 
 ## Email announcements

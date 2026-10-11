@@ -288,12 +288,13 @@ def search_media(query: str = "", kind: str = "", unused_only: bool = False, lim
 
 
 @server.tool()
-def get_schedule(days: int = 21) -> str:
-    """What's planned per day, which days are empty, weeks short of 3 main posts, and the GBP post for this cycle."""
+def get_schedule(days: int = 56) -> str:
+    """What's planned per day over the next 8 weeks (the planning horizon), which days are empty, weeks short of 3
+    main posts, and the GBP post for this cycle."""
     with session_scope() as db:
         _actor(db)
-        data = queue.schedule(db, days=min(max(days, 1), 60))
-        data["gaps"] = queue.gaps(db, weeks=3)
+        data = queue.schedule(db, days=min(max(days, 1), 90))
+        data["gaps"] = queue.gaps(db, weeks=max(1, min(max(days, 1), 90) // 7))
         return json.dumps(data, indent=1)
 
 

@@ -945,21 +945,39 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
         ("Subtitles (Whisper)", bool(s.whisper_model), f"STUDIO_WHISPER_MODEL={s.whisper_model or '(off)'}"),
     ]
     lan = lan_address(request)
+    from . import queue as queue_mod
     from . import reminders
-    from .config import WEEKDAYS
 
-    digest_subject, digest_body = reminders.digest(db)
-    next_digest = reminders.next_digest_date()
+    left = queue_mod.runway(db)
+    email_kinds = [{"key": k, "name": n, "what": w, "on": reminders.enabled(db, k)} for k, n, w, _ in reminders.EMAIL_KINDS]
     return render(request, "settings.html", user, tokens=tokens, new_token=new_token, new_scope=new_scope,
                   base_url=s.base_url, lan=lan, lan_configured=bool(s.lan_url),
-                  digest_subject=digest_subject, digest_body=digest_body, digest_day=WEEKDAYS[s.digest_day].capitalize(),
-                  next_digest=f"{next_digest:%a %b} {next_digest.day}", reminder_hour=s.reminder_hour,
-                  last_call=s.last_call_alerts, quiet=reminders.quiet(db), reminder_to=reminders.recipients(db),
-                  connections=connections, media_base=s.media_base_url, is_admin=user.has_role("admin"))
+                  reminder_hour=s.reminder_hour, quiet=reminders.quiet(db), reminder_to=reminders.recipients(db),
+                  connections=connections, media_base=s.media_base_url, is_admin=user.has_role("admin"),
+                  email_kinds=email_kinds, runway_left=len(left), runway_last=left[-1][1] if left else None,
+                  runway_low=reminders.RUNWAY_LOW, plan_weeks=reminders.PLAN_WEEKS)
 
 
-@router.post("/settings/digest-test")
-async def digest_test(request: Request, db: Session = Depends(get_db)):
+@router.post("/settings/emails")
+async def settings_emails(request: Request, db: Session = Depends(get_db)):
+    from . import reminders
+
+    user = require(request, db)
+    form = await form_with_csrf(request)
+    if not user.has_role("admin"):
+        flash(request, "Only an admin can change which emails are sent.", "error")
+        return back("/settings")
+    chosen = {}
+    for kind, *_ in reminders.EMAIL_KINDS:
+        chosen[kind] = form.get(f"email.{kind}") == "1"
+        reminders.set_enabled(db, kind, chosen[kind])
+    audit(db, Actor("user", user), "email_settings_changed", "user", user.id, **chosen)
+    flash(request, "Email choices saved.")
+    return back("/settings")
+
+
+@router.post("/settings/runway-test")
+async def runway_test(request: Request, db: Session = Depends(get_db)):
     from . import reminders
 
     user = require(request, db)
@@ -968,12 +986,11 @@ async def digest_test(request: Request, db: Session = Depends(get_db)):
         flash(request, "Add an email address to your account first (Users page).", "error")
         return back("/settings")
     try:
-        sent = reminders.weekly_digest(db, force_to=[user.email])
-    except Exception as exc:  # SMTP not set up, wrong password…
+        reminders.runway_email(db, force_to=[user.email])
+    except Exception as exc:
         flash(request, f"Couldn't send: {exc}", "error")
         return back("/settings")
-    audit(db, Actor("user", user), "digest_test_sent", "user", user.id, sent=sent)
-    flash(request, f"Test digest sent to {user.email}." if sent else "Nothing to report right now, so nothing was sent.")
+    flash(request, f"Test sent to {user.email}.")
     return back("/settings")
 
 

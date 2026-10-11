@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -134,6 +134,20 @@ def gaps(db: Session, weeks: int = 3) -> dict:
         and cycle <= to_local(v.scheduled_at).date() < cycle + timedelta(days=14)
     )
     return {"weeks": week_rows, "gbp_this_cycle": gbp, "gbp_target": 1, "cycle_start": cycle.isoformat()}
+
+
+def runway(db: Session) -> list[tuple[Post, datetime]]:
+    """Approved posts that still have something to publish, each with its last upcoming slot, soonest first.
+    This is how much is already lined up: when it runs low, it's time to plan the next stretch."""
+    now = utcnow()
+    last: dict[int, datetime] = {}
+    posts: dict[int, Post] = {}
+    for v in db.scalars(select(ChannelVersion).join(Post).where(
+            Post.status == "approved", ChannelVersion.enabled.is_(True), ChannelVersion.publish_state == "pending",
+            ChannelVersion.scheduled_at >= now)).all():
+        posts[v.post_id] = v.post
+        last[v.post_id] = max(last.get(v.post_id, v.scheduled_at), v.scheduled_at)
+    return sorted(((posts[i], when) for i, when in last.items()), key=lambda x: x[1])
 
 
 def approved_in_next(db: Session, days: int = 7) -> int:

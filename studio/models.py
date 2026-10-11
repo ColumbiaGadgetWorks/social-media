@@ -209,6 +209,14 @@ class AuditLog(Base):
     detail: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
+class AppSetting(Base):
+    """Settings changed in the app (for now: which emails to get), as opposed to the container's environment."""
+
+    __tablename__ = "app_settings"
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(String(200), default="")
+
+
 class ReminderLog(Base):
     """One row per reminder sent, so each reminder goes out once per key."""
 

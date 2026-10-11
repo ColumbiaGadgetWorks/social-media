@@ -120,27 +120,6 @@ def started_two_days_ago(s):
     s.scalar(select(ReminderLog).where(ReminderLog.kind == "installed")).sent_at = timeutil.utcnow() - timedelta(days=2)
 
 
-def test_weekly_digest_once_on_monday_with_claude_session(app, monkeypatch):
-    make_user("adam", "admin")
-    from studio.models import Post as P
-    at_local(monkeypatch, datetime(2026, 10, 12, 9, 0))  # a Monday
-    with db_mod.session_scope() as s:
-        for i in range(10):
-            s.add(P(note=f"upload {i}", status="needs_claude", created_at=timeutil.utcnow() - timedelta(days=4)))
-        started_two_days_ago(s)
-    with db_mod.session_scope() as s:
-        reminders.run(s)
-        reminders.run(s)  # once a day, however often the loop runs
-    assert len(mailer.outbox) == 1
-    msg = mailer.outbox[-1]
-    assert msg["Subject"].startswith("CGW Studio this week:") and "Claude session" in msg["Subject"]
-    assert "/cgw-session" in msg.get_content()
-    at_local(monkeypatch, datetime(2026, 10, 13, 9, 0))  # Tuesday: nothing
-    with db_mod.session_scope() as s:
-        reminders.run(s)
-    assert len(mailer.outbox) == 1
-
-
 def test_quiet_first_day(app, monkeypatch):
     make_user("adam", "admin")
     from studio.models import Post as P
@@ -153,40 +132,56 @@ def test_quiet_first_day(app, monkeypatch):
     assert mailer.outbox == []
 
 
-def test_last_call_at_most_every_three_days(approved_post, monkeypatch):
-    at_local(monkeypatch, datetime(2026, 10, 14, 10, 0))  # a Wednesday
+def test_running_low_email_once_then_weekly_and_again_after_a_recovery(approved_post, monkeypatch):
+    """One email when 1 (or 0) approved posts are left, one a week while it stays that low, and a fresh
+    email straight away if it recovers and then dips again."""
     with db_mod.session_scope() as s:
         started_two_days_ago(s)
-        p = s.get(Post, approved_post)
-        p.status, p.approved_hash = "in_review", None
-        p.version("bluesky").scheduled_at = timeutil.utcnow() + timedelta(hours=30)
-    with db_mod.session_scope() as s:
-        reminders.run(s)
-    assert [m["Subject"] for m in mailer.outbox] == ["Last call: 1 post(s) go out within 2 days"]
-    with db_mod.session_scope() as s:  # a second post the next day: still inside the 3-day gap
-        s.add(Post(note="another", status="in_review", target_at=timeutil.utcnow() + timedelta(days=1)))
-        s.flush()
-        at_local(monkeypatch, datetime(2026, 10, 15, 10, 0))
-        reminders.last_call(s)
-    assert len(mailer.outbox) == 1
+    left = {"n": 1}
+    monkeypatch.setattr(reminders, "runway", lambda db: [
+        (db.get(Post, approved_post), timeutil.utcnow() + timedelta(days=3)) for _ in range(left["n"])])
 
-
-def test_batch_day_reminder_only_on_cycle_start(approved_post, monkeypatch):
-    def schedule_instagram_in_3_days():
+    def run_at(when):
+        at_local(monkeypatch, when)
         with db_mod.session_scope() as s:
-            p = s.get(Post, approved_post)
-            v = p.version("instagram")
-            v.enabled, v.body, v.scheduled_at = True, "Hi", timeutil.utcnow() + timedelta(days=3)
-            p.approved_hash = post_svc.approval_hash(p)  # stands in for re-approval
+            reminders.run(s)
+        return [m["Subject"] for m in mailer.outbox]
 
-    monkeypatch.setattr("studio.batch.utcnow", lambda: timeutil.utcnow())
-    at_local(monkeypatch, datetime(2026, 10, 13, 9, 0))  # the day after the anchor batch day
-    schedule_instagram_in_3_days()
-    with db_mod.session_scope() as s:
-        assert "BATCH DAY" not in reminders.digest(s)[1]
+    assert run_at(datetime(2026, 10, 14, 10, 0)) == ["CGW Studio: only 1 post left scheduled"]
+    assert len(run_at(datetime(2026, 10, 14, 15, 0))) == 1  # not again the same day
+    assert len(run_at(datetime(2026, 10, 20, 10, 0))) == 1  # six days on: still quiet
+    assert len(run_at(datetime(2026, 10, 21, 10, 0))) == 2  # a week on: the weekly reminder
+    left["n"] = 2
+    assert len(run_at(datetime(2026, 10, 22, 10, 0))) == 2  # plenty again: nothing, and the stretch resets
+    left["n"] = 0
+    subjects = run_at(datetime(2026, 10, 23, 10, 0))  # dipped again: emails at once
+    assert len(subjects) == 3 and subjects[-1] == "CGW Studio: no posts left scheduled"
+    body = mailer.outbox[-1].get_content()
+    assert "/cgw-session" in body and "8 weeks" in body and "/settings" in body
 
-    at_local(monkeypatch, datetime(2026, 10, 26, 9, 0))  # two weeks after the anchor (a Monday)
-    schedule_instagram_in_3_days()
+
+def test_running_low_email_can_be_switched_off(approved_post, monkeypatch):
+    at_local(monkeypatch, datetime(2026, 10, 14, 10, 0))
     with db_mod.session_scope() as s:
-        subject, body = reminders.digest(s)
-    assert "batch day" in subject and "Instagram: 1 post(s)" in body
+        started_two_days_ago(s)
+        reminders.set_enabled(s, "runway", False)
+        reminders.run(s)
+    assert mailer.outbox == []
+
+
+def test_problem_alerts_follow_their_switches(approved_post):
+    with db_mod.session_scope() as s:
+        reminders.alert(s, "announcement_failed", "1:3", "Monthly email not sent: x", urgent=True)
+        reminders.alert(s, "publish_failed", "1:3", "Publishing failed: y", urgent=True)
+        s.flush()
+        assert [a.kind for a in s.scalars(select(reminders.PendingAlert)).all()] == ["announcement_failed", "publish_failed"]
+        reminders.set_enabled(s, "alert_announcement", False)
+        reminders.alert(s, "announcement_failed", "2:3", "Monthly email not sent: z", urgent=True)
+        s.flush()
+        assert sum(a.kind == "announcement_failed" for a in s.scalars(select(reminders.PendingAlert)).all()) == 1
+
+
+def test_default_emails_are_running_low_and_alerts_only(app):
+    with db_mod.session_scope() as s:
+        on = {k for k, *_ in reminders.EMAIL_KINDS if reminders.enabled(s, k)}
+    assert on == {"runway", "alert_publish", "alert_announcement"}

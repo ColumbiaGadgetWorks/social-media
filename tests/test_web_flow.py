@@ -195,3 +195,30 @@ def test_post_page_has_a_preview_for_each_channel(approver_client):
     data = json.loads(html.split('id="preview-data">')[1].split("</script>")[0])
     assert data["media"][0]["kind"] == "image" and data["media"][0]["src"].startswith("/files/")
     assert data["channels"]["bluesky"]["max_chars"] == 300 and data["channels"]["bluesky"]["max_images"] == 4
+
+
+def test_settings_lists_every_email_and_an_admin_can_change_them(approver_client):
+    from studio import reminders
+
+    page = approver_client.get("/settings").text
+    for _, name, _, _ in reminders.EMAIL_KINDS:
+        assert name in page
+    data = {"csrf": csrf_of(approver_client, "/settings"), "email.runway": "1", "email.alert_announcement": "1"}
+    r = approver_client.post("/settings/emails", data=data, follow_redirects=False)
+    assert r.status_code == 303
+    with db_mod.session_scope() as s:
+        assert reminders.enabled(s, "runway") and reminders.enabled(s, "alert_announcement")
+        assert not reminders.enabled(s, "alert_publish")  # unticked means off
+
+
+def test_only_an_admin_can_change_email_choices(app):
+    from studio import reminders
+
+    make_user("adam", "admin")
+    make_user("sam", "contributor")
+    with TestClient(app, client=("192.168.1.21", 50000)) as sam:
+        login(sam, "sam")
+        r = sam.post("/settings/emails", data={"csrf": csrf_of(sam, "/settings")}, follow_redirects=True)  # nothing ticked
+        assert "Only an admin" in r.text
+    with db_mod.session_scope() as s:
+        assert reminders.enabled(s, "runway")  # unchanged: sam is not an admin

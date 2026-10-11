@@ -153,7 +153,7 @@ def test_phase2_tools(setup):
     web, token, post_id = setup
     mcp = MCP(web, token).init()
     schedule = json.loads(mcp.call("get_schedule")["content"][0]["text"])
-    assert "gaps" in schedule and len(schedule["gaps"]["weeks"]) == 3
+    assert "gaps" in schedule and len(schedule["gaps"]["weeks"]) == 8  # the schedule looks eight weeks ahead
     assert json.loads(mcp.call("get_events")["content"][0]["text"]) == []
     assert "by_pillar" in json.loads(mcp.call("get_metrics")["content"][0]["text"])
 

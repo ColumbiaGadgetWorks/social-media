@@ -1,13 +1,14 @@
-"""Reminder emails, kept rare on purpose.
+"""Emails from the Studio, kept to three reasons, each switchable in Settings (see EMAIL_KINDS).
 
-- One weekly digest (Monday morning by default), only when something needs a person: posts to
-  approve this week with their deadlines, a Claude session when work is due soon, batch day, the
-  Google Business Profile post, empty days, the monthly email, Hack Night photos, event changes.
-- A "last call" when an unapproved post goes out within 48 hours: at most one every 3 days, and
-  each post gets at most one.
-- Problem alerts (a post failed to publish, the monthly email failed, an announced event was
-  cancelled or changed), bundled into at most one email a day.
-- Nothing in the first 24 hours after the Studio starts on a new database.
+- Running low: posts are planned about eight weeks ahead at a time, so it says nothing until only one
+  approved post is left to go out. Then one email, and after that one a week for as long as there are
+  zero or one left. When the runway recovers, the next dip emails right away again.
+- A post failed to publish (after its retries), bundled into at most one alert email a day.
+- The monthly email to the mailing list failed (after its retries).
+- Nothing in the first 24 hours after the Studio starts on a new database, and nothing in the evening.
+
+There's no weekly digest and no "last call" any more. A changed or cancelled event just takes its queued
+posts out of the queue (see calendar_sync), without an email.
 """
 
 from __future__ import annotations
@@ -19,11 +20,11 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from . import batch, mailer, timeutil
 from . import channels as ch
+from . import mailer, timeutil
 from .db import settings
-from .models import ChannelVersion, PendingAlert, Post, ReminderLog, User
-from .queue import approved_in_next, claude_queue, gaps
+from .models import AppSetting, ChannelVersion, PendingAlert, Post, ReminderLog, User
+from .queue import claude_queue, runway
 from .timeutil import local_now, to_local
 
 
@@ -33,11 +34,38 @@ def utcnow():
 log = logging.getLogger(__name__)
 
 QUIET_START = timedelta(hours=24)
-LAST_CALL_WINDOW = timedelta(hours=48)
-LAST_CALL_GAP = timedelta(days=3)
 ALERT_GAP = timedelta(hours=23)
-DIGEST_DAYS = 8  # what the digest looks at
-EVENING_HOUR = 21  # no reminder email after this local hour
+EVENING_HOUR = 21  # no email after this local hour
+
+# Every reason the Studio emails the team: (key, name, what it is, on unless changed in Settings).
+EMAIL_KINDS = [
+    ("runway", "Running low on posts",
+     "Only one approved post (or none) is left to go out. One email, then one a week while it stays that low.", True),
+    ("alert_publish", "A post failed to publish",
+     "A post couldn't be sent to its platform after retrying. At most one alert email a day.", True),
+    ("alert_announcement", "The monthly email failed to send",
+     "The monthly email to the mailing list couldn't be sent after three tries.", True),
+]
+KIND_DEFAULTS = {key: default for key, _, _, default in EMAIL_KINDS}
+ALERT_SETTING = {"publish_failed": "alert_publish", "announcement_failed": "alert_announcement"}
+RUNWAY_LOW = 1  # email when this many approved posts (or fewer) are left
+RUNWAY_REPEAT = timedelta(days=7)
+PLAN_WEEKS = 8  # how far ahead Claude sessions plan
+
+
+def enabled(db: Session, kind: str) -> bool:
+    """Is this email on? A choice made in Settings wins; otherwise the default."""
+    row = db.get(AppSetting, f"email.{kind}")
+    return (row.value == "1") if row is not None else KIND_DEFAULTS[kind]
+
+
+def set_enabled(db: Session, kind: str, on: bool) -> None:
+    row = db.get(AppSetting, f"email.{kind}")
+    if row is None:
+        db.add(AppSetting(key=f"email.{kind}", value="1" if on else "0"))
+    else:
+        row.value = "1" if on else "0"
+    db.flush()
 
 
 def recipients(db: Session) -> list[str]:
@@ -79,13 +107,11 @@ def _send(db: Session, kind: str, key: str, subject: str, body: str, to: list[st
 
 
 def _footer() -> str:
-    return (f"\n\n-- \nCGW Content Studio\n{settings().base_url}\n"
-            "You get one digest a week, a last call when something goes out within two days unapproved, "
-            "and an alert if something breaks.")
+    return f"\n\n-- \nCGW Content Studio\nChoose which emails you get: {settings().base_url}/settings"
 
 
 def started_at(db: Session) -> datetime:
-    """When this database first ran the reminder loop (a fresh install, or the upgrade to digests)."""
+    """When this database first ran the reminder loop (a fresh install, or the upgrade to these emails)."""
     row = db.scalar(select(ReminderLog).where(ReminderLog.kind == "installed", ReminderLog.key == "first_start"))
     if row is None:
         row = ReminderLog(kind="installed", key="first_start", sent_at=utcnow())
@@ -103,16 +129,13 @@ def _when(dt: datetime) -> str:
     return f"{local:%a %b} {local.day}, {local:%I:%M %p}".replace(", 0", ", ")
 
 
-def _day(dt: datetime) -> str:
-    local = to_local(dt)
-    return f"{local:%a %b} {local.day}"
-
-
 # --- problem alerts ------------------------------------------------------
 
 
-def alert(db: Session, kind: str, key: str, line: str, urgent: bool) -> None:
-    """Queue something to tell people. Urgent: next alert email (max one a day). Otherwise: the digest."""
+def alert(db: Session, kind: str, key: str, line: str, urgent: bool = True) -> None:
+    """Queue something to tell people: it goes out in the next alert email (at most one a day)."""
+    if kind in ALERT_SETTING and not enabled(db, ALERT_SETTING[kind]):
+        return
     if db.scalar(select(PendingAlert).where(PendingAlert.kind == kind, PendingAlert.key == key)):
         return
     db.add(PendingAlert(kind=kind, key=key[:96], line=line, urgent=urgent))
@@ -145,33 +168,6 @@ def publish_failures(db: Session, failed: list[ChannelVersion]) -> None:
     db.commit()
 
 
-def event_changed(db: Session, event, posts, changes: list[str]) -> bool:
-    if not posts:
-        return False
-    soon = utcnow() + timedelta(days=3)
-    urgent = any(v.publish_state == "published" or (v.enabled and v.scheduled_at and v.scheduled_at < soon)
-                 for p in posts for v in p.versions)
-    lines = "\n".join(f"  - {p.display_title} ({p.status.replace('_', ' ')}): {settings().base_url}/posts/{p.id}"
-                      for p in posts)
-    line = (f"Event changed: \"{event.title}\" ({', '.join(changes)}). Posts about it need another look; "
-            f"any approval was cleared:\n{lines}")
-    alert(db, "event_changed", f"{event.id}:{event.facts_hash[:12]}", line, urgent=urgent)
-    return True
-
-
-def event_cancelled(db: Session, event, pulled, announced: bool) -> bool:
-    line = f"Event cancelled: \"{event.title}\" was cancelled or removed from the calendar."
-    if pulled:
-        line += " These posts were pulled and won't publish:\n" + "\n".join(
-            f"  - {p.display_title}: {settings().base_url}/posts/{p.id}" for p in pulled)
-    if announced:
-        line += ("\n  It was already announced, so a cancellation notice is queued for the next Claude session. "
-                 "Also delete any copies already scheduled on batch-day platforms.")
-    urgent = announced or any(p.approved_at for p in pulled)
-    alert(db, "event_cancelled", str(event.id), line, urgent=urgent)
-    return True
-
-
 def announcement_sent(db: Session, ann) -> bool:
     """Shown in the app; no email."""
     return False
@@ -185,166 +181,62 @@ def announcement_failed(db: Session, ann) -> bool:
     return True
 
 
-# --- weekly digest -------------------------------------------------------
+# --- running low ---------------------------------------------------------
 
 
-def _first_slot(post: Post) -> datetime | None:
-    times = [v.scheduled_at for v in post.versions if v.enabled and v.scheduled_at and v.publish_state == "pending"]
-    return min(times) if times else None
-
-
-def digest(db: Session) -> tuple[str, str]:
-    """(subject, body) of the weekly email; an empty subject means there's nothing to say."""
-    from .models import Announcement, Event
-
+def runway_message(db: Session) -> tuple[str, str]:
+    left = runway(db)
     s = settings()
-    now = utcnow()
-    horizon = now + timedelta(days=DIGEST_DAYS)
-    sections: list[str] = []
-    subject_bits: list[str] = []
-
-    # Posts to approve this week, with a deadline the day before each goes out.
+    if not left:
+        subject, first = "CGW Studio: no posts left scheduled", "Nothing approved is waiting to go out."
+    else:
+        post, when = left[0]
+        subject = "CGW Studio: only 1 post left scheduled"
+        first = f"The last approved post is \"{post.display_title}\", going out {_when(when)}."
     waiting = db.scalars(select(Post).where(Post.status.in_(("in_review", "draft")))).all()
-    dated = sorted(((p, _first_slot(p)) for p in waiting), key=lambda x: x[1] or horizon + timedelta(days=999))
-    soon = [(p, t) for p, t in dated if t and t < horizon]
-    later = len(dated) - len(soon)
-    if soon:
-        lines = [f"- Approve by {_day(t - timedelta(days=1)) if t - now > timedelta(days=1) else 'today'}: "
-                 f"{p.display_title} ({', '.join(ch.CHANNELS[v.channel].label for v in p.enabled_versions)}), "
-                 f"goes out {_when(t)}" for p, t in soon]
-        more = f"\n{later} more in review for later dates." if later else ""
-        sections.append("TO APPROVE THIS WEEK\n" + "\n".join(lines) + more + f"\nReview: {s.base_url}/review")
-        subject_bits.append(f"{len(soon)} to approve")
-    emails = db.scalars(select(Announcement).where(Announcement.status == "in_review")).all()
-    if emails:
-        sections.append("MONTHLY EMAIL\n" + "\n".join(
-            f"- Approve \"{a.subject}\" before it sends {_when(a.send_at)}: {s.base_url}/announcements/{a.id}" for a in emails))
-        subject_bits.append("monthly email to approve")
-
-    # A Claude session, only when the work is due soon or uploads have waited a while.
     queued = claude_queue(db)
-    due = [p for p in queued if (p.target_at and p.target_at < now + timedelta(days=10))
-           or (not p.target_at and now - p.created_at >= timedelta(days=s.claude_max_age_days))]
-    drafts = db.scalars(select(Announcement).where(Announcement.status == "needs_claude")).all()
-    if due or drafts:
-        minutes = max(5, round(len(queued) * 1.5) + 5 * len(drafts))
-        what = f"{len(queued)} item(s) waiting" + (", including the monthly email draft" if drafts else "")
-        sections.append(f"CLAUDE SESSION (~{minutes} min)\n{what}; {len(due)} due in the next 10 days.\n"
-                        "In Claude Code (or the Code tab in Claude Desktop), open the social-media folder and run "
-                        "/cgw-session.")
-        subject_bits.append(f"Claude session ~{minutes} min")
-
-    # Batch day this week.
-    info = batch.cycle_info()
-    today = local_now().date()
-    next_batch = info["start"] if info["start"] >= today else info["next"]
-    if (next_batch - today).days < 7:
-        rows = [r for r in batch.overview(db) if r["count"]]
-        if rows:
-            lines = [f"- {r['channel'].label}: {r['count']} post(s): {s.base_url}/batch/{r['channel'].key}" for r in rows]
-            sections.append(f"BATCH DAY {next_batch:%a %b} {next_batch.day}\nSchedule these in each platform's own "
-                            "scheduler (the browser extension fills the forms):\n" + "\n".join(lines))
-            subject_bits.append("batch day")
-
-    # Posts that have to go up by hand on the day (Google Business Profile).
-    on_day = [c.key for c in ch.CHANNELS.values() if ch.mode(c) == "on_day"]
-    by_hand = db.scalars(select(ChannelVersion).join(Post).where(
-        ChannelVersion.channel.in_(on_day), ChannelVersion.enabled.is_(True), ChannelVersion.publish_state == "pending",
-        Post.status == "approved", ChannelVersion.scheduled_at >= now, ChannelVersion.scheduled_at < horizon)).all()
-    if by_hand:
-        sections.append("POST BY HAND\n" + "\n".join(
-            f"- {_day(v.scheduled_at)}: {ch.CHANNELS[v.channel].label}: {v.post.display_title}: {s.base_url}/batch/{v.channel}"
-            for v in by_hand))
-
-    # Empty days, only when the next week is thin.
-    if approved_in_next(db, 7) < 2:
-        found = gaps(db, weeks=2)
-        lines = [f"- Week of {w['week_of']}: {w['planned']} of {w['target']} posts planned" for w in found["weeks"] if w["missing"]]
-        if found["gbp_this_cycle"] < found["gbp_target"]:
-            lines.append("- Google Business Profile: no post yet this cycle")
-        if lines:
-            sections.append("SCHEDULE GAPS\n" + "\n".join(lines) + "\nRun /cgw-plan for ideas from unused photos.")
-
-    # Photos at this week's weekly events.
-    if s.photo_nudges:
-        weekly = db.scalars(select(Event).where(Event.series != "", Event.promote.is_(True), Event.status == "active",
-                                                Event.start > now, Event.start < now + timedelta(days=7))
-                            .order_by(Event.start)).all()
-        if weekly:
-            names = ", ".join(f"{e.title} {_day(e.start)}" for e in weekly)
-            sections.append(f"PHOTOS\n{names}: grab 3-5 photos or a short clip (projects, people at the tools, "
-                            "anything funny; ask before photographing faces). Upload with \"Taken at\" set, or drop "
-                            "them in the Discord uploads channel. Next week's post uses them.")
-
-    # Event changes and cancellations that aren't urgent.
-    notes = db.scalars(select(PendingAlert).where(PendingAlert.urgent.is_(False), PendingAlert.sent_at.is_(None))
-                       .order_by(PendingAlert.created_at)).all()
-    if notes:
-        sections.append("CALENDAR CHANGES\n" + "\n\n".join(n.line for n in notes))
-
-    needs_you = bool(subject_bits) or bool(notes) or any(x.startswith(("SCHEDULE GAPS", "POST BY HAND")) for x in sections)
-    if not needs_you:
-        return "", ""
-    subject = "CGW Studio this week: " + (", ".join(subject_bits) if subject_bits else "a few things to check")
-    return subject, "\n\n".join(sections)
+    lines = [first]
+    if waiting:
+        lines.append(f"{len(waiting)} more are drafted but not approved yet: {s.base_url}/review")
+    if queued:
+        lines.append(f"{len(queued)} items are waiting for Claude to draft them.")
+    lines.append(f"To plan the next {PLAN_WEEKS} weeks in one go, open the social-media folder in Claude Code "
+                 "(or the Code tab in Claude Desktop) and run /cgw-session, then approve what it drafts on the "
+                 "Review page.")
+    lines.append(f"This is the only email about it: one now, then one a week while {RUNWAY_LOW} or fewer posts "
+                 f"are left. It stops once there are more than {RUNWAY_LOW} again.")
+    return subject, "\n\n".join(lines)
 
 
-def weekly_digest(db: Session, force_to: list[str] | None = None) -> bool:
-    subject, body = digest(db)
-    if not subject:
-        return False
+def runway_email(db: Session, force_to: list[str] | None = None) -> bool:
+    """The running-low email: once when the runway drops to RUNWAY_LOW approved posts or fewer, then once a
+    week while it stays that low. A row in the reminder log remembers that we're in a low stretch."""
     if force_to:
+        subject, body = runway_message(db)
         mailer.send(force_to, "[TEST] " + subject, body + _footer())
         return True
-    if not _send(db, "digest", local_now().date().isoformat(), subject, body):
+    if not enabled(db, "runway"):
         return False
-    for n in db.scalars(select(PendingAlert).where(PendingAlert.urgent.is_(False), PendingAlert.sent_at.is_(None))):
-        n.sent_at = utcnow()
-    db.commit()
-    return True
-
-
-def next_digest_date():
-    s = settings()
-    now = local_now()
-    days = (s.digest_day - now.weekday()) % 7
-    if days == 0 and now.hour >= s.reminder_hour:
-        days = 7
-    return (now + timedelta(days=days)).date()
-
-
-# --- last call -----------------------------------------------------------
-
-
-def last_call(db: Session) -> bool:
-    """Unapproved posts that go out (or should) within 48 hours. Max one email every 3 days; one per post."""
-    if not settings().last_call_alerts:
-        return False
-    last = _last_sent(db, "last_call")
-    if last and utcnow() - last < LAST_CALL_GAP:
+    state = db.scalar(select(ReminderLog).where(ReminderLog.kind == "runway_state", ReminderLog.key == "low"))
+    if len(runway(db)) > RUNWAY_LOW:
+        if state is not None:  # recovered: the next dip emails right away
+            db.delete(state)
+            db.commit()
         return False
     now = utcnow()
-    cutoff = now + LAST_CALL_WINDOW
-    found = []
-    for p in db.scalars(select(Post).where(Post.status.in_(("needs_claude", "draft", "in_review")))).all():
-        when = _first_slot(p) or p.target_at
-        if when and now < when < cutoff:
-            seen = db.scalar(select(ReminderLog).where(ReminderLog.kind == "last_call_post", ReminderLog.key == str(p.id)))
-            if not seen:
-                found.append((p, when))
-    if not found:
+    if state is not None and now - state.sent_at < RUNWAY_REPEAT:
         return False
-    s = settings()
-    lines = []
-    for p, when in sorted(found, key=lambda x: x[1]):
-        state = "still needs drafting (run /cgw-session)" if p.status == "needs_claude" else "not approved yet"
-        lines.append(f"- {p.display_title}: goes out {_when(when)}, {state}: {s.base_url}/posts/{p.id}")
-    body = ("These go out within two days but aren't approved, so they won't publish:\n\n" + "\n".join(lines)
-            + f"\n\nReview: {s.base_url}/review")
-    if not _send(db, "last_call", now.isoformat(timespec="minutes"), f"Last call: {len(found)} post(s) go out within 2 days", body):
+    subject, body = runway_message(db)
+    try:
+        mailer.send(recipients(db), subject, body + _footer())
+    except Exception:
+        log.exception("sending the running-low email failed")
+        db.rollback()
         return False
-    for p, _ in found:
-        _once(db, "last_call_post", str(p.id))
+    if state is None:
+        db.add(ReminderLog(kind="runway_state", key="low", sent_at=now))
+    else:
+        state.sent_at = now
     db.commit()
     return True
 
@@ -360,9 +252,7 @@ def run(db: Session) -> None:
     if not (settings().reminder_hour <= hour < EVENING_HOUR):
         return
     flush_alerts(db)
-    if local_now().weekday() == settings().digest_day:
-        weekly_digest(db)
-    last_call(db)
+    runway_email(db)
 
 
 run_daily = run  # older name

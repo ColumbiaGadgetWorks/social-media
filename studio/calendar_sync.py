@@ -470,26 +470,20 @@ def _clear_approval(post: Post) -> None:
 
 
 def handle_change(db: Session, event: Event, price: str, changes: list[str]) -> list[Post]:
-    old_card = event.card_media_id
-    new_card = _make_card(db, event, price) if event.promos_created else None
-    touched = []
-    targets = promo_targets(event)
+    """The event changed while posts about it were queued: take those posts out of the queue rather than
+    keep them with out-of-date facts. Posts that already published are left alone. A weekly event gets a
+    fresh post for the new details; for a one-off event, queue new posts if you still want them."""
+    removed = []
     for post in _open_posts(event):
-        if post.purpose in targets:
-            post.target_at = targets[post.purpose]
-        if new_card is not None:
-            for link in post.media_links:
-                if link.media_id == old_card:
-                    link.media = new_card
-        post.note = _note(event, post.purpose or "promo", post.angle)
-        post.review_comment = f"The event changed ({', '.join(changes)}). Check the dates and details."
-        if post.status == "approved":
-            post.status = "in_review"
-            _clear_approval(post)
-            audit(db, SYSTEM, "approval_cleared", "post", post.id, reason="event changed", changes=changes)
-        touched.append(post)
-    audit(db, SYSTEM, "event_changed", "event", event.id, changes=changes, posts=[p.id for p in touched])
-    return touched
+        post.status = "rejected"
+        post.review_comment = f"The event changed ({', '.join(changes)}), so this post was removed from the queue."
+        _clear_approval(post)
+        audit(db, SYSTEM, "rejected", "post", post.id, reason="event changed", changes=changes)
+        removed.append(post)
+    if event.series and removed:
+        event.promos_created = False
+    audit(db, SYSTEM, "event_changed", "event", event.id, changes=changes, posts=[p.id for p in removed])
+    return removed
 
 
 def refresh_card(db: Session, event: Event, price: str = "") -> list[Post]:
@@ -704,8 +698,6 @@ def series_context(db: Session, post: Post) -> dict:
 
 def sync(db: Session, text: str) -> dict:
     """Bring Event rows in line with the feed. Returns what happened, for reminders and logs."""
-    from . import reminders
-
     now = utcnow()
     horizon = now + timedelta(days=settings().calendar_lookahead_days)
     occurrences = parse(text, now, horizon)
@@ -737,9 +729,8 @@ def sync(db: Session, text: str) -> dict:
             if o["series"] and event.series != o["series"]:  # spotted as weekly (also after an upgrade)
                 event.series, event.promote = o["series"], should_promote(o)
             if o["cancelled"] and event.status != "cancelled":
-                pulled, announced = handle_cancel(db, event)
+                handle_cancel(db, event)
                 result["cancelled"] += 1
-                reminders.event_cancelled(db, event, pulled, announced)
             elif event.facts_hash != digest and event.status != "cancelled":
                 fields = ("title", "start", "end", "location", "description", "url")
                 changes = [k for k in fields if str(getattr(event, k)) != str(o[k])]
@@ -748,9 +739,8 @@ def sync(db: Session, text: str) -> dict:
                 event.facts_hash, event.changed_at = digest, now
                 event.promote = should_promote(o)
                 event.email_ok = o["directives"].get("email", "").lower() not in ("no", "false", "off")
-                touched = handle_change(db, event, price, changes or ["details"])
+                handle_change(db, event, price, changes or ["details"])
                 result["changed"] += 1
-                reminders.event_changed(db, event, touched, changes)
             if refresh_card(db, event, price) or refresh_badges(db, event):
                 result["refreshed"] = result.get("refreshed", 0) + 1
         seen.add(event.id)
@@ -762,9 +752,8 @@ def sync(db: Session, text: str) -> dict:
             continue
         event.missing_count += 1
         if event.missing_count >= 2:
-            pulled, announced = handle_cancel(db, event)
+            handle_cancel(db, event)
             result["cancelled"] += 1
-            reminders.event_cancelled(db, event, pulled, announced)
     result["promoted"] += weekly_promos(db)
     if retired := retire_past_posts(db):
         result["retired"] = retired

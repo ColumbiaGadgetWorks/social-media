@@ -326,29 +326,27 @@ def test_sync_creates_promos_for_one_off_and_weekly_events(app2):
         assert calendar_sync.sync(s, calendar_text()) == {"new": 0, "promoted": 0, "changed": 0, "cancelled": 0}
 
 
-def test_event_change_clears_approval_and_moves_targets(app2):
+def test_event_change_removes_its_queued_posts_without_an_email(app2):
     with db_mod.session_scope() as s:
         calendar_sync.sync(s, calendar_text())
     with db_mod.session_scope() as s:
         event = s.scalar(select(Event).where(Event.uid == "solder@cgw"))
-        post = event.posts[0]
+        announce, reminder = event.posts
         actor = adam(s)
-        post_svc.update_post(s, actor, post, versions=[{"channel": "facebook", "enabled": True, "body": "Solder!",
-                                                         "scheduled_at": db_mod.utcnow() + timedelta(days=5)}])
-        post_svc.submit_for_review(s, actor, post)
-        post_svc.approve(s, actor, post, post_svc.approval_hash(post))
-        post_id, old_target = post.id, post.target_at
+        post_svc.update_post(s, actor, announce, versions=[{"channel": "facebook", "enabled": True, "body": "Solder!",
+                                                             "scheduled_at": db_mod.utcnow() + timedelta(days=5)}])
+        post_svc.submit_for_review(s, actor, announce)
+        post_svc.approve(s, actor, announce, post_svc.approval_hash(announce))
+        announce_id, reminder_id = announce.id, reminder.id
     with db_mod.session_scope() as s:  # moved two days later and an hour earlier
         result = calendar_sync.sync(s, calendar_text(class_offset=32, class_time="1700"))
     assert result["changed"] == 1 and result["new"] == 0
-    with db_mod.session_scope() as s:
-        post = s.get(Post, post_id)
-        assert post.status == "in_review" and post.approved_hash is None
-        assert "changed" in post.review_comment and post.target_at - old_target == timedelta(days=2)
-    with db_mod.session_scope() as s:  # posts go out in 5 days: it waits for the weekly digest
-        alert = s.scalar(select(PendingAlert).where(PendingAlert.kind == "event_changed"))
-        assert alert and not alert.urgent and "Intro to Soldering" in alert.line
-        assert "CALENDAR CHANGES" in reminders.digest(s)[1]
+    with db_mod.session_scope() as s:  # the approved post and the one nobody had drafted are both out of the queue
+        for post_id in (announce_id, reminder_id):
+            post = s.get(Post, post_id)
+            assert post.status == "rejected" and post.approved_hash is None
+            assert "changed" in post.review_comment and "removed from the queue" in post.review_comment
+        assert s.scalar(select(PendingAlert)) is None
     assert mailer.outbox == []
 
 
@@ -361,8 +359,7 @@ def test_cancelled_event_pulls_posts(app2):
         event = s.scalar(select(Event).where(Event.uid == "solder@cgw"))
         assert event.status == "cancelled"
         assert {p.status for p in event.posts} == {"rejected"}
-        alert = s.scalar(select(PendingAlert).where(PendingAlert.kind == "event_cancelled"))
-        assert alert and not alert.urgent  # nothing was announced or approved yet
+        assert s.scalar(select(PendingAlert)) is None  # no email for this either
 
 
 def test_sync_redraws_a_stale_event_card_and_reopens_approved_posts(app2):
@@ -410,8 +407,12 @@ def test_event_badge_goes_on_a_real_photo_and_follows_event_changes(app2):
         post_id, first = post.id, badge.id
         # a plain event card is left alone, and so is a post with no media
         assert calendar_sync.apply_badge(s, event.posts[1]) is None
-    with db_mod.session_scope() as s:  # the class moves two days: the badge on the photo is redrawn
-        calendar_sync.sync(s, calendar_text(class_offset=32, class_time="1700"))
+    with db_mod.session_scope() as s:  # the event's details change underneath it: the badge is redrawn
+        event = s.scalar(select(Event).where(Event.uid == "solder@cgw"))
+        event.start = event.start + timedelta(days=2)
+        s.flush()
+        touched = calendar_sync.refresh_badges(s, event)
+        assert [p.id for p in touched] == [post_id]
     with db_mod.session_scope() as s:
         post = s.get(Post, post_id)
         assert len(post.media) == 1 and post.media[0].id != first and "event-badge" in post.media[0].tags
@@ -500,8 +501,6 @@ def test_gaps_and_schedule_dry_reminder(app2, monkeypatch):
     with db_mod.session_scope() as s:
         found = queue.gaps(s)
         assert found["weeks"][1]["missing"] == 3 and found["gbp_this_cycle"] == 0
-        subject, body = reminders.digest(s)
-    assert subject and "SCHEDULE GAPS" in body and "/cgw-plan" in body
 
 
 # --- migration ---------------------------------------------------------------------------
