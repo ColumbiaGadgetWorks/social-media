@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import time
 from collections import defaultdict
 from datetime import timedelta
@@ -984,17 +985,26 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
         ("Subtitles (Whisper)", bool(s.whisper_model), f"STUDIO_WHISPER_MODEL={s.whisper_model or '(off)'}"),
     ]
     lan = lan_address(request)
+    return render(request, "settings.html", user, tokens=tokens, new_token=new_token, new_scope=new_scope,
+                  base_url=s.base_url, lan=lan, lan_configured=bool(s.lan_url),
+                  connections=connections, media_base=s.media_base_url, is_admin=user.has_role("admin"), tab="general")
+
+
+@router.get("/settings/emails")
+def settings_emails_page(request: Request, db: Session = Depends(get_db)):
     from . import queue as queue_mod
     from . import reminders
 
+    user = require(request, db)
     left = queue_mod.runway(db)
-    email_kinds = [{"key": k, "name": n, "what": w, "on": reminders.enabled(db, k)} for k, n, w, _ in reminders.EMAIL_KINDS]
-    return render(request, "settings.html", user, tokens=tokens, new_token=new_token, new_scope=new_scope,
-                  base_url=s.base_url, lan=lan, lan_configured=bool(s.lan_url),
-                  reminder_hour=s.reminder_hour, quiet=reminders.quiet(db), reminder_to=reminders.recipients(db),
-                  connections=connections, media_base=s.media_base_url, is_admin=user.has_role("admin"),
-                  email_kinds=email_kinds, runway_left=len(left), runway_last=left[-1][1] if left else None,
-                  runway_low=reminders.RUNWAY_LOW, plan_weeks=reminders.PLAN_WEEKS)
+    kinds = [{"key": k, "name": n, "what": w, "on": reminders.enabled(db, k)} for k, n, w, _ in reminders.EMAIL_KINDS]
+    options = [{"key": k, "label": label, "low": low, "high": high, "value": reminders.option(db, k)}
+               for k, (_, low, high, label) in reminders.OPTIONS.items()]
+    return render(request, "settings_emails.html", user, tab="emails", is_admin=user.has_role("admin"), kinds=kinds,
+                  options=options, typed_to=reminders.configured_recipients(db), sent_to=reminders.recipients(db),
+                  runway_left=len(left), runway_last=left[-1][1] if left else None,
+                  runway_low=reminders.option(db, "runway_low"), plan_weeks=reminders.PLAN_WEEKS,
+                  quiet=reminders.quiet(db))
 
 
 @router.post("/settings/emails")
@@ -1004,15 +1014,43 @@ async def settings_emails(request: Request, db: Session = Depends(get_db)):
     user = require(request, db)
     form = await form_with_csrf(request)
     if not user.has_role("admin"):
-        flash(request, "Only an admin can change which emails are sent.", "error")
-        return back("/settings")
-    chosen = {}
+        flash(request, "Only an admin can change the email settings.", "error")
+        return back("/settings/emails")
+    chosen: dict = {}
+    values: dict[str, int] = {}
+    for key, (_, low, high, label) in reminders.OPTIONS.items():
+        raw = str(form.get(f"opt.{key}", "")).strip()
+        values[key] = reminders.option(db, key)
+        if not raw:
+            continue
+        try:
+            value = int(raw)
+        except ValueError:
+            flash(request, f"\"{label}\" needs a whole number.", "error")
+            return back("/settings/emails")
+        if not low <= value <= high:
+            flash(request, f"\"{label}\" must be between {low} and {high}.", "error")
+            return back("/settings/emails")
+        values[key] = value
+    if values["send_from"] >= values["send_until"]:
+        flash(request, "The earliest hour has to be before the latest hour.", "error")
+        return back("/settings/emails")
+    typed = str(form.get("recipients", "")).strip()
+    bad = [a for a in re.split(r"[\s,;]+", typed) if a and "@" not in a]
+    if bad:
+        flash(request, f"These don't look like email addresses: {', '.join(bad)}", "error")
+        return back("/settings/emails")
     for kind, *_ in reminders.EMAIL_KINDS:
         chosen[kind] = form.get(f"email.{kind}") == "1"
         reminders.set_enabled(db, kind, chosen[kind])
+    for key, value in values.items():
+        reminders.set_option(db, key, str(value))
+        chosen[key] = value
+    reminders.set_option(db, "recipients", typed)
+    chosen["recipients"] = typed
     audit(db, Actor("user", user), "email_settings_changed", "user", user.id, **chosen)
-    flash(request, "Email choices saved.")
-    return back("/settings")
+    flash(request, "Email settings saved.")
+    return back("/settings/emails")
 
 
 @router.post("/settings/runway-test")
@@ -1023,14 +1061,14 @@ async def runway_test(request: Request, db: Session = Depends(get_db)):
     await form_with_csrf(request)
     if not user.email:
         flash(request, "Add an email address to your account first (Users page).", "error")
-        return back("/settings")
+        return back("/settings/emails")
     try:
         reminders.runway_email(db, force_to=[user.email])
     except Exception as exc:
         flash(request, f"Couldn't send: {exc}", "error")
-        return back("/settings")
+        return back("/settings/emails")
     flash(request, f"Test sent to {user.email}.")
-    return back("/settings")
+    return back("/settings/emails")
 
 
 @router.post("/settings/tokens")

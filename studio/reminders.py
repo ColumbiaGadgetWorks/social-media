@@ -14,6 +14,7 @@ posts out of the queue (see calendar_sync), without an email.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
@@ -33,23 +34,28 @@ def utcnow():
 
 log = logging.getLogger(__name__)
 
-QUIET_START = timedelta(hours=24)
-ALERT_GAP = timedelta(hours=23)
-EVENING_HOUR = 21  # no email after this local hour
 
 # Every reason the Studio emails the team: (key, name, what it is, on unless changed in Settings).
 EMAIL_KINDS = [
     ("runway", "Running low on posts",
-     "Only one approved post (or none) is left to go out. One email, then one a week while it stays that low.", True),
+     "Few approved posts are left to go out (you pick how few below). One email, then a repeat every so often while it stays that low.", True),
     ("alert_publish", "A post failed to publish",
-     "A post couldn't be sent to its platform after retrying. At most one alert email a day.", True),
+     "A post couldn't be sent to its platform after retrying. Problems are bundled into one email.", True),
     ("alert_announcement", "The monthly email failed to send",
      "The monthly email to the mailing list couldn't be sent after three tries.", True),
 ]
 KIND_DEFAULTS = {key: default for key, _, _, default in EMAIL_KINDS}
+# Timing and wording choices, editable on the Settings > Emails page: key -> (default, minimum, maximum, label).
+# A value saved in the database wins over the default. Recipients is separate (text).
+OPTIONS = {
+    "send_from": (None, 0, 23, "Don't send before this hour (local time, 0-23)"),
+    "send_until": (21, 1, 24, "Don't send at or after this hour (local time, 1-24)"),
+    "runway_low": (1, 0, 20, "Running low: email when this many approved posts (or fewer) are left"),
+    "runway_repeat_days": (7, 1, 60, "Running low: days between repeat emails while it stays low"),
+    "alert_gap_hours": (24, 1, 168, "Failure alerts: at least this many hours between emails (problems are bundled)"),
+    "quiet_hours": (24, 0, 168, "Stay silent this many hours after the Studio first starts on a new database"),
+}
 ALERT_SETTING = {"publish_failed": "alert_publish", "announcement_failed": "alert_announcement"}
-RUNWAY_LOW = 1  # email when this many approved posts (or fewer) are left
-RUNWAY_REPEAT = timedelta(days=7)
 PLAN_WEEKS = 8  # how far ahead Claude sessions plan
 
 
@@ -68,7 +74,38 @@ def set_enabled(db: Session, kind: str, on: bool) -> None:
     db.flush()
 
 
+def option(db: Session, key: str) -> int:
+    """A timing choice from Settings, or its default."""
+    default, low, high, _ = OPTIONS[key]
+    if default is None:  # send_from falls back to the STUDIO_REMINDER_HOUR setting
+        default = settings().reminder_hour
+    row = db.get(AppSetting, f"email_opt.{key}")
+    try:
+        value = int(row.value) if row is not None else default
+    except ValueError:
+        value = default
+    return max(low, min(high, value))
+
+
+def set_option(db: Session, key: str, value: str) -> None:
+    row = db.get(AppSetting, f"email_opt.{key}")
+    if row is None:
+        db.add(AppSetting(key=f"email_opt.{key}", value=value))
+    else:
+        row.value = value
+    db.flush()
+
+
+def configured_recipients(db: Session) -> str:
+    """The address list typed on the Settings page ('' means: use the default people)."""
+    row = db.get(AppSetting, "email_opt.recipients")
+    return row.value if row is not None else ""
+
+
 def recipients(db: Session) -> list[str]:
+    typed = [a for a in re.split(r"[\s,;]+", configured_recipients(db)) if "@" in a]
+    if typed:
+        return typed
     configured = settings().reminder_emails
     if configured:
         return configured
@@ -121,7 +158,7 @@ def started_at(db: Session) -> datetime:
 
 
 def quiet(db: Session) -> bool:
-    return utcnow() - started_at(db) < QUIET_START
+    return utcnow() - started_at(db) < timedelta(hours=option(db, "quiet_hours"))
 
 
 def _when(dt: datetime) -> str:
@@ -148,7 +185,7 @@ def flush_alerts(db: Session) -> bool:
     if not pending:
         return False
     last = _last_sent(db, "alerts")
-    if last and utcnow() - last < ALERT_GAP:
+    if last and utcnow() - last < timedelta(hours=option(db, "alert_gap_hours")):
         return False
     body = "Something needs a look:\n\n" + "\n\n".join(a.line for a in pending)
     subject = pending[0].line.split("\n")[0][:90] if len(pending) == 1 else f"{len(pending)} problems need a look"
@@ -186,12 +223,13 @@ def announcement_failed(db: Session, ann) -> bool:
 
 def runway_message(db: Session) -> tuple[str, str]:
     left = runway(db)
+    low = option(db, "runway_low")
     s = settings()
     if not left:
         subject, first = "CGW Studio: no posts left scheduled", "Nothing approved is waiting to go out."
     else:
         post, when = left[0]
-        subject = "CGW Studio: only 1 post left scheduled"
+        subject = f"CGW Studio: only {len(left)} post{'s' if len(left) != 1 else ''} left scheduled"
         first = f"The last approved post is \"{post.display_title}\", going out {_when(when)}."
     waiting = db.scalars(select(Post).where(Post.status.in_(("in_review", "draft")))).all()
     queued = claude_queue(db)
@@ -203,14 +241,14 @@ def runway_message(db: Session) -> tuple[str, str]:
     lines.append(f"To plan the next {PLAN_WEEKS} weeks in one go, open the social-media folder in Claude Code "
                  "(or the Code tab in Claude Desktop) and run /cgw-session, then approve what it drafts on the "
                  "Review page.")
-    lines.append(f"This is the only email about it: one now, then one a week while {RUNWAY_LOW} or fewer posts "
-                 f"are left. It stops once there are more than {RUNWAY_LOW} again.")
+    lines.append(f"This is the only email about it: one now, then one every {option(db, 'runway_repeat_days')} days "
+                 f"while {low} or fewer posts are left. It stops once there are more than {low} again.")
     return subject, "\n\n".join(lines)
 
 
 def runway_email(db: Session, force_to: list[str] | None = None) -> bool:
-    """The running-low email: once when the runway drops to RUNWAY_LOW approved posts or fewer, then once a
-    week while it stays that low. A row in the reminder log remembers that we're in a low stretch."""
+    """The running-low email: once when the runway drops to the chosen number of approved posts or fewer, then
+    repeats on the chosen interval while it stays that low. A row in the reminder log remembers that we're in a low stretch."""
     if force_to:
         subject, body = runway_message(db)
         mailer.send(force_to, "[TEST] " + subject, body + _footer())
@@ -218,13 +256,13 @@ def runway_email(db: Session, force_to: list[str] | None = None) -> bool:
     if not enabled(db, "runway"):
         return False
     state = db.scalar(select(ReminderLog).where(ReminderLog.kind == "runway_state", ReminderLog.key == "low"))
-    if len(runway(db)) > RUNWAY_LOW:
+    if len(runway(db)) > option(db, "runway_low"):
         if state is not None:  # recovered: the next dip emails right away
             db.delete(state)
             db.commit()
         return False
     now = utcnow()
-    if state is not None and now - state.sent_at < RUNWAY_REPEAT:
+    if state is not None and now - state.sent_at < timedelta(days=option(db, "runway_repeat_days")):
         return False
     subject, body = runway_message(db)
     try:
@@ -249,7 +287,7 @@ def run(db: Session) -> None:
     if quiet(db):
         return
     hour = local_now().hour
-    if not (settings().reminder_hour <= hour < EVENING_HOUR):
+    if not (option(db, "send_from") <= hour < option(db, "send_until")):
         return
     flush_alerts(db)
     runway_email(db)

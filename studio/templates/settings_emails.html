@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Email settings · CGW Studio{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+{% include "_settings_tabs.html" %}
+<form method="post" action="/settings/emails" class="card" style="max-width:760px">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <h2 style="margin-top:0">Which emails</h2>
+  <p class="small muted">Every reason the Studio emails the team, and nothing else.</p>
+  {% for k in kinds %}
+  <label class="row" style="align-items:flex-start;gap:10px;margin:10px 0;font-weight:400">
+    <input type="checkbox" name="email.{{ k.key }}" value="1" {{ 'checked' if k.on }} {{ 'disabled' if not is_admin }} style="margin-top:4px">
+    <span><strong>{{ k.name }}</strong><br><span class="small muted">{{ k.what }}</span></span>
+  </label>
+  {% endfor %}
+
+  <h2>When</h2>
+  <p class="small muted">Times are Central.{% if quiet %} The Studio is still in its quiet period, so nothing is sent yet.{% endif %}</p>
+  {% for o in options %}
+  <label for="opt-{{ o.key }}">{{ o.label }}</label>
+  <input type="number" id="opt-{{ o.key }}" name="opt.{{ o.key }}" value="{{ o.value }}" min="{{ o.low }}" max="{{ o.high }}" {{ 'disabled' if not is_admin }} style="max-width:120px">
+  {% endfor %}
+
+  <h2>Who gets them</h2>
+  <label for="recipients">Email addresses (separate with commas; leave empty for the default)</label>
+  <input type="text" id="recipients" name="recipients" value="{{ typed_to }}" {{ 'disabled' if not is_admin }} placeholder="e.g. adam@example.org, sam@example.org">
+  <p class="small muted">Right now they go to: {{ sent_to | join(', ') or 'nobody yet. Add addresses here, or an email address to approver and admin accounts.' }} The default is every approver and admin with an email address.</p>
+
+  <p class="small"><strong>Posts left scheduled:</strong> {{ runway_left }}{% if runway_last %} (the last goes out {{ runway_last | local('%a %b %-d') }}){% endif %}.
+    {% if runway_left <= runway_low %}That's low, so the running-low email is active.{% else %}Plenty: the running-low email waits until {{ runway_low }} or fewer are left.{% endif %}
+    Claude sessions plan {{ plan_weeks }} weeks at a time.</p>
+  <div class="row">
+    {% if is_admin %}<button type="submit" class="primary">Save</button>{% else %}<span class="small muted">Only an admin can change these.</span>{% endif %}
+    <button type="submit" formaction="/settings/runway-test">Send me the running-low email as a test</button>
+  </div>
+</form>
+{% endblock %}

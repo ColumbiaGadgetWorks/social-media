@@ -217,15 +217,41 @@ def test_post_page_has_a_preview_for_each_channel(approver_client):
 def test_settings_lists_every_email_and_an_admin_can_change_them(approver_client):
     from studio import reminders
 
-    page = approver_client.get("/settings").text
+    page = approver_client.get("/settings/emails").text
     for _, name, _, _ in reminders.EMAIL_KINDS:
         assert name in page
-    data = {"csrf": csrf_of(approver_client, "/settings"), "email.runway": "1", "email.alert_announcement": "1"}
+    for _, _, _, label in reminders.OPTIONS.values():
+        assert label.split("'")[-1] in page  # apostrophes are escaped in HTML
+    data = {"csrf": csrf_of(approver_client, "/settings/emails"), "email.runway": "1", "email.alert_announcement": "1"}
     r = approver_client.post("/settings/emails", data=data, follow_redirects=False)
     assert r.status_code == 303
     with db_mod.session_scope() as s:
         assert reminders.enabled(s, "runway") and reminders.enabled(s, "alert_announcement")
         assert not reminders.enabled(s, "alert_publish")  # unticked means off
+
+
+def test_email_timing_and_recipients_can_be_set(approver_client):
+    from studio import reminders
+
+    def save(**fields):
+        data = {"csrf": csrf_of(approver_client, "/settings/emails"), "email.runway": "1"} | fields
+        return approver_client.post("/settings/emails", data=data, follow_redirects=True).text
+
+    page = save(**{"opt.runway_low": "3", "opt.runway_repeat_days": "14", "opt.send_from": "9", "opt.send_until": "17",
+                   "recipients": "a@example.org, b@example.org"})
+    assert "Email settings saved." in page
+    with db_mod.session_scope() as s:
+        assert reminders.option(s, "runway_low") == 3 and reminders.option(s, "runway_repeat_days") == 14
+        assert reminders.option(s, "send_from") == 9 and reminders.option(s, "send_until") == 17
+        assert reminders.recipients(s) == ["a@example.org", "b@example.org"]
+    assert "must be between" in save(**{"opt.runway_low": "99"})
+    assert "needs a whole number" in save(**{"opt.runway_low": "lots"})
+    assert "earliest hour" in save(**{"opt.send_from": "18", "opt.send_until": "10"})
+    assert "look like email addresses" in save(recipients="not-an-address")
+    with db_mod.session_scope() as s:  # bad input saved nothing
+        assert reminders.option(s, "runway_low") == 3
+        s.get(reminders.AppSetting, "email_opt.recipients").value = ""
+        assert reminders.recipients(s) == ["adam@example.org"]  # back to the default list
 
 
 def test_only_an_admin_can_change_email_choices(app):
@@ -235,7 +261,7 @@ def test_only_an_admin_can_change_email_choices(app):
     make_user("sam", "contributor")
     with TestClient(app, client=("192.168.1.21", 50000)) as sam:
         login(sam, "sam")
-        r = sam.post("/settings/emails", data={"csrf": csrf_of(sam, "/settings")}, follow_redirects=True)  # nothing ticked
+        r = sam.post("/settings/emails", data={"csrf": csrf_of(sam, "/settings/emails")}, follow_redirects=True)  # nothing ticked
         assert "Only an admin" in r.text
     with db_mod.session_scope() as s:
         assert reminders.enabled(s, "runway")  # unchanged: sam is not an admin
