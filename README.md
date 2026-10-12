@@ -58,7 +58,7 @@ The full plan is in [`docs/plan.html`](docs/plan.html). This is **Phase 1**.
 - **Monthly "Coming up at CGW" email** to the Dolibarr contacts tagged *Email updates* (the list
   the website signup already builds). The draft appears about 12 days before the first Tuesday with
   that month's one-off events, Claude writes it (`draft_announcement`), you approve it, and it sends
-  at 10 am on the first Tuesday. Special announcements are possible; a third email in a month needs
+  at 10 am on the first Tuesday. Special announcements are possible (the newsletter is sent from `info@columbiagadgetworks.org`, special/event ones from `events@columbiagadgetworks.org`; both must be allowed in SMTP2GO); a third email in a month needs
   an admin override. Every email has one-click unsubscribe (RFC 8058), which removes the Dolibarr tag
   and sets the contact's email opt-out; each send is logged on the contact's Dolibarr agenda.
   Social posts can't be emailed.

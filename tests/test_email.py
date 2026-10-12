@@ -234,3 +234,11 @@ def test_claude_drafts_blurbs_but_cannot_change_facts(app3):
         a = s.get(Announcement, ann_id)
         assert a.items[0]["blurb"] == "Learn to solder a blinky badge." and a.items[0]["title"] == "Soldering"
         assert a.approved_hash is None
+
+
+def test_newsletter_and_event_announcements_use_different_addresses(app3):
+    monthly = Announcement(kind="monthly", subject="Coming up at CGW: November", items=[], status="draft")
+    special = Announcement(kind="special", subject="Big news", items=[], status="draft")
+    for a, address in ((monthly, "info@columbiagadgetworks.org"), (special, "events@columbiagadgetworks.org")):
+        msg = ann_mod.build_message(a, "sam@example.org")
+        assert msg["From"] == f"Columbia Gadget Works <{address}>" and msg["Reply-To"] == address

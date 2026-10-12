@@ -21,7 +21,7 @@ import smtplib
 import time
 from datetime import date, datetime, timedelta
 from email.message import EmailMessage
-from email.utils import make_msgid
+from email.utils import formataddr, make_msgid
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -322,16 +322,24 @@ def sync_pending_unsubscribes(db: Session, dolibarr: Dolibarr | None = None) -> 
 # --- sending ------------------------------------------------------------------------
 
 
+def sender_address(ann: Announcement) -> str:
+    """The monthly newsletter comes from the info address; a one-off (event or news) announcement from the
+    events address. Replies go to the same address."""
+    s = settings()
+    return s.newsletter_address if ann.kind == "monthly" else s.events_address
+
+
 def build_message(ann: Announcement, to: str, test: bool = False) -> EmailMessage:
     s = settings()
+    address = sender_address(ann)
     unsub = unsubscribe_url(to)
     html_body, text_body = render(ann, unsub)
     msg = EmailMessage()
-    msg["From"] = s.announce_from
+    msg["From"] = formataddr((s.announce_name, address))
     msg["To"] = to
-    msg["Reply-To"] = s.announce_reply_to
+    msg["Reply-To"] = address
     msg["Subject"] = ("[TEST] " if test else "") + ann.subject
-    msg["Message-ID"] = make_msgid(domain=s.announce_reply_to.split("@")[-1] or None)
+    msg["Message-ID"] = make_msgid(domain=address.split("@")[-1] or None)
     msg["List-Unsubscribe"] = f"<{unsub}>"
     msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"  # RFC 8058 one-click
     msg.set_content(text_body)

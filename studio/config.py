@@ -101,8 +101,10 @@ class Settings:
     dolibarr_api_key: str = ""
     dolibarr_tag: str = "Email updates"
     dolibarr_user_id: int = 1
-    announce_from: str = "Columbia Gadget Works <mail@columbiagadgetworks.org>"
-    announce_reply_to: str = "mail@columbiagadgetworks.org"
+    # The monthly newsletter and one-off event announcements go out from different addresses.
+    newsletter_address: str = "info@columbiagadgetworks.org"
+    events_address: str = "events@columbiagadgetworks.org"
+    announce_name: str = "Columbia Gadget Works"
     announce_hour: int = 10
     org_address: str = "Columbia Gadget Works, 1404 Grand Ave, Columbia, MO 65203"
     # Video: Whisper model for subtitles ("" turns transcription off), ffmpeg threads per job
@@ -210,8 +212,9 @@ def load_settings() -> Settings:
         dolibarr_api_key=os.environ.get("STUDIO_DOLIBARR_API_KEY", ""),
         dolibarr_tag=os.environ.get("STUDIO_DOLIBARR_TAG", "Email updates"),
         dolibarr_user_id=_int("STUDIO_DOLIBARR_USER_ID", 1),
-        announce_from=os.environ.get("STUDIO_ANNOUNCE_FROM", "Columbia Gadget Works <mail@columbiagadgetworks.org>"),
-        announce_reply_to=os.environ.get("STUDIO_ANNOUNCE_REPLY_TO", "mail@columbiagadgetworks.org"),
+        newsletter_address=os.environ.get("STUDIO_NEWSLETTER_ADDRESS", "").strip() or "info@columbiagadgetworks.org",
+        events_address=os.environ.get("STUDIO_EVENTS_ADDRESS", "").strip() or "events@columbiagadgetworks.org",
+        announce_name=os.environ.get("STUDIO_ANNOUNCE_NAME", "").strip() or "Columbia Gadget Works",
         announce_hour=_int("STUDIO_ANNOUNCE_HOUR", 10),
         org_address=os.environ.get("STUDIO_ORG_ADDRESS", "Columbia Gadget Works, 1404 Grand Ave, Columbia, MO 65203"),
         whisper_model=os.environ.get("STUDIO_WHISPER_MODEL", "base.en"),
