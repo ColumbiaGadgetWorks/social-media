@@ -345,7 +345,9 @@ def get_music() -> str:
         _actor(db)
         tracks = db.scalars(select(MusicTrack).order_by(MusicTrack.title)).all()
         return json.dumps([{"music_track_id": t.id, "title": t.title, "artist": t.artist, "mood": t.mood,
-                            "seconds": round(t.duration_s or 0), "credit_line": t.credit_line} for t in tracks], indent=1)
+                            "seconds": round(t.duration_s or 0), "license": t.license,
+                            "credit_line": "" if t.license in video.NO_CREDIT_LICENSES else t.credit_line}
+                           for t in tracks], indent=1)
 
 
 @server.tool()

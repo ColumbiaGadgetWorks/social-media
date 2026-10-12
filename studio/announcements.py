@@ -102,7 +102,7 @@ def ensure_monthly(db: Session, early: bool = False) -> Announcement | None:
         _, month_end = _month_bounds_utc(year, month)
         events = db.scalars(
             select(Event).where(Event.start >= send_at, Event.start < month_end, Event.status == "active",
-                                Event.recurring.is_(False), Event.email_ok.is_(True)).order_by(Event.start)
+                                Event.recurring.is_(False), Event.email_ok.is_(True), Event.series == "").order_by(Event.start)
         ).all()
         name = date(year, month, 1).strftime("%B")
         ann = Announcement(kind="monthly", month=key, subject=f"Coming up at CGW: {name}",

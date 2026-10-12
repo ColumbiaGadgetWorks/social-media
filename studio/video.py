@@ -326,7 +326,7 @@ def run(db: Session, job: RenderJob) -> None:
             size_bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), uploader_id=source.uploader_id,
             note=source.note, tags=sorted(set(source.tags) | {"edited"}), description=source.description,
             alt_text=source.alt_text, frames=[], transcript=[], source_media_id=source.id,
-            credit=music.credit_line if music and music.credit_line else "",
+            credit=music.credit_line if music and music.credit_line and music.license not in NO_CREDIT_LICENSES else "",
         )
         db.add(output)
         db.flush()
@@ -366,6 +366,9 @@ def run_pending(db: Session, limit: int = 1) -> int:
     return len(jobs)
 
 
+# Licenses that never need a credit in captions, whatever text is saved in the track's credit line (pages
+# often say things like "no need to give me any credit", which must not be pasted into a post).
+NO_CREDIT_LICENSES = ("Pixabay Content License", "CC0 / public domain", "Own recording")
 MUSIC_EXTENSIONS = (".mp3", ".m4a", ".aac", ".wav", ".ogg", ".flac")
 MAX_PACK_TRACKS = 500
 MAX_TRACK_MB = 80

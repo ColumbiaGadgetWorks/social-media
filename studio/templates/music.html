@@ -9,7 +9,16 @@
   <tbody>{% for t in tracks %}<tr>
     <td>{{ t.title }}{% if t.artist %} <span class="muted">· {{ t.artist }}</span>{% endif %}{% if t.mood %}<div class="small muted">{{ t.mood }}</div>{% endif %}</td>
     <td class="small">{{ t.license }}{% if t.source_url %}<div><a href="{{ t.source_url }}" rel="noopener" target="_blank">Source</a></div>{% endif %}</td>
-    <td class="small">{{ t.credit_line or '—' }}</td>
+    <td class="small">
+      {% if user.has_role('editor') %}
+      <form method="post" action="/music/{{ t.id }}/credit" class="row" style="gap:4px">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="text" name="credit_line" value="{{ t.credit_line }}" placeholder="none" aria-label="Credit line" style="min-width:160px">
+        <button type="submit">Save</button>
+      </form>
+      {% else %}{{ t.credit_line or '—' }}{% endif %}
+      {% if t.credit_line and t.license in no_credit %}<div class="muted">Not added to captions: {{ t.license }} needs no credit.</div>{% endif %}
+    </td>
     <td class="small mono">{{ '%d:%02d' | format((t.duration_s or 0) // 60, (t.duration_s or 0) % 60) }}</td>
     <td><audio controls preload="none" src="/music/{{ t.id }}/file" style="max-width:220px"></audio></td>
   </tr>{% endfor %}</tbody>

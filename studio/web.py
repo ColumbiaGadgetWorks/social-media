@@ -424,7 +424,8 @@ async def media_transcript(request: Request, media_id: int, db: Session = Depend
 def music_page(request: Request, db: Session = Depends(get_db)):
     user = require(request, db)
     tracks = db.scalars(select(MusicTrack).order_by(MusicTrack.title)).all()
-    return render(request, "music.html", user, tracks=tracks, licenses=MUSIC_LICENSES)
+    return render(request, "music.html", user, tracks=tracks, licenses=MUSIC_LICENSES,
+                  no_credit=video_mod.NO_CREDIT_LICENSES)
 
 
 @router.post("/music")
@@ -462,6 +463,23 @@ async def music_upload(request: Request, db: Session = Depends(get_db)):
     if notes:
         message += f" Skipped {len(notes)}: " + "; ".join(notes[:5]) + ("; ..." if len(notes) > 5 else "")
     flash(request, message)
+    return back("/music")
+
+
+@router.post("/music/{track_id}/credit")
+async def music_credit(request: Request, track_id: int, db: Session = Depends(get_db)):
+    user = require(request, db, "editor")
+    form = await form_with_csrf(request)
+    track = db.get(MusicTrack, track_id)
+    if track is None:
+        return Response(status_code=404)
+    credit = str(form.get("credit_line", "")).strip()[:300]
+    if MUSIC_LICENSES.get(track.license) and not credit:
+        flash(request, f"{track.license} requires a credit line.", "error")
+        return back("/music")
+    track.credit_line = credit
+    audit(db, Actor("user", user), "music_credit_changed", "music", track.id, credit=credit)
+    flash(request, "Credit line saved.")
     return back("/music")
 
 

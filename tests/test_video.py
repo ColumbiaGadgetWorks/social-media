@@ -201,3 +201,34 @@ def test_track_titles_come_from_file_names():
     assert video.track_title("02 - Chill Loop.WAV") == "Chill Loop"
     assert video.track_title("7.mp3") == "7"
 
+
+
+def test_tracks_that_need_no_credit_dont_force_one_into_captions(app):
+    from starlette.testclient import TestClient
+
+    from studio.models import MusicTrack
+
+    from .conftest import csrf_of, login
+
+    make_user("adam", "admin")
+    with db_mod.session_scope() as s:
+        free = MusicTrack(title="Free", license="CC0 / public domain", credit_line="No need to give me any credit", path="m/x.mp3")
+        by = MusicTrack(title="By", license="CC BY 4.0", credit_line="Music: By (CC BY 4.0)", path="m/y.mp3")
+        s.add_all([free, by])
+        s.flush()
+        assert free.license in video.NO_CREDIT_LICENSES and by.license not in video.NO_CREDIT_LICENSES
+    with TestClient(app, client=("192.168.1.20", 50000)) as c:
+        login(c, "adam")
+        page = c.get("/music").text
+        assert "needs no credit" in page
+        with db_mod.session_scope() as s:
+            by_id = s.scalar(select(MusicTrack.id).where(MusicTrack.title == "By"))
+            free_id = s.scalar(select(MusicTrack.id).where(MusicTrack.title == "Free"))
+        def save(i, text):
+            return c.post(f"/music/{i}/credit", data={"csrf": csrf_of(c, "/music"), "credit_line": text},
+                          follow_redirects=True).text
+
+        assert "requires a credit line" in save(by_id, "")
+        assert "Credit line saved" in save(free_id, "")
+    with db_mod.session_scope() as s:
+        assert s.get(MusicTrack, free_id).credit_line == "" and "CC BY" in s.get(MusicTrack, by_id).credit_line
