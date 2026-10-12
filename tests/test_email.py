@@ -289,3 +289,15 @@ def test_sender_addresses_can_be_set_in_settings(app3):
         s.flush()
         assert ann_mod.build_message(monthly, "a@example.org")["From"] == "CGW Makers <news@example.org>"
         assert ann_mod.build_message(special, "a@example.org")["Reply-To"] == "go@example.org"
+
+
+
+def test_newsletter_can_be_started_early(app3, monkeypatch):
+    with db_mod.session_scope() as s:
+        s.add(Event(uid="class", start=datetime(2026, 11, 10, 18, 0), title="Soldering class", email_ok=True))
+    at_local(monkeypatch, datetime(2026, 10, 12, 9, 0))  # well before the usual 12-day window
+    with db_mod.session_scope() as s:
+        assert ann_mod.ensure_monthly(s) is None
+        a = ann_mod.ensure_monthly(s, early=True)
+        assert a.month == "2026-11" and a.status == "needs_claude" and [i["title"] for i in a.items] == ["Soldering class"]
+        assert ann_mod.ensure_monthly(s, early=True) is None  # already started

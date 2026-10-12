@@ -183,6 +183,21 @@ def get_announcement(announcement_id: int) -> str:
 
 
 @server.tool()
+def start_monthly_newsletter() -> str:
+    """Start the next monthly "Coming up at CGW" email draft now instead of waiting for the automatic one
+    (which appears 12 days before its send date). Fills in that month's events; then use get_announcement and
+    draft_announcement to write it. Does nothing if the next newsletter was already started."""
+    with session_scope() as db:
+        actor = _actor(db)
+        a = announcements.ensure_monthly(db, early=True)
+        if a is None:
+            return "Error: the next newsletter has already been started (or its send date has passed)."
+        audit(db, actor, "newsletter_started_early", "announcement", a.id, month=a.month)
+        return json.dumps({"announcement_id": a.id, "subject": a.subject, "sends": fmt_local(a.send_at),
+                           "items": len(a.items)})
+
+
+@server.tool()
 def draft_announcement(
     announcement_id: int,
     subject: str = "",

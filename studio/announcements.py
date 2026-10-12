@@ -87,14 +87,15 @@ def event_item(event: Event) -> dict:
             "link": event.url or f"{settings().website_url}/calendar/", "blurb": ""}
 
 
-def ensure_monthly(db: Session) -> Announcement | None:
-    """Create next month's draft about 12 days before its send date (the first Tuesday)."""
+def ensure_monthly(db: Session, early: bool = False) -> Announcement | None:
+    """Create next month's draft about 12 days before its send date (the first Tuesday). With early=True the
+    12-day wait is skipped: the next newsletter that hasn't been started yet is created now."""
     now = utcnow()
     today = local_now().date()
     for year, month in ((today.year, today.month), (today.year + (today.month == 12), today.month % 12 + 1)):
         key = f"{year:04d}-{month:02d}"
         send_at = monthly_send_at(year, month)
-        if send_at <= now or send_at - now > timedelta(days=DRAFT_DAYS_AHEAD):
+        if send_at <= now or (not early and send_at - now > timedelta(days=DRAFT_DAYS_AHEAD)):
             continue
         if db.scalar(select(Announcement).where(Announcement.kind == "monthly", Announcement.month == key)):
             continue

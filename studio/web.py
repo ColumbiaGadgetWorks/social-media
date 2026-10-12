@@ -761,6 +761,19 @@ async def announcement_new(request: Request, db: Session = Depends(get_db)):
     return back(f"/announcements/{ann.id}")
 
 
+@router.post("/announcements/newsletter")
+async def announcement_newsletter(request: Request, db: Session = Depends(get_db)):
+    user = require(request, db, "editor")
+    await form_with_csrf(request)
+    ann = ann_mod.ensure_monthly(db, early=True)
+    if ann is None:
+        flash(request, "The next newsletter has already been started (or its send date has passed).", "error")
+        return back("/announcements")
+    audit(db, Actor("user", user), "newsletter_started_early", "announcement", ann.id, month=ann.month)
+    flash(request, f"Started the {ann.subject} draft. It's waiting for a Claude session to write it.")
+    return back(f"/announcements/{ann.id}")
+
+
 def _recipient_count() -> tuple[int | None, str]:
     if not settings().dolibarr_configured:
         return None, "Dolibarr isn't connected, so the list can't be read yet."
