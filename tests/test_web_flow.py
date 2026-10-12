@@ -265,3 +265,25 @@ def test_only_an_admin_can_change_email_choices(app):
         assert "Only an admin" in r.text
     with db_mod.session_scope() as s:
         assert reminders.enabled(s, "runway")  # unchanged: sam is not an admin
+
+
+def test_dashboard_lists_every_upcoming_post_not_just_the_first_twelve_channels(approver_client):
+    from datetime import timedelta
+
+    from studio.models import ChannelVersion
+
+    with db_mod.session_scope() as s:
+        for n in range(4):  # four posts going to six channels each: 24 entries before the last post
+            post = Post(status="approved", note=f"early {n}", title=f"Early post {n}")
+            s.add(post)
+            s.flush()
+            for key in ("instagram", "facebook", "threads", "bluesky", "gbp", "website"):
+                s.add(ChannelVersion(post_id=post.id, channel=key, enabled=True, body="x", publish_state="pending",
+                                     scheduled_at=db_mod.utcnow() + timedelta(days=1 + n)))
+        late = Post(status="approved", note="late", title="Robot arm board")
+        s.add(late)
+        s.flush()
+        s.add(ChannelVersion(post_id=late.id, channel="bluesky", enabled=True, body="x", publish_state="pending",
+                             scheduled_at=db_mod.utcnow() + timedelta(days=20)))
+    page = approver_client.get("/").text
+    assert "Robot arm board" in page and page.count("Early post 0") == 1  # one row per post, all its channels

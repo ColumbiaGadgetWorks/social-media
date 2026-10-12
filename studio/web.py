@@ -176,6 +176,15 @@ async def logout(request: Request):
 # --- dashboard -----------------------------------------------------------
 
 
+def _group_upcoming(versions: list[ChannelVersion], limit: int = 30) -> list[dict]:
+    """One row per post and time, with every channel it goes to (a six-channel post used to fill the list)."""
+    rows: dict[tuple, dict] = {}
+    for v in versions:
+        row = rows.setdefault((v.post_id, v.scheduled_at.replace(second=0, microsecond=0)), {"when": v.scheduled_at, "post": v.post, "channels": []})
+        row["channels"].append({"label": ch.CHANNELS[v.channel].label, "mode": ch.mode(v.channel)})
+    return list(rows.values())[:limit]
+
+
 @router.get("/")
 def dashboard(request: Request, db: Session = Depends(get_db)):
     user = require(request, db)
@@ -186,13 +195,13 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         select(ChannelVersion).join(Post).where(
             ChannelVersion.enabled.is_(True), ChannelVersion.publish_state == "pending",
             ChannelVersion.scheduled_at >= utcnow(), Post.status == "approved",
-        ).order_by(ChannelVersion.scheduled_at).limit(12)
+        ).order_by(ChannelVersion.scheduled_at)
     ).all()
     failed = db.scalars(
         select(ChannelVersion).join(Post).where(ChannelVersion.publish_state == "failed", Post.status == "approved")
     ).all()
     return render(
-        request, "dashboard.html", user, counts=counts, claude=queue_summary(db), upcoming=upcoming,
+        request, "dashboard.html", user, counts=counts, claude=queue_summary(db), upcoming=_group_upcoming(upcoming),
         failed=failed, batches=batch_mod.overview(db), cycle=batch_mod.cycle_info(),
         open_batches=upload_batch.open_batches(db),
     )

@@ -45,14 +45,15 @@
 <h2>Coming up</h2>
 {% if upcoming %}
 <div class="table-wrap"><table>
-  <thead><tr><th>When</th><th>Channel</th><th>Post</th><th>How</th></tr></thead>
+  <thead><tr><th>When</th><th>Post</th><th>Channels</th></tr></thead>
   <tbody>
-  {% for v in upcoming %}
-    <tr><td>{{ v.scheduled_at | local }}</td><td>{{ CHANNELS[v.channel].label }}</td>
-    <td><a href="/posts/{{ v.post_id }}">{{ v.post.display_title }}</a></td>
-    <td class="small muted">{{ {'direct': 'Automatic', 'batch': 'Batch day', 'on_day': 'By hand on the day'}[mode_of(v.channel)] }}</td></tr>
+  {% for r in upcoming %}
+    <tr><td>{{ r.when | local }}</td>
+    <td><a href="/posts/{{ r.post.id }}">{{ r.post.display_title }}</a></td>
+    <td class="small">{% for c in r.channels %}<span class="tag{{ '' if c.mode == 'direct' else ' warn' }}" title="{{ {'direct': 'Automatic', 'batch': 'You schedule it on batch day', 'on_day': 'You post it by hand on the day'}[c.mode] }}">{{ c.label }}</span> {% endfor %}</td></tr>
   {% endfor %}
   </tbody>
 </table></div>
+<p class="small muted">Highlighted channels are posted or scheduled by hand; the rest publish on their own.</p>
 {% else %}<p class="muted">No approved posts scheduled yet.</p>{% endif %}
 {% endblock %}
