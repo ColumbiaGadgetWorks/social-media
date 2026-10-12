@@ -39,6 +39,7 @@ from .models import (
     STATUS_LABELS,
     Announcement,
     ApiToken,
+    AppSetting,
     AuditLog,
     ChannelVersion,
     Event,
@@ -781,6 +782,7 @@ def announcement_page(request: Request, ann_id: int, db: Session = Depends(get_d
                          .order_by(AuditLog.at.desc())).all()
     return render(request, "announcement_edit.html", user, a=ann, preview_html=preview_html,
                   problems=ann_mod.problems(db, ann), seen_hash=ann_mod.content_hash(ann), history=history,
+                  tested=ann_mod.tested_version(db, ann), sender=ann_mod.sender_address(ann),
                   count=count, count_note=count_note, same_month=ann_mod.same_month_count(db, ann),
                   editable=ann.status not in ("sent", "cancelled"))
 
@@ -854,7 +856,7 @@ async def announcement_test(request: Request, ann_id: int, db: Session = Depends
     def fn(actor, ann, form):
         if not actor.user.email:
             raise ann_mod.AnnouncementError("Add your email address under Users first.")
-        ann_mod.send_test(ann, actor.user.email)
+        ann_mod.send_test(ann, actor.user.email, db)
         audit(db, actor, "test_sent", "announcement", ann.id)
         return f"Test sent to {actor.user.email}."
     return await _ann_action(request, ann_id, db, "editor", fn)
@@ -990,6 +992,19 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
                   connections=connections, media_base=s.media_base_url, is_admin=user.has_role("admin"), tab="general")
 
 
+def _senders(db: Session) -> list[dict]:
+    """The From addresses for email blasts: what's saved here, and what applies when it's left empty."""
+    s = settings()
+    rows = [("newsletter", "Monthly newsletter from", s.newsletter_address),
+            ("events", "Event and news announcements from", s.events_address),
+            ("name", "Sender name", s.announce_name)]
+    out = []
+    for key, label, default in rows:
+        row = db.get(AppSetting, f"sender.{key}")
+        out.append({"key": key, "label": label, "default": default, "value": row.value if row is not None else ""})
+    return out
+
+
 @router.get("/settings/emails")
 def settings_emails_page(request: Request, db: Session = Depends(get_db)):
     from . import queue as queue_mod
@@ -1001,7 +1016,7 @@ def settings_emails_page(request: Request, db: Session = Depends(get_db)):
     options = [{"key": k, "label": label, "low": low, "high": high, "value": reminders.option(db, k)}
                for k, (_, low, high, label) in reminders.OPTIONS.items()]
     return render(request, "settings_emails.html", user, tab="emails", is_admin=user.has_role("admin"), kinds=kinds,
-                  options=options, typed_to=reminders.configured_recipients(db), sent_to=reminders.recipients(db),
+                  options=options, senders=_senders(db), typed_to=reminders.configured_recipients(db), sent_to=reminders.recipients(db),
                   runway_left=len(left), runway_last=left[-1][1] if left else None,
                   runway_low=reminders.option(db, "runway_low"), plan_weeks=reminders.PLAN_WEEKS,
                   quiet=reminders.quiet(db))
@@ -1035,6 +1050,12 @@ async def settings_emails(request: Request, db: Session = Depends(get_db)):
     if values["send_from"] >= values["send_until"]:
         flash(request, "The earliest hour has to be before the latest hour.", "error")
         return back("/settings/emails")
+    senders = {}
+    for key in ("newsletter", "events", "name"):
+        senders[key] = str(form.get(f"sender.{key}", "")).strip()
+        if key != "name" and senders[key] and not re.fullmatch(r"[^@\s<>,;]+@[^@\s<>,;]+\.[^@\s<>,;]+", senders[key]):
+            flash(request, f"\"{senders[key]}\" isn't a plain email address (like info@columbiagadgetworks.org).", "error")
+            return back("/settings/emails")
     typed = str(form.get("recipients", "")).strip()
     bad = [a for a in re.split(r"[\s,;]+", typed) if a and "@" not in a]
     if bad:
@@ -1046,6 +1067,13 @@ async def settings_emails(request: Request, db: Session = Depends(get_db)):
     for key, value in values.items():
         reminders.set_option(db, key, str(value))
         chosen[key] = value
+    for key, value in senders.items():
+        row = db.get(AppSetting, f"sender.{key}")
+        if row is None:
+            db.add(AppSetting(key=f"sender.{key}", value=value))
+        else:
+            row.value = value
+        chosen[f"sender_{key}"] = value
     reminders.set_option(db, "recipients", typed)
     chosen["recipients"] = typed
     audit(db, Actor("user", user), "email_settings_changed", "user", user.id, **chosen)

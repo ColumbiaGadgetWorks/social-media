@@ -80,6 +80,7 @@ def approved_email(send_at, subject="Coming up at CGW: November", kind="special"
         s.flush()
         actor = adam(s)
         ann_mod.submit(s, actor, a)
+        ann_mod.record_test(s, a, "adam@example.org")  # approving needs a test of this version
         ann_mod.approve(s, actor, a, ann_mod.content_hash(a))
         return a.id
 
@@ -242,3 +243,49 @@ def test_newsletter_and_event_announcements_use_different_addresses(app3):
     for a, address in ((monthly, "info@columbiagadgetworks.org"), (special, "events@columbiagadgetworks.org")):
         msg = ann_mod.build_message(a, "sam@example.org")
         assert msg["From"] == f"Columbia Gadget Works <{address}>" and msg["Reply-To"] == address
+
+
+
+def test_approval_needs_a_test_of_this_exact_version(app3):
+    with db_mod.session_scope() as s:
+        a = Announcement(kind="special", subject="Big news", intro="Hello.", send_at=db_mod.utcnow() + timedelta(days=3),
+                         status="draft", items=[])
+        s.add(a)
+        s.flush()
+        ann_mod.submit(s, adam(s), a)
+        with pytest.raises(ann_mod.AnnouncementError, match="test of this exact version"):
+            ann_mod.approve(s, adam(s), a, ann_mod.content_hash(a))
+        mailer.outbox.clear()
+        ann_mod.send_test(a, "adam@example.org", s)
+        assert ann_mod.tested_version(s, a)["to"] == "adam@example.org"
+        ann_mod.update(s, adam(s), a, intro="Changed after the test.")
+        assert ann_mod.tested_version(s, a) is None  # an edit means testing again
+        with pytest.raises(ann_mod.AnnouncementError, match="test of this exact version"):
+            ann_mod.approve(s, adam(s), a, ann_mod.content_hash(a))
+        ann_mod.send_test(a, "adam@example.org", s)
+        ann_mod.approve(s, adam(s), a, ann_mod.content_hash(a))
+        assert a.status == "approved"
+
+
+def test_sender_addresses_can_be_set_in_settings(app3):
+    from starlette.testclient import TestClient
+
+    from .conftest import csrf_of, login
+
+    def save(c, **fields):
+        data = {"csrf": csrf_of(c, "/settings/emails")} | fields
+        return c.post("/settings/emails", data=data, follow_redirects=True).text
+
+    with TestClient(app3, client=("192.168.1.20", 50000)) as c:
+        login(c, "adam")
+        assert "info@columbiagadgetworks.org" in c.get("/settings/emails").text  # the default shows as a hint
+        assert "plain email address" in save(c, **{"sender.newsletter": "Name <x@y.org>"})
+        assert "saved" in save(c, **{"sender.newsletter": "news@example.org", "sender.events": "go@example.org",
+                                     "sender.name": "CGW Makers"})
+    with db_mod.session_scope() as s:
+        monthly = Announcement(kind="monthly", subject="S", items=[], status="draft")
+        special = Announcement(kind="special", subject="S", items=[], status="draft")
+        s.add_all([monthly, special])
+        s.flush()
+        assert ann_mod.build_message(monthly, "a@example.org")["From"] == "CGW Makers <news@example.org>"
+        assert ann_mod.build_message(special, "a@example.org")["Reply-To"] == "go@example.org"

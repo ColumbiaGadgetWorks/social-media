@@ -41,14 +41,18 @@
     {% if count is not none %}<p class="small"><strong>{{ count }}</strong> people on the "Email updates" list right now.</p>{% elif count_note %}<p class="small" style="color:var(--warn)">{{ count_note }}</p>{% endif %}
     <p class="small muted">{{ same_month }} other email(s) approved or sent that month (limit 2).</p>
     {% if problems and a.status not in ('sent', 'cancelled') %}<div class="problems small"><ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></div>{% endif %}
+    <p class="small muted">Sent from {{ sender }}; replies go there too.</p>
     {% if editable and user.has_role('editor') %}
       <form method="post" action="/announcements/{{ a.id }}/test"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit">Send a test to me</button></form>
+      {% if tested %}<p class="small" style="color:var(--ok)">Tested: this version was sent to {{ tested.to }} ({{ tested.at }} UTC).</p>
+      {% elif a.status in ('in_review', 'approved') %}<p class="small" style="color:var(--warn)">Not tested yet. Send yourself a test and check how it looks before approving. Any edit means testing again.</p>{% endif %}
     {% endif %}
     {% if a.status == 'in_review' and user.has_role('approver') %}
       <form method="post" action="/announcements/{{ a.id }}/approve" style="margin-top:10px">
         <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="seen_hash" value="{{ seen_hash }}">
         <p class="small">Approving sends exactly this email to the whole list at the time shown.</p>
-        <button class="approve" type="submit" {{ 'disabled' if problems }}>Approve</button>
+        <button class="approve" type="submit" {{ 'disabled' if problems or not tested }}>Approve</button>
+        {% if not tested %}<p class="small muted">Approve unlocks once you've sent a test of this version.</p>{% endif %}
       </form>
     {% endif %}
     {% if editable and user.has_role('approver') and a.status != 'needs_claude' %}

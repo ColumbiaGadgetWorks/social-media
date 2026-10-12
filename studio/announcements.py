@@ -31,7 +31,7 @@ from sqlalchemy.orm import Session
 from . import mailer
 from .db import settings, utcnow
 from .dolibarr import Dolibarr, valid_email
-from .models import Announcement, AnnouncementRecipient, Event, Unsubscribe
+from .models import Announcement, AnnouncementRecipient, AppSetting, Event, Unsubscribe
 from .security import Actor, audit
 from .timeutil import local_now, to_local
 
@@ -219,6 +219,9 @@ def approve(db: Session, actor: Actor, ann: Announcement, seen_hash: str | None)
     current = content_hash(ann)
     if seen_hash != current:
         raise AnnouncementError("This email changed after you opened it. Review the new version and approve again.")
+    if tested_version(db, ann) is None:
+        raise AnnouncementError("Send yourself a test of this exact version first (Send a test to me), check how it "
+                                "looks, then approve. Any edit means testing again.")
     ann.approved_hash, ann.approved_by_id, ann.approved_at, ann.status = current, actor.user.id, utcnow(), "approved"
     audit(db, actor, "approved", "announcement", ann.id, hash=current, send_at=ann.send_at.isoformat())
 
@@ -322,20 +325,34 @@ def sync_pending_unsubscribes(db: Session, dolibarr: Dolibarr | None = None) -> 
 # --- sending ------------------------------------------------------------------------
 
 
+def _saved(ann: Announcement, key: str) -> str:
+    """A sender choice made on the Settings > Emails page, if there is one."""
+    from sqlalchemy.orm import object_session
+
+    db = object_session(ann)
+    row = db.get(AppSetting, key) if db is not None else None
+    return row.value.strip() if row is not None else ""
+
+
 def sender_address(ann: Announcement) -> str:
     """The monthly newsletter comes from the info address; a one-off (event or news) announcement from the
-    events address. Replies go to the same address."""
+    events address. Replies go to the same address. Settings > Emails overrides the environment."""
     s = settings()
-    return s.newsletter_address if ann.kind == "monthly" else s.events_address
+    if ann.kind == "monthly":
+        return _saved(ann, "sender.newsletter") or s.newsletter_address
+    return _saved(ann, "sender.events") or s.events_address
+
+
+def sender_name(ann: Announcement) -> str:
+    return _saved(ann, "sender.name") or settings().announce_name
 
 
 def build_message(ann: Announcement, to: str, test: bool = False) -> EmailMessage:
-    s = settings()
     address = sender_address(ann)
     unsub = unsubscribe_url(to)
     html_body, text_body = render(ann, unsub)
     msg = EmailMessage()
-    msg["From"] = formataddr((s.announce_name, address))
+    msg["From"] = formataddr((sender_name(ann), address))
     msg["To"] = to
     msg["Reply-To"] = address
     msg["Subject"] = ("[TEST] " if test else "") + ann.subject
@@ -374,9 +391,34 @@ class _Transport:
             self.smtp.quit()
 
 
-def send_test(ann: Announcement, to: str) -> None:
+def send_test(ann: Announcement, to: str, db: Session | None = None) -> None:
+    """Send the email to one address, marked [TEST]. With a session, remember that this exact version was
+    tested: approving needs that (see approve)."""
     with _Transport() as t:
         t.send(build_message(ann, to, test=True))
+    if db is not None:
+        record_test(db, ann, to)
+
+
+def record_test(db: Session, ann: Announcement, to: str) -> None:
+    value = f"{content_hash(ann)}|{to}|{utcnow().isoformat(timespec='minutes')}"
+    row = db.get(AppSetting, f"ann_test.{ann.id}")
+    if row is None:
+        db.add(AppSetting(key=f"ann_test.{ann.id}", value=value))
+    else:
+        row.value = value
+    db.flush()
+
+
+def tested_version(db: Session, ann: Announcement) -> dict | None:
+    """The test send of this exact version (same content and send time), or None if it hasn't been tested
+    since the last edit."""
+    row = db.get(AppSetting, f"ann_test.{ann.id}")
+    if row is None:
+        return None
+    digest, _, rest = row.value.partition("|")
+    to, _, when = rest.partition("|")
+    return {"to": to, "at": when} if digest == content_hash(ann) else None
 
 
 def recipients(db: Session, dolibarr: Dolibarr | None = None) -> list[dict]:
