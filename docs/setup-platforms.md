@@ -129,7 +129,53 @@ In the channel:
 - The sender's Discord name is recorded in the note ("sent by Sam on Discord"). That's who shared
   it, not necessarily who made it; captions credit makers only when the text says so.
 
-## 7. Apply for the remaining APIs (free, takes weeks)
+## 7. Discord posting (#shop-news)
+
+The same bot that reads the uploads channel can post approved posts to a channel, automatically
+at their scheduled time like Bluesky. Each post gets its own Discord caption (no hashtags).
+
+1. In the server, give the bot's role these permissions **in #shop-news**: View Channel, Send
+   Messages, Attach Files, Embed Links. If #shop-news is an **Announcement** channel, the bot also
+   publishes each message to servers that follow it (no extra permission needed for its own
+   messages).
+2. Right-click #shop-news → **Copy Channel ID** → set `STUDIO_DISCORD_POST_CHANNEL_ID`. Apply.
+   Settings → Connections shows "Discord posting", and Discord becomes an automatic channel.
+3. Videos up to `STUDIO_DISCORD_UPLOAD_MB` (default 10, Discord's limit without server boosts) are
+   attached; bigger ones go as a link to the approved copy, which Discord plays inline. Raise it
+   to 50 or 100 if the server is boosted.
+
+## 8. LinkedIn company page (Community Management API)
+
+Built and waiting for LinkedIn's approval. Until it's approved and connected, LinkedIn stays on
+batch day.
+
+1. Sign in to <https://www.linkedin.com/developers/apps> as a **CGW page admin** → **Create app**:
+   name "CGW Content Studio", LinkedIn Page = Columbia Gadget Works, privacy policy URL
+   (e.g. https://columbiagadgetworks.org/privacy/), the CGW logo (`unraid/icon.png` works).
+2. **Settings** tab → **Verify** the app with the CGW page (a page admin approves the request).
+3. **Products** tab → request **Community Management API**. LinkedIn asks for a business email and
+   a short description of the use. Suggested wording:
+
+   > Columbia Gadget Works is a 501(c)(3) community makerspace in Columbia, Missouri. We use a
+   > self-hosted tool to schedule posts to our own LinkedIn company page about classes, events,
+   > member projects and organisation news. Every post is written by staff and approved by a person
+   > before publishing. We only post to our own page; we don't read or store member data, message
+   > anyone, or manage other organisations' pages.
+
+   The Community Management API has to be the only product on the app. Approval usually takes a few
+   weeks (development tier first; the standard tier review comes later and adds refresh tokens).
+4. **Auth** tab → **Authorized redirect URLs** → add `https://<your Studio address>/settings/linkedin/callback`
+   (Settings shows the exact URL). Copy the **Client ID** and **Client Secret**.
+5. The organization ID is the number in the page admin URL: `linkedin.com/company/<number>/admin/`.
+6. Set `STUDIO_LINKEDIN_CLIENT_ID`, `STUDIO_LINKEDIN_CLIENT_SECRET`, `STUDIO_LINKEDIN_ORG_ID` and apply.
+7. Once LinkedIn has approved the product: Settings → **Connect LinkedIn** (sign in as a page admin
+   and allow). LinkedIn becomes automatic. The sign-in lasts 60 days; with a refresh token the Studio
+   renews it nightly for about a year, and Settings shows when to connect again.
+8. `STUDIO_LINKEDIN_API_VERSION` (YYYYMM, default 202509) is the LinkedIn API version the Studio
+   asks for. LinkedIn retires versions after about a year; if a post fails with "version isn't
+   accepted", set it to a recent month.
+
+## 9. Apply for the remaining APIs (free, takes weeks)
 
 These move channels from batch day to automatic when approved:
 

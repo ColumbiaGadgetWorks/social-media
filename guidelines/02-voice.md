@@ -41,4 +41,5 @@ Professional but human. Never cringe.
   plus 1-2 niche tags (#3dprinting #lasercutting #woodworking #cnc #diycommunity #righttorepair).
 - Facebook: 2-3 max; keywords in the text matter more.
 - X and Bluesky: 1-2, inside the character limit.
+- Discord #shop-news: none. It's our own community; write like a note to regulars (what's new, when to come see it).
 - TikTok: 3-5 including #makerspace and one or two niche tags.

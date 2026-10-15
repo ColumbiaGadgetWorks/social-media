@@ -49,6 +49,7 @@ from .models import (
     RenderJob,
     User,
 )
+from .publishers import linkedin as linkedin_pub
 from .queue import queue_summary
 from .scheduler import kick_media
 from .security import (
@@ -1024,12 +1025,15 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
         ("Reminder email", s.mail_backend == "smtp" and bool(s.smtp_user), "STUDIO_SMTP_USER, STUDIO_SMTP_PASSWORD"),
         ("Email list (Dolibarr)", s.dolibarr_configured, "STUDIO_DOLIBARR_URL, STUDIO_DOLIBARR_API_KEY"),
         ("Discord uploads", s.discord_configured, "STUDIO_DISCORD_BOT_TOKEN, STUDIO_DISCORD_CHANNEL_IDS"),
+        ("Discord posting", s.discord_post_configured, "STUDIO_DISCORD_POST_CHANNEL_ID (plus the bot token)"),
+        ("LinkedIn page", linkedin_pub.connected(), "STUDIO_LINKEDIN_CLIENT_ID, _CLIENT_SECRET, _ORG_ID, then Connect"),
         ("Subtitles (Whisper)", bool(s.whisper_model), f"STUDIO_WHISPER_MODEL={s.whisper_model or '(off)'}"),
     ]
     lan = lan_address(request)
     return render(request, "settings.html", user, tokens=tokens, new_token=new_token, new_scope=new_scope,
                   base_url=s.base_url, lan=lan, lan_configured=bool(s.lan_url),
-                  connections=connections, media_base=s.media_base_url, is_admin=user.has_role("admin"), tab="general")
+                  connections=connections, media_base=s.media_base_url, is_admin=user.has_role("admin"), tab="general",
+                  linkedin=linkedin_pub.status(db), linkedin_redirect=linkedin_pub.redirect_uri())
 
 
 def _senders(db: Session) -> list[dict]:
@@ -1043,6 +1047,44 @@ def _senders(db: Session) -> list[dict]:
         row = db.get(AppSetting, f"sender.{key}")
         out.append({"key": key, "label": label, "default": default, "value": row.value if row is not None else ""})
     return out
+
+
+@router.post("/settings/linkedin/connect")
+async def linkedin_connect(request: Request, db: Session = Depends(get_db)):
+    require(request, db, "admin")
+    await form_with_csrf(request)
+    if not settings().linkedin_app_configured:
+        flash(request, "Set STUDIO_LINKEDIN_CLIENT_ID, STUDIO_LINKEDIN_CLIENT_SECRET and STUDIO_LINKEDIN_ORG_ID first.", "error")
+        return back("/settings")
+    return RedirectResponse(linkedin_pub.authorize_url(request.session), status_code=303)
+
+
+@router.get("/settings/linkedin/callback")
+def linkedin_callback(request: Request, code: str = "", state: str = "", error: str = "",
+                      error_description: str = "", db: Session = Depends(get_db)):
+    user = require(request, db, "admin")
+    if error:
+        flash(request, f"LinkedIn didn't connect: {error_description or error}", "error")
+        return back("/settings")
+    try:
+        linkedin_pub.finish_connect(db, request.session, code, state)
+    except Exception as exc:
+        db.rollback()
+        flash(request, str(exc), "error")
+        return back("/settings")
+    audit(db, Actor("user", user), "linkedin_connected", "user", user.id)
+    flash(request, "LinkedIn connected. Approved LinkedIn posts now publish automatically.")
+    return back("/settings")
+
+
+@router.post("/settings/linkedin/disconnect")
+async def linkedin_disconnect(request: Request, db: Session = Depends(get_db)):
+    user = require(request, db, "admin")
+    await form_with_csrf(request)
+    linkedin_pub.disconnect(db)
+    audit(db, Actor("user", user), "linkedin_disconnected", "user", user.id)
+    flash(request, "LinkedIn disconnected. LinkedIn posts go back to batch day.")
+    return back("/settings")
 
 
 @router.get("/settings/emails")

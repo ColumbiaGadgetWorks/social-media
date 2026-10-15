@@ -77,6 +77,13 @@ CHANNELS: dict[str, Channel] = {
             tips="Professional angle: impact, partners, sponsors, classes.",
         ),
         Channel(
+            "discord", "Discord #shop-news", "batch", images=True, video=True, text_only=True,
+            max_chars=2000, max_images=10,
+            link_note="Links work and preview. No hashtags.",
+            tips="The CGW community's own server: members and regulars. Chatty and specific, no hashtags, "
+                 "no hard sell; say what's new in the shop and when to come see it.",
+        ),
+        Channel(
             "x", "X", "batch", images=True, video=True, text_only=True,
             max_chars=280, max_images=4, tips="280 characters including hashtags; a link counts as 23.",
         ),
@@ -97,7 +104,11 @@ _DIRECT_WHEN = {
     "facebook": "meta_configured",
     "threads": "threads_configured",
     "website": "website_configured",
+    "discord": "discord_post_configured",
 }
+
+# Channels that also need a sign-in stored in the database (not just settings).
+_CONNECTED = {"linkedin": "studio.publishers.linkedin:connected"}
 
 
 # Where to go to schedule or post by hand on each manual channel.
@@ -109,6 +120,7 @@ POST_LINKS = {
     "tiktok": "https://www.tiktok.com/tiktokstudio/upload",
     "linkedin": "https://www.linkedin.com/feed/",
     "x": "https://x.com/compose/post",
+    "discord": "https://discord.com/channels/@me",
 }
 
 
@@ -128,6 +140,13 @@ def mode(channel: Channel | str) -> str:
     flag = _DIRECT_WHEN.get(c.key)
     if flag and getattr(settings(), flag):
         return "direct"
+    check = _CONNECTED.get(c.key)
+    if check:
+        import importlib
+
+        module, func = check.split(":")
+        if getattr(importlib.import_module(module), func)():
+            return "direct"
     return c.mode
 
 

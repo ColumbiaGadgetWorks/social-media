@@ -100,6 +100,15 @@ def _nightly() -> None:
         except Exception:
             log.exception("Threads token refresh failed")
             db.rollback()
+        try:
+            from .publishers import linkedin
+
+            if linkedin.refresh(db):
+                log.info("LinkedIn token refreshed")
+            db.commit()
+        except Exception:
+            log.exception("LinkedIn token refresh failed")
+            db.rollback()
         log.info("collected %s metric snapshots", metrics.collect(db))
 
 

@@ -48,11 +48,23 @@ def _website(db):
     return WebsiteClient()
 
 
+def _discord(db):
+    from .discord import DiscordClient
+
+    return DiscordClient()
+
+
+def _linkedin(db):
+    from .linkedin import LinkedInClient
+
+    return LinkedInClient(db)
+
+
 # Each factory takes the db session and returns a client whose publish(version)
 # returns (public url, platform id).
 PUBLISHERS: dict[str, Callable] = {
     "bluesky": _bluesky, "facebook": _facebook, "instagram": _instagram,
-    "threads": _threads, "website": _website,
+    "threads": _threads, "website": _website, "discord": _discord, "linkedin": _linkedin,
 }
 
 

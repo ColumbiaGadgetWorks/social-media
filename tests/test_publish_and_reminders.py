@@ -117,7 +117,8 @@ def at_local(monkeypatch, when: datetime):
 
 def started_two_days_ago(s):
     reminders.started_at(s)
-    s.scalar(select(ReminderLog).where(ReminderLog.kind == "installed")).sent_at = timeutil.utcnow() - timedelta(days=2)
+    # Long ago, so the 24-hour quiet start never applies, whatever date a test pretends it is.
+    s.scalar(select(ReminderLog).where(ReminderLog.kind == "installed")).sent_at = datetime(2026, 1, 1)
 
 
 def test_quiet_first_day(app, monkeypatch):

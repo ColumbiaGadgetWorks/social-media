@@ -76,6 +76,13 @@ class Settings:
     # Discord: photos/videos posted in these channels come into the media library
     discord_bot_token: str = ""
     discord_channel_ids: list = field(default_factory=list)
+    discord_post_channel_id: str = ""  # approved posts go here (e.g. #shop-news)
+    discord_upload_mb: int = 10  # Discord's attachment limit for this server (10 unless boosted)
+    # LinkedIn company page (Community Management API; connect in Settings once the app is approved)
+    linkedin_client_id: str = ""
+    linkedin_client_secret: str = ""
+    linkedin_org_id: str = ""
+    linkedin_api_version: str = "202509"
     # Calendar
     calendar_ics_url: str = ""
     # Where to post Google Business Profile updates by hand (the business profile's own link)
@@ -136,6 +143,14 @@ class Settings:
         return bool(self.discord_bot_token and self.discord_channel_ids)
 
     @property
+    def discord_post_configured(self) -> bool:
+        return bool(self.discord_bot_token and self.discord_post_channel_id)
+
+    @property
+    def linkedin_app_configured(self) -> bool:
+        return bool(self.linkedin_client_id and self.linkedin_client_secret and self.linkedin_org_id)
+
+    @property
     def website_configured(self) -> bool:
         return bool(self.github_token and self.website_repo)
 
@@ -190,6 +205,12 @@ def load_settings() -> Settings:
         lan_url=os.environ.get("STUDIO_LAN_URL", "").rstrip("/"),
         discord_bot_token=os.environ.get("STUDIO_DISCORD_BOT_TOKEN", "").strip(),
         discord_channel_ids=[c for c in re.split(r"[\s,]+", os.environ.get("STUDIO_DISCORD_CHANNEL_IDS", "")) if c.isdigit()],
+        discord_post_channel_id="".join(c for c in os.environ.get("STUDIO_DISCORD_POST_CHANNEL_ID", "") if c.isdigit()),
+        discord_upload_mb=_int("STUDIO_DISCORD_UPLOAD_MB", 10),
+        linkedin_client_id=os.environ.get("STUDIO_LINKEDIN_CLIENT_ID", "").strip(),
+        linkedin_client_secret=os.environ.get("STUDIO_LINKEDIN_CLIENT_SECRET", "").strip(),
+        linkedin_org_id="".join(c for c in os.environ.get("STUDIO_LINKEDIN_ORG_ID", "") if c.isdigit()),
+        linkedin_api_version=os.environ.get("STUDIO_LINKEDIN_API_VERSION", "202509").strip(),
         calendar_ics_url=os.environ.get(
             "STUDIO_CALENDAR_ICS_URL", "https://columbiagadgetworks.org/api/calendar.ics"
         ),

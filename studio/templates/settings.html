@@ -70,6 +70,28 @@
   {% endfor %}</table>
   {% if is_admin %}<p class="small muted">Meta fetches approved photos and videos from <span class="mono">{{ media_base }}/m/…</span>. That path must be reachable from the internet without proxy sign-in.</p>{% endif %}
 </div>
+{% if is_admin %}
+<div class="card">
+  <h2 style="margin-top:0">LinkedIn company page</h2>
+  {% if not linkedin.app %}
+    <p class="small">Not set up. Create a LinkedIn app for the CGW page, request the <strong>Community Management API</strong>, and set
+      <span class="mono">STUDIO_LINKEDIN_CLIENT_ID</span>, <span class="mono">_CLIENT_SECRET</span> and <span class="mono">_ORG_ID</span>
+      (docs/setup-platforms.md, "LinkedIn"). Until then LinkedIn posts stay on batch day.</p>
+    <p class="small muted">Redirect URL to register in the app: <span class="mono">{{ linkedin_redirect }}</span></p>
+  {% elif not linkedin.connected %}
+    <p class="small">The app is set up. Once LinkedIn has approved the Community Management API, a CGW page admin connects it here.</p>
+    <p class="small muted">Redirect URL registered in the app must be <span class="mono">{{ linkedin_redirect }}</span></p>
+    <form method="post" action="/settings/linkedin/connect"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="primary" type="submit">Connect LinkedIn</button></form>
+  {% else %}
+    <p class="small"><span class="tag ok">Connected</span> Posting as page <span class="mono">{{ linkedin.org }}</span>. Approved LinkedIn posts publish automatically.</p>
+    <p class="small muted">Sign-in valid until {{ linkedin.expires[:10] }}{% if linkedin.can_refresh %}; renewed automatically until {{ linkedin.refresh_expires[:10] }}, then connect again{% else %}. LinkedIn gave no refresh token, so connect again before then{% endif %}.</p>
+    <div class="row">
+      <form method="post" action="/settings/linkedin/connect"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit">Reconnect</button></form>
+      <form method="post" action="/settings/linkedin/disconnect" data-confirm="Disconnect LinkedIn? Posts go back to batch day."><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link danger" type="submit">Disconnect</button></form>
+    </div>
+  {% endif %}
+</div>
+{% endif %}
 <form method="post" action="/settings/appearance" class="card">
   <h2 style="margin-top:0">Appearance</h2>
   <input type="hidden" name="csrf" value="{{ csrf }}">
