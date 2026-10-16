@@ -186,3 +186,21 @@ def test_default_emails_are_running_low_and_alerts_only(app):
     with db_mod.session_scope() as s:
         on = {k for k, *_ in reminders.EMAIL_KINDS if reminders.enabled(s, k)}
     assert on == {"runway", "alert_publish", "alert_announcement"}
+
+
+def test_meta_errors_say_what_was_wrong_not_just_invalid_parameter():
+    import httpx
+
+    from studio.publishers.meta import PublishError, _Graph
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": {"message": "Invalid parameter", "code": 100, "error_subcode": 2207052,
+                                                   "error_user_msg": "The media could not be fetched."}})
+
+    graph = _Graph("https://graph.example/v1", "tok", httpx.Client(transport=httpx.MockTransport(handler)))
+    with pytest.raises(PublishError) as raised:
+        graph.call("POST", "123/threads", media_type="IMAGE", image_url="https://x/y.jpg", text="hi")
+    message = str(raised.value)
+    assert "Invalid parameter" in message and "code 100" in message and "subcode 2207052" in message
+    assert "The media could not be fetched." in message and "sent media_type, image_url, text" in message
+    assert "tok" not in message  # the access token is never echoed

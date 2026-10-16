@@ -46,7 +46,14 @@ class _Graph:
         if r.status_code >= 400 or "error" in body:
             err = body.get("error", {}) if isinstance(body, dict) else {}
             message = err.get("message") or r.text[:300]
-            raise PublishError(f"{path.split('/')[-1] or path}: {message} (HTTP {r.status_code})")
+            # Meta's one-line message is often just "Invalid parameter"; its code, the user-facing text and the
+            # parameters we sent say what is actually wrong.
+            extra = [f"{label} {err[key]}" for label, key in (("code", "code"), ("subcode", "error_subcode")) if err.get(key)]
+            if err.get("error_user_msg"):
+                extra.append(str(err["error_user_msg"]))
+            sent = [k for k in params if k != "access_token"]
+            detail = f" [{'; '.join(extra)}]" if extra else ""
+            raise PublishError(f"{path.split('/')[-1] or path}: {message}{detail} (HTTP {r.status_code}; sent {', '.join(sent) or 'nothing'})")
         return body
 
     def wait_ready(self, container_id: str, field: str) -> None:
