@@ -1037,6 +1037,11 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
                   linkedin=linkedin_pub.status(db), linkedin_redirect=linkedin_pub.redirect_uri())
 
 
+def _socials(db: Session) -> list[dict]:
+    return [{"key": key, "label": label, "value": (db.get(AppSetting, f"social.{key}") or AppSetting(key="", value="")).value}
+            for key, label in ann_mod.SOCIAL_SITES]
+
+
 def _senders(db: Session) -> list[dict]:
     """The From addresses for email blasts: what's saved here, and what applies when it's left empty."""
     s = settings()
@@ -1099,7 +1104,7 @@ def settings_emails_page(request: Request, db: Session = Depends(get_db)):
     options = [{"key": k, "label": label, "low": low, "high": high, "value": reminders.option(db, k)}
                for k, (_, low, high, label) in reminders.OPTIONS.items()]
     return render(request, "settings_emails.html", user, tab="emails", is_admin=user.has_role("admin"), kinds=kinds,
-                  options=options, senders=_senders(db), typed_to=reminders.configured_recipients(db), sent_to=reminders.recipients(db),
+                  options=options, senders=_senders(db), socials=_socials(db), typed_to=reminders.configured_recipients(db), sent_to=reminders.recipients(db),
                   runway_left=len(left), runway_last=left[-1][1] if left else None,
                   runway_low=reminders.option(db, "runway_low"), plan_weeks=reminders.PLAN_WEEKS,
                   quiet=reminders.quiet(db))
@@ -1139,6 +1144,12 @@ async def settings_emails(request: Request, db: Session = Depends(get_db)):
         if key != "name" and senders[key] and not re.fullmatch(r"[^@\s<>,;]+@[^@\s<>,;]+\.[^@\s<>,;]+", senders[key]):
             flash(request, f"\"{senders[key]}\" isn't a plain email address (like info@columbiagadgetworks.org).", "error")
             return back("/settings/emails")
+    socials = {}
+    for key, label in ann_mod.SOCIAL_SITES:
+        socials[key] = str(form.get(f"social.{key}", "")).strip()
+        if socials[key] and not re.fullmatch(r"https?://[^\s<>\"]+", socials[key]):
+            flash(request, f"The {label} link must start with https:// (for example https://www.facebook.com/yourpage).", "error")
+            return back("/settings/emails")
     typed = str(form.get("recipients", "")).strip()
     bad = [a for a in re.split(r"[\s,;]+", typed) if a and "@" not in a]
     if bad:
@@ -1157,6 +1168,15 @@ async def settings_emails(request: Request, db: Session = Depends(get_db)):
         else:
             row.value = value
         chosen[f"sender_{key}"] = value
+    for key, value in socials.items():
+        row = db.get(AppSetting, f"social.{key}")
+        if row is None:
+            if value:
+                db.add(AppSetting(key=f"social.{key}", value=value))
+        else:
+            row.value = value
+        if value:
+            chosen[f"social_{key}"] = value
     reminders.set_option(db, "recipients", typed)
     chosen["recipients"] = typed
     audit(db, Actor("user", user), "email_settings_changed", "user", user.id, **chosen)

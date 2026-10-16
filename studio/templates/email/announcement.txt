@@ -11,7 +11,10 @@ Details: {{ item.link }}{% endif %}
 {% endfor %}
 
 {{ plain(a.closing) }}
-
+{% if socials %}
+Follow us:{% for s in socials %}
+{{ s.label }}: {{ s.url }}{% endfor %}
+{% endif %}
 Full calendar: {{ site }}/calendar/
 
 --

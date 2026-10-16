@@ -27,6 +27,7 @@
     {% endfor %}
     <tr><td style="padding:16px 28px 24px;font-size:15px;line-height:1.55">
       {% for p in closing %}<p style="margin:0 0 12px">{{ p | safe }}</p>{% endfor %}
+      {% if socials %}<p style="margin:0 0 12px"><strong>Follow us:</strong> {% for s in socials %}<a href="{{ s.url }}" style="color:#983c1e">{{ s.label }}</a>{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
       <p style="margin:0"><a href="{{ site }}/calendar/" style="color:#983c1e">Full calendar</a> · <a href="{{ site }}" style="color:#983c1e">columbiagadgetworks.org</a></p>
     </td></tr>
   </table>

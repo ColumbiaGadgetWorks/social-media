@@ -28,6 +28,13 @@
   <input type="text" id="sender-{{ f.key }}" name="sender.{{ f.key }}" value="{{ f.value }}" placeholder="{{ f.default }}" {{ 'disabled' if not is_admin }}>
   {% endfor %}
 
+  <h2>Follow links in the newsletter</h2>
+  <p class="small muted">Your social pages. Any you fill in appear as a "Follow us" line at the bottom of every newsletter and announcement. Leave one empty to leave it out.</p>
+  {% for f in socials %}
+  <label for="social-{{ f.key }}">{{ f.label }}</label>
+  <input type="url" id="social-{{ f.key }}" name="social.{{ f.key }}" value="{{ f.value }}" placeholder="https://" {{ 'disabled' if not is_admin }}>
+  {% endfor %}
+
   <h2>Who gets the Studio's own emails</h2>
   <label for="recipients">Email addresses (separate with commas; leave empty for the default)</label>
   <input type="text" id="recipients" name="recipients" value="{{ typed_to }}" {{ 'disabled' if not is_admin }} placeholder="e.g. adam@example.org, sam@example.org">

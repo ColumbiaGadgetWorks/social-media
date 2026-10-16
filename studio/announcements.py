@@ -264,11 +264,30 @@ def plain(text: str) -> str:
     return re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r"\1 (\2)", (text or "").replace("**", ""))
 
 
+SOCIAL_SITES = [("facebook", "Facebook"), ("instagram", "Instagram"), ("bluesky", "Bluesky"), ("threads", "Threads"),
+                ("youtube", "YouTube"), ("tiktok", "TikTok"), ("linkedin", "LinkedIn"), ("discord", "Discord")]
+
+
+def social_links(ann: Announcement) -> list[dict]:
+    """The "Follow us" links for the email footer: only the ones set on the Settings > Emails page."""
+    from sqlalchemy.orm import object_session
+
+    db = object_session(ann)
+    if db is None:
+        return []
+    out = []
+    for key, label in SOCIAL_SITES:
+        row = db.get(AppSetting, f"social.{key}")
+        if row is not None and row.value.strip():
+            out.append({"label": label, "url": row.value.strip()})
+    return out
+
+
 def render(ann: Announcement, unsubscribe_url: str) -> tuple[str, str]:
     ctx = {"a": ann, "intro": paragraphs(ann.intro), "closing": paragraphs(ann.closing),
            "items": [{**i, "blurb_html": _inline(i.get("blurb", ""))} for i in ann.items],
            "unsubscribe_url": unsubscribe_url, "address": settings().org_address,
-           "site": settings().website_url, "plain": plain}
+           "site": settings().website_url, "plain": plain, "socials": social_links(ann)}
     return _env.get_template("announcement.html").render(ctx), _env.get_template("announcement.txt").render(ctx)
 
 

@@ -301,3 +301,25 @@ def test_newsletter_can_be_started_early(app3, monkeypatch):
         a = ann_mod.ensure_monthly(s, early=True)
         assert a.month == "2026-11" and a.status == "needs_claude" and [i["title"] for i in a.items] == ["Soldering class"]
         assert ann_mod.ensure_monthly(s, early=True) is None  # already started
+
+
+
+def test_social_links_set_in_settings_appear_in_the_email(app3):
+    from starlette.testclient import TestClient
+
+    from .conftest import csrf_of, login
+
+    with TestClient(app3, client=("192.168.1.20", 50000)) as c:
+        login(c, "adam")
+        data = {"csrf": csrf_of(c, "/settings/emails"), "social.facebook": "not a link"}
+        assert "must start with https://" in c.post("/settings/emails", data=data, follow_redirects=True).text
+        data = {"csrf": csrf_of(c, "/settings/emails"), "social.facebook": "https://www.facebook.com/cgw",
+                "social.instagram": "https://www.instagram.com/cgw"}
+        assert "saved" in c.post("/settings/emails", data=data, follow_redirects=True).text
+    with db_mod.session_scope() as s:
+        a = Announcement(kind="monthly", subject="S", intro="Hi", closing="Bye", items=[], status="draft")
+        s.add(a)
+        s.flush()
+        html_body, text_body = ann_mod.render(a, "#u")
+        assert "Follow us:" in html_body and 'href="https://www.facebook.com/cgw"' in html_body
+        assert "Instagram: https://www.instagram.com/cgw" in text_body and "TikTok" not in html_body

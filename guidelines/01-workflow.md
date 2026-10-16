@@ -30,7 +30,7 @@ shouldn't try to work around that.
 `draft_announcement`: a plain subject (e.g. "Coming up at CGW: November"), preview text, a 2-4
 sentence opening, a 2-3 sentence description per item, and a short closing. Email goes to people who
 asked for updates: warm and professional, no hype, no emoji, no hashtags, and never member-project or
-humor content. Facts come only from the items. You can't add or remove items, approve, or send.
+humor content, unless a person asks for a short "around the shop" section (then keep it to facts you were given, in the closing). Facts come only from the items. You can't add or remove items, approve, or send.
 
 ## Video
 
