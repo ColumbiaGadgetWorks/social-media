@@ -10,12 +10,23 @@ from sqlalchemy.orm import Session
 
 from .. import channels as ch
 from ..db import utcnow
-from ..models import ChannelVersion, Post
+from ..models import AppSetting, ChannelVersion, Post
 from ..posts import finish_if_complete, is_publishable
 from ..security import Actor, audit
 
 log = logging.getLogger(__name__)
-MAX_ATTEMPTS = 3
+DEFAULT_RETRIES = 3  # how many more times to try a post that failed to publish (Settings can change it; 0 = never retry)
+MAX_RETRIES = 10
+
+
+def max_retries(db: Session) -> int:
+    """Automatic retries after a failed publish, from Settings (default 3). 0 turns retrying off."""
+    row = db.get(AppSetting, "publish.retries")
+    try:
+        value = int(row.value) if row is not None else DEFAULT_RETRIES
+    except ValueError:
+        value = DEFAULT_RETRIES
+    return max(0, min(MAX_RETRIES, value))
 
 
 def _bluesky(db):
@@ -90,6 +101,7 @@ def publish_due(db: Session, factories: dict[str, Callable] | None = None) -> li
     clients: dict[str, object] = {}
     failed: list[ChannelVersion] = []
     system = Actor.system()
+    attempts_allowed = max_retries(db) + 1  # the first try plus the retries
     for version in due_versions(db):
         ok, reason = is_publishable(version.post)
         if not ok:
@@ -109,7 +121,7 @@ def publish_due(db: Session, factories: dict[str, Callable] | None = None) -> li
             version.attempts += 1
             version.last_error = str(exc)[:500]
             clients.pop(version.channel, None)
-            if version.attempts >= MAX_ATTEMPTS:
+            if version.attempts >= attempts_allowed:
                 version.publish_state = "failed"
                 failed.append(version)
             audit(db, system, "publish_failed", "post", version.post_id, channel=version.channel,

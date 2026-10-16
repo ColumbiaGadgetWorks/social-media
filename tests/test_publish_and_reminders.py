@@ -12,7 +12,7 @@ from studio.models import Post, ReminderLog, User
 from studio.publishers.bluesky import BlueskyClient, facets
 from studio.security import Actor
 
-from .conftest import jpeg_bytes, make_user
+from .conftest import csrf_of, jpeg_bytes, make_user
 
 
 @pytest.fixture
@@ -95,14 +95,14 @@ def test_tampered_post_is_blocked_not_sent(approved_post):
 def test_failures_retry_then_email(approved_post):
     def broken(db):
         raise RuntimeError("network down")
-    for _ in range(publishers.MAX_ATTEMPTS):
+    for _ in range(publishers.DEFAULT_RETRIES + 1):
         with db_mod.session_scope() as s:
             failed = publishers.publish_due(s, {"bluesky": broken})
             if failed:
                 reminders.publish_failures(s, failed)
     with db_mod.session_scope() as s:
         v = s.get(Post, approved_post).version("bluesky")
-        assert v.publish_state == "failed" and v.attempts == 3
+        assert v.publish_state == "failed" and v.attempts == publishers.DEFAULT_RETRIES + 1
     with db_mod.session_scope() as s:  # bundled into one alert email, at most one a day
         started_two_days_ago(s)
         assert reminders.flush_alerts(s) is True
@@ -204,3 +204,21 @@ def test_meta_errors_say_what_was_wrong_not_just_invalid_parameter():
     assert "Invalid parameter" in message and "code 100" in message and "subcode 2207052" in message
     assert "The media could not be fetched." in message and "sent media_type, image_url, text" in message
     assert "tok" not in message  # the access token is never echoed
+
+
+def test_retries_are_set_in_settings_and_zero_turns_them_off(approver_client):
+    from studio.models import AppSetting
+
+    def save(value):
+        data = {"csrf": csrf_of(approver_client, "/settings"), "retries": value}
+        return approver_client.post("/settings/publishing", data=data, follow_redirects=True).text
+
+    with db_mod.session_scope() as s:
+        assert publishers.max_retries(s) == 3  # the default
+    assert "retried up to 5 times" in save("5")
+    with db_mod.session_scope() as s:
+        assert publishers.max_retries(s) == 5
+    assert "from 0 to 10" in save("99") and "from 0 to 10" in save("lots")
+    assert "retries are off" in save("0")
+    with db_mod.session_scope() as s:
+        assert publishers.max_retries(s) == 0 and s.get(AppSetting, "publish.retries").value == "0"

@@ -1033,6 +1033,7 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
     return render(request, "settings.html", user, tokens=tokens, new_token=new_token, new_scope=new_scope,
                   base_url=s.base_url, lan=lan, lan_configured=bool(s.lan_url),
                   connections=connections, media_base=s.media_base_url, is_admin=user.has_role("admin"), tab="general",
+                  retries=publishers.max_retries(db), max_retries=publishers.MAX_RETRIES,
                   linkedin=linkedin_pub.status(db), linkedin_redirect=linkedin_pub.redirect_uri())
 
 
@@ -1161,6 +1162,31 @@ async def settings_emails(request: Request, db: Session = Depends(get_db)):
     audit(db, Actor("user", user), "email_settings_changed", "user", user.id, **chosen)
     flash(request, "Email settings saved.")
     return back("/settings/emails")
+
+
+@router.post("/settings/publishing")
+async def settings_publishing(request: Request, db: Session = Depends(get_db)):
+    user = require(request, db)
+    form = await form_with_csrf(request)
+    if not user.has_role("admin"):
+        flash(request, "Only an admin can change publishing settings.", "error")
+        return back("/settings")
+    raw = str(form.get("retries", "")).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        value = -1
+    if not 0 <= value <= publishers.MAX_RETRIES:
+        flash(request, f"Retries must be a whole number from 0 to {publishers.MAX_RETRIES}.", "error")
+        return back("/settings")
+    row = db.get(AppSetting, "publish.retries")
+    if row is None:
+        db.add(AppSetting(key="publish.retries", value=str(value)))
+    else:
+        row.value = str(value)
+    audit(db, Actor("user", user), "publish_retries_changed", "user", user.id, retries=value)
+    flash(request, "Automatic retries are off." if value == 0 else f"Failed posts will be retried up to {value} times.")
+    return back("/settings")
 
 
 @router.post("/settings/runway-test")

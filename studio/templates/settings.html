@@ -92,6 +92,14 @@
   {% endif %}
 </div>
 {% endif %}
+<form method="post" action="/settings/publishing" class="card">
+  <h2 style="margin-top:0">Publishing</h2>
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label for="retries">Retry a failed post this many times</label>
+  <input type="number" id="retries" name="retries" value="{{ retries }}" min="0" max="{{ max_retries }}" {{ 'disabled' if not is_admin }} style="max-width:120px">
+  <p class="small muted">When a post can't be sent to Bluesky, Facebook, Instagram, Threads or the website, the Studio tries again on its next pass (about a minute later) up to this many times before giving up and emailing you. 0 turns automatic retries off, so the first failure is final. You can always press Retry on the post.</p>
+  <p>{% if is_admin %}<button type="submit">Save</button>{% else %}<span class="small muted">Only an admin can change this.</span>{% endif %}</p>
+</form>
 <form method="post" action="/settings/appearance" class="card">
   <h2 style="margin-top:0">Appearance</h2>
   <input type="hidden" name="csrf" value="{{ csrf }}">
