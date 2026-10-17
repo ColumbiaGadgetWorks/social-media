@@ -210,5 +210,43 @@
 })();
 </script>
 <script type="application/json" id="preview-data">{{ preview | tojson }}</script>
+<script>
+// Turning a channel on starts it from the text, title and time of the others, so nothing is retyped.
+// It only fills an empty caption; anything already written for that channel is left alone.
+(function () {
+  const form = document.getElementById("post-form");
+  const dataEl = document.getElementById("preview-data");
+  if (!form || !dataEl) return;
+  const channels = JSON.parse(dataEl.textContent).channels;
+  const NO_TAGS = ["website", "discord", "gbp"]; // channels that don't use hashtags
+  const get = (key, name) => form.querySelector(`[name="${key}.${name}"]`);
+  const val = (key, name) => (get(key, name)?.value ?? "").trim();
+  const setValue = (el, value) => { if (!el || el.value === value) return; el.value = value; el.dispatchEvent(new Event("input", { bubbles: true })); };
+
+  form.querySelectorAll('input[type="checkbox"][name$=".enabled"]').forEach((box) => {
+    box.addEventListener("change", () => {
+      if (!box.checked) return;
+      const key = box.name.slice(0, -".enabled".length);
+      if (val(key, "body")) return; // already has its own text
+      const keys = Object.keys(channels).filter((k) => k !== key && get(k, "body"));
+      const from = keys.find((k) => get(k, "enabled")?.checked && val(k, "body")) || keys.find((k) => val(k, "body"));
+      if (!from) return;
+      setValue(get(key, "body"), get(from, "body").value);
+      if (!NO_TAGS.includes(key)) setValue(get(key, "hashtags"), get(from, "hashtags")?.value ?? "");
+      const when = get(from, "scheduled_at")?.value;
+      if (when && !val(key, "scheduled_at")) setValue(get(key, "scheduled_at"), when);
+      const titleBox = get(key, "title");
+      if (titleBox && !val(key, "title")) {
+        const source = val(from, "title") || document.getElementById("title")?.value.trim() || "";
+        setValue(titleBox, source.slice(0, Number(channels[key].title_chars) || source.length));
+      }
+      const note = document.createElement("p");
+      note.className = "small muted";
+      note.textContent = `Started from ${channels[from].label}. Edit it to suit ${channels[key].label}.`;
+      box.closest("label").after(note);
+    });
+  });
+})();
+</script>
 <script src="/static/preview.js?v={{ ASSET_V }}"></script>
 {% endblock %}

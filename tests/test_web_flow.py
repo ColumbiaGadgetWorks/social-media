@@ -367,3 +367,9 @@ def test_save_and_approve_approves_what_was_just_saved(approver_client):
             "bluesky.body": "word " * 80, "bluesky.hashtags": "", "bluesky.scheduled_at": future(), "action": "approve"}
     r = approver_client.post(f"/posts/{other}", data=data, follow_redirects=True)
     assert "Saved, but not approved" in r.text and status_of(other) == "in_review"
+
+
+def test_turning_a_channel_on_starts_it_from_the_others(approver_client):
+    post_id = upload(approver_client, [("a.jpg", jpeg_bytes(), "image/jpeg")])
+    html = approver_client.get(f"/posts/{post_id}").text
+    assert "Started from" in html and "starts it from the text, title and time of the others" in html
