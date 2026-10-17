@@ -859,6 +859,28 @@ async def announcement_newsletter(request: Request, db: Session = Depends(get_db
     return back(f"/announcements/{ann.id}")
 
 
+@router.post("/announcements/list-check")
+async def announcement_list_check(request: Request, db: Session = Depends(get_db)):
+    require(request, db, "editor")
+    await form_with_csrf(request)
+    if not settings().dolibarr_configured:
+        flash(request, "Dolibarr isn't connected (STUDIO_DOLIBARR_URL / STUDIO_DOLIBARR_API_KEY).", "error")
+        return back("/announcements")
+    try:
+        d = Dolibarr().diagnose()
+    except Exception as exc:
+        flash(request, f"Couldn't read the list from Dolibarr: {exc}", "error")
+        return back("/announcements")
+    text = (f"Dolibarr tag \"{d['tag']}\" (id {d['tag_id']}): {d['tagged']} contacts visible to the Studio, "
+            f"{d['valid_email']} with a valid address, {d['active']} active, {d['subscribed']} not opted out, "
+            f"so {d['usable']} get the email.")
+    if not d["tagged"]:
+        text += (" None are visible. If contacts carry this tag in Dolibarr, the API key's user probably can't see them: "
+                 "use an administrator's key, or give that user the right to see all third parties' contacts.")
+    flash(request, text, "ok" if d["usable"] else "error")
+    return back("/announcements")
+
+
 def _recipient_count() -> tuple[int | None, str]:
     if not settings().dolibarr_configured:
         return None, "Dolibarr isn't connected, so the list can't be read yet."
@@ -954,7 +976,12 @@ async def announcement_test(request: Request, ann_id: int, db: Session = Depends
     def fn(actor, ann, form):
         if not actor.user.email:
             raise ann_mod.AnnouncementError("Add your email address under Users first.")
-        ann_mod.send_test(ann, actor.user.email, db)
+        try:
+            ann_mod.send_test(ann, actor.user.email, db)
+        except Exception as exc:  # the mail server said no: say so on the page rather than failing with an error screen
+            raise ann_mod.AnnouncementError(
+                f"The test email couldn't be sent: {exc}. If it mentions the sender or From address, "
+                f"{ann_mod.sender_address(ann)} has to be an allowed sender in SMTP2GO.") from exc
         audit(db, actor, "test_sent", "announcement", ann.id)
         return f"Test sent to {actor.user.email}."
     return await _ann_action(request, ann_id, db, "editor", fn)

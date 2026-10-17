@@ -61,6 +61,10 @@
         {% if not tested %}<p class="small muted">Approve unlocks once you've sent a test of this version.</p>{% endif %}
       </form>
     {% endif %}
+    {% if not tested and a.status == 'in_review' and editable and user.has_role('editor') %}
+      <div class="problems small" style="margin-top:10px"><strong>Approve is locked.</strong> Send yourself a test of this exact version first; any edit means a new test.
+        <form method="post" action="/announcements/{{ a.id }}/test" style="margin-top:6px"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit">Send a test to me</button></form></div>
+    {% endif %}
     {% if editable and user.has_role('approver') and a.status != 'needs_claude' %}
       <form method="post" action="/announcements/{{ a.id }}/changes" style="margin-top:10px">
         <input type="hidden" name="csrf" value="{{ csrf }}">

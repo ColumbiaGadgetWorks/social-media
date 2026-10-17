@@ -351,3 +351,25 @@ def test_weekly_events_are_one_line_and_cancelled_ones_have_no_link(app3, monkey
         items = ann_mod.refresh_items(s, adam(s), a)
         assert [i["title"] for i in items][1] == "Open Hack Night" and items[1]["blurb"] == "Free for all."
         assert len(items) == 3
+
+
+
+def test_list_check_explains_where_contacts_drop_out(app3, monkeypatch):
+    import httpx
+
+    from studio import dolibarr as dol
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/categories"):
+            return httpx.Response(200, json=[{"id": "1", "label": "Email updates"}])
+        return httpx.Response(200, json=[
+            {"id": "1", "email": "a@example.org", "statut": "1", "no_email": None},
+            {"id": "2", "email": "b@example.org", "statut": "1", "no_email": "1"},
+            {"id": "3", "email": "not-an-address", "statut": "1"},
+            {"id": "4", "email": "d@example.org", "statut": "0"}])
+
+    object.__setattr__(db_mod.settings(), "dolibarr_url", "https://dol.example")
+    object.__setattr__(db_mod.settings(), "dolibarr_api_key", "k")
+    client = dol.Dolibarr(http=httpx.Client(transport=httpx.MockTransport(handler)))
+    d = client.diagnose()
+    assert d == {"tag": "Email updates", "tag_id": 1, "tagged": 4, "valid_email": 3, "active": 2, "subscribed": 1, "usable": 1}

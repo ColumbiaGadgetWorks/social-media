@@ -59,24 +59,38 @@ class Dolibarr:
             self._category_id = int(found[0]["id"])
         return self._category_id
 
+    def _tagged(self) -> list[dict]:
+        """Every contact carrying the tag, as Dolibarr returns them to this API key."""
+        rows: list[dict] = []
+        page = 0
+        while True:
+            chunk = self._call("GET", "contacts", params={"category": self.category_id(), "limit": 200, "page": page}) or []
+            rows += chunk
+            if len(chunk) < 200:
+                return rows
+            page += 1
+
     def recipients(self) -> list[dict]:
         """Active contacts with the tag, an email address, and no opt-out. One entry per address."""
         out: dict[str, dict] = {}
-        page = 0
-        while True:
-            rows = self._call("GET", "contacts", params={"category": self.category_id(), "limit": 200, "page": page}) or []
-            for c in rows:
-                email = (c.get("email") or "").strip()
-                if not valid_email(email) or str(c.get("statut", c.get("status", "1"))) != "1":
-                    continue
-                if str(c.get("no_email") or "0") not in ("0", "", "None"):
-                    continue
-                name = " ".join(x for x in (c.get("firstname"), c.get("lastname")) if x).strip()
-                out.setdefault(email.lower(), {"email": email, "contact_id": int(c["id"]), "name": name})
-            if len(rows) < 200:
-                break
-            page += 1
+        for c in self._tagged():
+            email = (c.get("email") or "").strip()
+            if not valid_email(email) or str(c.get("statut", c.get("status", "1"))) != "1":
+                continue
+            if str(c.get("no_email") or "0") not in ("0", "", "None"):
+                continue
+            name = " ".join(x for x in (c.get("firstname"), c.get("lastname")) if x).strip()
+            out.setdefault(email.lower(), {"email": email, "contact_id": int(c["id"]), "name": name})
         return list(out.values())
+
+    def diagnose(self) -> dict:
+        """Where contacts drop out on the way to the list: tagged, with a valid address, active, not opted out."""
+        tagged = self._tagged()
+        valid = [c for c in tagged if valid_email((c.get("email") or "").strip())]
+        active = [c for c in valid if str(c.get("statut", c.get("status", "1"))) == "1"]
+        subscribed = [c for c in active if str(c.get("no_email") or "0") in ("0", "", "None")]
+        return {"tag": self.tag, "tag_id": self.category_id(), "tagged": len(tagged), "valid_email": len(valid),
+                "active": len(active), "subscribed": len(subscribed), "usable": len(self.recipients())}
 
     def contacts_with_email(self, email: str) -> list[dict]:
         if not valid_email(email):

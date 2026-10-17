@@ -3,6 +3,12 @@
 {% block content %}
 <h1>Email announcements</h1>
 <p class="muted small">Classes, events and important news only, 1–2 a month, to the Dolibarr contacts tagged "Email updates". The monthly "Coming up at CGW" draft appears about 12 days before the first Tuesday, filled with that month's events, and waits for a Claude session to write it.{% if not dolibarr %} <strong>Dolibarr isn't connected yet, so nothing can be sent.</strong>{% endif %}</p>
+{% if dolibarr and user.has_role('editor') %}
+<form method="post" action="/announcements/list-check" class="row" style="margin:0 0 12px">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit">Check the email list</button>
+  <span class="small muted">Shows how many contacts the Studio can see in Dolibarr and where any are left out.</span>
+</form>
+{% endif %}
 <div class="table-wrap"><table>
   <thead><tr><th>Sends</th><th>Subject</th><th>Kind</th><th>Status</th><th>Sent to</th></tr></thead>
   <tbody>{% for a in rows %}<tr>
