@@ -308,12 +308,26 @@ def test_withdraw_approval_from_several_posts_at_once(approver_client):
     assert "Approved and scheduled" in page and "Scheduled post 0" in page and "Scheduled post 1" in page
     assert "Scheduled post 2" not in page  # already started publishing: can't be withdrawn
     data = {"csrf": csrf_of(approver_client, "/review"), "post": [str(ids[0]), str(ids[1])], "comment": "Add Discord"}
-    assert "Withdrew approval for 2 posts" in approver_client.post("/review/withdraw", data=data, follow_redirects=True).text
+    page = approver_client.post("/review/withdraw", data=data, follow_redirects=True).text
+    assert "Withdrew approval for 2 posts" in page and "back in draft" in page
+    assert "Sent back and waiting for edits" in page and "Add Discord" in page and "Scheduled post 0" in page  # still visible
     with db_mod.session_scope() as s:
         for i in ids[:2]:
             post = s.get(Post, i)
             assert post.status == "draft" and post.approved_hash is None and post.review_comment == "Add Discord"
         assert s.get(Post, ids[2]).status == "approved"
+    # with "queue for Claude" ticked they land in Claude's queue instead
+    with db_mod.session_scope() as s:
+        again = Post(status="approved", note="again", title="Another scheduled post", approved_hash="x", approved_by_id=1)
+        s.add(again)
+        s.flush()
+        s.add(ChannelVersion(post_id=again.id, channel="bluesky", enabled=True, body="x", publish_state="pending",
+                             scheduled_at=db_mod.utcnow() + timedelta(days=5)))
+        again_id = again.id
+    data = {"csrf": csrf_of(approver_client, "/review"), "post": [str(again_id)], "comment": "Add Discord", "queue": "1"}
+    assert "queued for the next Claude session" in approver_client.post("/review/withdraw", data=data, follow_redirects=True).text
+    with db_mod.session_scope() as s:
+        assert s.get(Post, again_id).status == "needs_claude"
     empty = {"csrf": csrf_of(approver_client, "/review")}
     assert "Tick the posts" in approver_client.post("/review/withdraw", data=empty, follow_redirects=True).text
 

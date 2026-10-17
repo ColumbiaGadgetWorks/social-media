@@ -547,7 +547,8 @@ def review(request: Request, db: Session = Depends(get_db)):
     user = require(request, db)
     waiting = db.scalars(select(Post).where(Post.status == "in_review").order_by(Post.submitted_at)).all()
     emails = db.scalars(select(Announcement).where(Announcement.status == "in_review")).all()
-    return render(request, "review.html", user, posts=waiting, emails=emails, scheduled=_withdrawable(db))
+    sent_back = db.scalars(select(Post).where(Post.status.in_(("draft", "needs_claude"))).order_by(Post.id.desc()).limit(40)).all()
+    return render(request, "review.html", user, posts=waiting, emails=emails, scheduled=_withdrawable(db), sent_back=sent_back)
 
 
 def _withdrawable(db: Session) -> list[Post]:
@@ -564,6 +565,7 @@ async def review_withdraw(request: Request, db: Session = Depends(get_db)):
     form = await form_with_csrf(request)
     ids = [int(i) for i in form.getlist("post") if str(i).isdigit()]
     comment = str(form.get("comment", "")).strip() or "Approval withdrawn to make changes."
+    queue = form.get("queue") == "1"
     if not ids:
         flash(request, "Tick the posts to withdraw first.", "error")
         return back("/review")
@@ -574,10 +576,13 @@ async def review_withdraw(request: Request, db: Session = Depends(get_db)):
             if post is None:
                 raise post_svc.PostError("no such post")
             post_svc.request_changes(db, Actor("user", user), post, comment)
+            if queue:  # so the next Claude session picks it up with your note
+                post_svc.send_to_claude(db, Actor("user", user), post)
             done.append(post_id)
         except post_svc.PostError as exc:
             skipped.append(f"{post_id}: {exc}")
-    message = f"Withdrew approval for {len(done)} post{'s' if len(done) != 1 else ''}; they're back in draft."
+    where = "queued for the next Claude session (with your note)" if queue else "back in draft, listed below under Sent back"
+    message = f"Withdrew approval for {len(done)} post{'s' if len(done) != 1 else ''}; {'it is' if len(done) == 1 else 'they are'} {where}."
     if skipped:
         message += " Couldn't withdraw " + "; ".join(skipped)
     flash(request, message, "error" if skipped and not done else "ok")
@@ -821,6 +826,14 @@ async def announcement_new(request: Request, db: Session = Depends(get_db)):
         flash(request, str(exc) or "Enter a subject and a send time.", "error")
         return back("/announcements")
     return back(f"/announcements/{ann.id}")
+
+
+@router.post("/announcements/{ann_id}/refresh-items")
+async def announcement_refresh_items(request: Request, ann_id: int, db: Session = Depends(get_db)):
+    def fn(actor, ann, form):
+        count = len(ann_mod.refresh_items(db, actor, ann))
+        return f"Rebuilt the list from the calendar: {count} items. Your descriptions were kept where the line is still there."
+    return await _ann_action(request, ann_id, db, "editor", fn)
 
 
 @router.post("/announcements/newsletter")

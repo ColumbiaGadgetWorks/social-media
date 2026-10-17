@@ -198,6 +198,25 @@ def start_monthly_newsletter() -> str:
 
 
 @server.tool()
+def refresh_newsletter_items(announcement_id: int) -> str:
+    """Rebuild a monthly email draft's list of events from the calendar (weekly events like Open Hack Night
+    become one line, cancelled events have no link). Descriptions already written are kept. Only for drafts
+    that aren't approved."""
+    with session_scope() as db:
+        actor = _actor(db)
+        a = db.get(Announcement, announcement_id)
+        if a is None:
+            return "Error: no such email."
+        try:
+            items = announcements.refresh_items(db, actor, a)
+        except announcements.AnnouncementError as exc:
+            db.rollback()
+            return f"Error: {exc}"
+        return json.dumps({"announcement_id": a.id, "status": a.status,
+                           "items": [{"index": i, **item} for i, item in enumerate(items)]}, indent=1)
+
+
+@server.tool()
 def draft_announcement(
     announcement_id: int,
     subject: str = "",

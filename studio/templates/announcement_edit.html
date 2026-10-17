@@ -42,6 +42,12 @@
     <p class="small muted">{{ same_month }} other email(s) approved or sent that month (limit 2).</p>
     {% if problems and a.status not in ('sent', 'cancelled') %}<div class="problems small"><ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></div>{% endif %}
     <p class="small muted">Sent from {{ sender }}; replies go there too.</p>
+    {% if a.kind == 'monthly' and a.status in ('needs_claude', 'draft', 'in_review') and user.has_role('editor') %}
+      <form method="post" action="/announcements/{{ a.id }}/refresh-items" style="margin-bottom:10px">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit">Rebuild the list from the calendar</button>
+        <p class="small muted">Weekly events become one line and cancelled ones lose their link. Descriptions you've written are kept.</p>
+      </form>
+    {% endif %}
     {% if editable and user.has_role('editor') %}
       <form method="post" action="/announcements/{{ a.id }}/test"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit">Send a test to me</button></form>
       {% if tested %}<p class="small" style="color:var(--ok)">Tested: this version was sent to {{ tested.to }} ({{ tested.at }} UTC).</p>

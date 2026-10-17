@@ -323,3 +323,31 @@ def test_social_links_set_in_settings_appear_in_the_email(app3):
         html_body, text_body = ann_mod.render(a, "#u")
         assert "Follow us:" in html_body and 'href="https://www.facebook.com/cgw"' in html_body
         assert "Instagram: https://www.instagram.com/cgw" in text_body and "TikTok" not in html_body
+
+
+
+def test_weekly_events_are_one_line_and_cancelled_ones_have_no_link(app3, monkeypatch):
+    with db_mod.session_scope() as s:
+        for day in (6, 13, 20):  # 6 PM Central is midnight UTC the next day
+            s.add(Event(uid=f"hn{day}", start=datetime(2026, 11, day, 0, 0), title="Open Hack Night", series="hack|Thu|18:00",
+                        location="1404 Grand Ave"))
+        s.add(Event(uid="class", start=datetime(2026, 11, 4, 0, 0), title="Free Public CGW Class: CAD"))
+        s.add(Event(uid="thanks", start=datetime(2026, 11, 27, 0, 0), title="Cancelled: Open Hack Night (Thanksgiving)"))
+    at_local(monkeypatch, datetime(2026, 10, 12, 9, 0))
+    with db_mod.session_scope() as s:
+        a = ann_mod.ensure_monthly(s, early=True)
+        titles = [i["title"] for i in a.items]
+        assert titles == ["Free Public CGW Class: CAD", "Open Hack Night", "Cancelled: Open Hack Night (Thanksgiving)"]
+        hack = a.items[1]
+        assert hack["when"].startswith("Thursdays, ") and hack["when"].endswith("November 5, 12 and 19")
+        assert hack["link"] and a.items[0]["link"]
+        assert a.items[2]["link"] == ""  # nothing to link for a cancelled event
+        html_body, text_body = ann_mod.render(a, "#u")
+        assert "Details: https://" in text_body and text_body.count("Details:") == 2
+        # an older draft built one line per Hack Night is rebuilt, keeping what was written
+        a.items = [{"event_id": 99, "title": "Open Hack Night", "when": "x", "where": "", "link": "l", "blurb": "Free for all."},
+                   {"event_id": 98, "title": "Open Hack Night", "when": "y", "where": "", "link": "l", "blurb": "Free for all."}]
+        a.status = "draft"
+        items = ann_mod.refresh_items(s, adam(s), a)
+        assert [i["title"] for i in items][1] == "Open Hack Night" and items[1]["blurb"] == "Free for all."
+        assert len(items) == 3

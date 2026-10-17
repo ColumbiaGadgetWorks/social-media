@@ -80,11 +80,63 @@ def _month_bounds_utc(year: int, month: int) -> tuple[datetime, datetime]:
 
 
 def event_item(event: Event) -> dict:
-    from .calendar_sync import event_when
+    from .calendar_sync import event_when, is_cancelled
 
     day, when = event_when(event)
+    link = "" if is_cancelled(event) else (event.url or f"{settings().website_url}/calendar/")  # nothing to see for a cancelled event
     return {"event_id": event.id, "title": event.title, "when": f"{day}, {when}", "where": event.location,
-            "link": event.url or f"{settings().website_url}/calendar/", "blurb": ""}
+            "link": link, "blurb": ""}
+
+
+def weekly_item(events: list[Event]) -> dict:
+    """One line for a weekly event (Open Hack Night): the weekday and time, then every date in the month."""
+    from .calendar_sync import event_when
+
+    first = events[0]
+    day, when = event_when(first)
+    weekday = day.split(",")[0]
+    local = [to_local(e.start) for e in events]
+    days = [str(d.day) for d in local]
+    dates = ", ".join(days[:-1]) + (" and " if len(days) > 1 else "") + days[-1]
+    return {"event_id": first.id, "title": first.title, "when": f"{weekday}s, {when}: {local[0]:%B} {dates}",
+            "where": first.location, "link": first.url or f"{settings().website_url}/calendar/", "blurb": ""}
+
+
+def month_items(db: Session, send_at: datetime, month_end: datetime) -> list[dict]:
+    """What goes in a month's newsletter: each one-off event, and each weekly event as a single line."""
+    events = db.scalars(
+        select(Event).where(Event.start >= send_at, Event.start < month_end, Event.status == "active",
+                            Event.recurring.is_(False), Event.email_ok.is_(True)).order_by(Event.start)
+    ).all()
+    items, seen = [], set()
+    for e in events:
+        if e.series:
+            if e.series in seen:
+                continue
+            seen.add(e.series)
+            items.append(weekly_item([x for x in events if x.series == e.series]))
+        else:
+            items.append(event_item(e))
+    return items
+
+
+def refresh_items(db: Session, actor: Actor, ann: Announcement) -> list[dict]:
+    """Rebuild a monthly draft's list from the calendar (for example after the list was built an older way),
+    keeping the descriptions already written for lines that are still there."""
+    if ann.kind != "monthly" or ann.status not in ("needs_claude", "draft", "in_review"):
+        raise AnnouncementError("Only a monthly email that isn't approved yet can be rebuilt from the calendar.")
+    year, month = (int(x) for x in ann.month.split("-"))
+    _, month_end = _month_bounds_utc(year, month)
+    old = ann.items
+    items = month_items(db, ann.send_at, month_end)
+    for item in items:
+        same = next((o for o in old if o.get("event_id") == item["event_id"] and o.get("blurb")), None) \
+            or next((o for o in old if o.get("title") == item["title"] and o.get("blurb")), None)
+        if same:
+            item["blurb"] = same["blurb"]
+    update(db, actor, ann, items=items)
+    audit(db, actor, "items_refreshed", "announcement", ann.id, items=len(items))
+    return items
 
 
 def ensure_monthly(db: Session, early: bool = False) -> Announcement | None:
@@ -100,17 +152,14 @@ def ensure_monthly(db: Session, early: bool = False) -> Announcement | None:
         if db.scalar(select(Announcement).where(Announcement.kind == "monthly", Announcement.month == key)):
             continue
         _, month_end = _month_bounds_utc(year, month)
-        events = db.scalars(
-            select(Event).where(Event.start >= send_at, Event.start < month_end, Event.status == "active",
-                                Event.recurring.is_(False), Event.email_ok.is_(True), Event.series == "").order_by(Event.start)
-        ).all()
+        items = month_items(db, send_at, month_end)
         name = date(year, month, 1).strftime("%B")
         ann = Announcement(kind="monthly", month=key, subject=f"Coming up at CGW: {name}",
-                           items=[event_item(e) for e in events], closing=DEFAULT_CLOSING, send_at=send_at,
+                           items=items, closing=DEFAULT_CLOSING, send_at=send_at,
                            status="needs_claude")
         db.add(ann)
         db.flush()
-        audit(db, Actor.system(), "announcement_created", "announcement", ann.id, month=key, items=len(events))
+        audit(db, Actor.system(), "announcement_created", "announcement", ann.id, month=key, items=len(items))
         return ann
     return None
 

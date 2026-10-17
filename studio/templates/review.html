@@ -20,6 +20,19 @@
   </div>
 {% endfor %}
 </div>
+{% if sent_back %}
+<h2>Sent back and waiting for edits</h2>
+<p class="small muted">Drafts and posts waiting for a Claude session, with the note they were sent back with. Once they're revised and submitted they return to the list above.</p>
+<div class="stack" style="margin-bottom:16px">
+{% for p in sent_back %}
+  <div class="card">
+    <div class="row spread"><h3><a href="/posts/{{ p.id }}">{{ p.display_title }}</a></h3>
+      <span class="tag {{ 'accent' if p.status == 'needs_claude' else '' }}">{{ STATUS_LABELS[p.status] }}</span></div>
+    {% if p.review_comment %}<p class="small">“{{ p.review_comment }}”</p>{% endif %}
+  </div>
+{% endfor %}
+</div>
+{% endif %}
 {% if scheduled and user.has_role('approver') %}
 <h2>Approved and scheduled</h2>
 <p class="small muted">Need to change something, like adding a channel? Send these back to draft. They have to be approved again afterwards. Posts that have already started publishing can't be withdrawn.</p>
@@ -32,8 +45,10 @@
       <span class="small muted">{% for v in p.enabled_versions %}{{ CHANNELS[v.channel].label }}{{ ', ' if not loop.last }}{% endfor %}{% if p.enabled_versions %} · {{ (p.enabled_versions | map(attribute='scheduled_at') | select | min) | local('%b %-d %-I:%M %p') }}{% endif %}</span></span>
   </label>
   {% endfor %}
-  <label for="withdraw-comment">Note (optional)</label>
+  <label for="withdraw-comment">What should change? (Claude sees this note)</label>
   <input type="text" id="withdraw-comment" name="comment" placeholder="e.g. Add Discord">
+  <label class="row" style="gap:8px;margin:10px 0;font-weight:400"><input type="checkbox" name="queue" value="1" checked>
+    Queue them for the next Claude session, so Claude makes the change and sends them back for review</label>
   <p><button type="submit">Withdraw approval for the ticked posts</button></p>
 </form>
 {% endif %}
