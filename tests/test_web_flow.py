@@ -373,3 +373,30 @@ def test_turning_a_channel_on_starts_it_from_the_others(approver_client):
     post_id = upload(approver_client, [("a.jpg", jpeg_bytes(), "image/jpeg")])
     html = approver_client.get(f"/posts/{post_id}").text
     assert "Started from" in html and "starts it from the text, title and time of the others" in html
+
+
+def test_cancel_posts_from_the_review_page(approver_client):
+    from datetime import timedelta
+
+    from studio.models import ChannelVersion
+
+    ids = {}
+    with db_mod.session_scope() as s:
+        for status in ("needs_claude", "in_review", "approved", "done"):
+            post = Post(status=status, note=status, title=f"Post {status}", approved_hash="x", approved_by_id=1)
+            s.add(post)
+            s.flush()
+            s.add(ChannelVersion(post_id=post.id, channel="bluesky", enabled=True, body="x",
+                                 publish_state="published" if status == "done" else "pending",
+                                 scheduled_at=db_mod.utcnow() + timedelta(days=2)))
+            ids[status] = post.id
+    page = approver_client.get("/review").text
+    assert page.count("Cancel this post") >= 2 and "Cancel the ticked posts" in page
+    data = {"csrf": csrf_of(approver_client, "/review"), "post": [str(i) for i in ids.values()]}
+    page = approver_client.post("/review/discard", data=data, follow_redirects=True).text
+    assert "Cancelled 3 posts" in page and "be cancelled" in page
+    with db_mod.session_scope() as s:
+        assert [s.get(Post, ids[k]).status for k in ("needs_claude", "in_review", "approved", "done")] == [
+            "rejected", "rejected", "rejected", "done"]
+        assert s.get(Post, ids["approved"]).approved_hash is None
+

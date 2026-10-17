@@ -589,6 +589,32 @@ async def review_withdraw(request: Request, db: Session = Depends(get_db)):
     return back("/review")
 
 
+@router.post("/review/discard")
+async def review_discard(request: Request, db: Session = Depends(get_db)):
+    """Cancel posts from the Review page: whatever stage they're at, they end up Rejected and never publish."""
+    user = require(request, db, "approver")
+    form = await form_with_csrf(request)
+    ids = [int(i) for i in form.getlist("post") if str(i).isdigit()]
+    if not ids:
+        flash(request, "Tick the posts to cancel first.", "error")
+        return back("/review")
+    done, skipped = [], []
+    for post_id in ids:
+        post = db.get(Post, post_id)
+        try:
+            if post is None:
+                raise post_svc.PostError("no such post")
+            post_svc.discard(db, Actor("user", user), post, "Cancelled from the Review page.")
+            done.append(post_id)
+        except post_svc.PostError as exc:
+            skipped.append(f"{post_id}: {exc}")
+    message = f"Cancelled {len(done)} post{'s' if len(done) != 1 else ''}; nothing will be published."
+    if skipped:
+        message += " Couldn't cancel " + "; ".join(skipped)
+    flash(request, message, "error" if skipped and not done else "ok")
+    return back("/review")
+
+
 def _load_post(db: Session, post_id: int) -> Post | None:
     return db.get(Post, post_id)
 

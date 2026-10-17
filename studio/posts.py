@@ -223,6 +223,23 @@ def request_changes(db: Session, actor: Actor, post: Post, comment: str, *, reje
     audit(db, actor, "rejected" if reject else "changes_requested", "post", post.id, comment=comment)
 
 
+def discard(db: Session, actor: Actor, post: Post, comment: str = "") -> None:
+    """Cancel a post for good (it moves to Rejected and never publishes): at any stage before it starts going out,
+    including a draft still waiting for Claude."""
+    if not actor.is_human or not actor.user.has_role("approver"):
+        raise PostError("Only an approver can cancel a post.")
+    if post.status not in ("needs_claude", "draft", "in_review", "approved"):
+        raise PostError(f"A post that is {post.status} can't be cancelled.")
+    if _has_published(post):
+        raise PostError("Part of this post is already published.")
+    post.status = "rejected"
+    post.review_comment = comment
+    post.approved_hash = None
+    post.approved_by_id = None
+    post.approved_at = None
+    audit(db, actor, "rejected", "post", post.id, comment=comment, discarded=True)
+
+
 def mark_posted(db: Session, actor: Actor, version: ChannelVersion, url: str = "") -> None:
     """A person scheduled or posted this version by hand (batch / on-day channels)."""
     if not actor.is_human:
