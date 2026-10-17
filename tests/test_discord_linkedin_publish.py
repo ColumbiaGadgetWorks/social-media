@@ -161,3 +161,21 @@ def test_linkedin_connect_publish_and_refresh(app_pub, monkeypatch):
         assert s.scalars(select(Credential).where(Credential.key.like("linkedin%"))).all() == []
     linkedin._forget_cache()
     assert ch.mode("linkedin") == "batch"
+
+
+def test_discord_photos_are_shrunk_to_fit_one_message_and_errors_explain_themselves():
+    import random
+
+    from PIL import Image
+
+    random.seed(1)
+    noisy = [Image.frombytes("RGB", (1800, 1800), random.randbytes(1800 * 1800 * 3)) for _ in range(3)]
+    limit = 2 * 1024 * 1024
+    fitted = discord_pub.fit_images(noisy, limit)
+    assert len(fitted) == 3 and sum(len(b) for b in fitted) <= limit * 0.95
+
+    small = discord_pub.fit_images([Image.new("RGB", (400, 300), "red")], limit)
+    assert len(small) == 1 and small[0][:2] == b"\xff\xd8"  # still a JPEG
+
+    refusal = httpx.Response(403, json={"message": "Missing Permissions", "code": 50013})
+    assert "Missing Permissions (code 50013)" in discord_pub._why(refusal)

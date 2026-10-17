@@ -316,3 +316,13 @@ def test_withdraw_approval_from_several_posts_at_once(approver_client):
         assert s.get(Post, ids[2]).status == "approved"
     empty = {"csrf": csrf_of(approver_client, "/review")}
     assert "Tick the posts" in approver_client.post("/review/withdraw", data=empty, follow_redirects=True).text
+
+
+def test_every_channel_has_a_preview_builder(approver_client):
+    """A channel with no builder in preview.js shows no preview at all (Discord used to be missing)."""
+    from studio import channels as ch
+
+    js = approver_client.get("/static/preview.js").text
+    for key in ch.CHANNELS:
+        assert f"{key}(p)" in js or f"builders.{key} =" in js, f"no preview for {key}"
+    assert "sm-discord" in approver_client.get("/static/app.css").text

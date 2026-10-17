@@ -152,6 +152,28 @@
       const cap = add(h("div", "sm-text"), clipped(p.full, 210, "…more"));
       return add(root, head("Nonprofit · now"), cap, carousel("linkedin", p.items, "1 / 1", "contain"), textRow("Like", "Comment", "Repost", "Send"));
     },
+    discord(p) {
+      // A Discord message: dark theme, the bot's name, then every photo laid out in a grid (video plays inline).
+      const root = h("div", "sm sm-discord");
+      const who = add(h("div", "sm-dc-line"), h("b", null, NAME), h("span", "sm-dc-tag", "APP"), h("span", "sm-sub", "Today"));
+      const cap = add(h("div", "sm-text"), limited(p.full, p.max));
+      const grid = h("div", `sm-dc-grid n${Math.min(p.items.length, 4)}`);
+      p.items.forEach((m) => {
+        let node;
+        if (m.kind === "video" && m.video) {
+          node = h("video");
+          node.controls = true; node.muted = true; node.playsInline = true; node.preload = "metadata";
+          node.src = m.video;
+          if (m.src) node.poster = m.src;
+        } else {
+          node = h("img");
+          node.src = m.src; node.alt = m.alt || "";
+        }
+        grid.append(node);
+      });
+      const body = add(h("div", "sm-dc-body"), who, cap, p.items.length ? grid : null);
+      return add(root, add(h("div", "sm-dc-msg"), avatar(), body));
+    },
     gbp(p) {
       const root = h("div", "sm sm-gbp");
       const cap = add(h("div", "sm-text"), clipped(p.full, 140, "More"));

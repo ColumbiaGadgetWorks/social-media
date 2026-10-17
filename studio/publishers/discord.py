@@ -8,9 +8,11 @@ follow it.
 
 from __future__ import annotations
 
+import io
 import json
 
 import httpx
+from PIL import Image
 
 from .. import public_media
 from ..db import settings
@@ -41,10 +43,13 @@ class DiscordClient:
         if r.status_code == 429:
             raise PublishError("Discord rate limit; trying again shortly")
         if r.status_code in (401, 403):
-            raise PublishError(f"Discord refused ({r.status_code}): the bot needs View Channel, Send Messages and "
-                               "Attach Files in the posting channel")
+            raise PublishError(f"Discord refused ({r.status_code}): {_why(r)}. The bot needs View Channel, Send Messages "
+                               "and Attach Files in the posting channel (photos fail without Attach Files)")
+        if r.status_code == 413:
+            raise PublishError(f"Discord says the message is too large ({_why(r)}); the photos and video together must "
+                               f"fit under {self.limit // (1024 * 1024)} MB (STUDIO_DISCORD_UPLOAD_MB)")
         if r.status_code >= 400:
-            raise PublishError(f"Discord error (HTTP {r.status_code}): {r.text[:200]}")
+            raise PublishError(f"Discord error (HTTP {r.status_code}): {_why(r)}")
         return r.json() if r.content else {}
 
     def publish(self, version: ChannelVersion) -> tuple[str, str]:
@@ -59,10 +64,8 @@ class DiscordClient:
             else:  # too big for Discord: link the approved public copy, which Discord plays inline
                 text = f"{text}\n\n{public_media.url(video, 'video')}".strip()
         else:
-            for i, m in enumerate(m for m in media if m.kind == "image"):
-                if i >= 10:
-                    break
-                data = public_media.render(m, "jpg")
+            photos = [m for m in media if m.kind == "image"][:10]
+            for m, data in zip(photos, fit_images([public_media._open(m) for m in photos], self.limit), strict=True):
                 files.append((f"cgw-{m.id}.jpg", data, "image/jpeg"))
         if len(text) > MAX_TEXT:
             raise PublishError(f"Discord messages are limited to {MAX_TEXT} characters ({len(text)} here)")
@@ -82,6 +85,32 @@ class DiscordClient:
                 pass  # the message is up in our own channel either way
         url = f"https://discord.com/channels/{self.guild or '@me'}/{self.channel}/{msg['id']}"
         return url, msg["id"]
+
+
+def _why(r: httpx.Response) -> str:
+    """Discord's own explanation (its message and error code), not just the HTTP status."""
+    try:
+        body = r.json()
+        return f"{body.get('message', r.text[:200])} (code {body.get('code', '?')})"
+    except ValueError:
+        return r.text[:200] or "no details"
+
+
+def fit_images(images: list[Image.Image], limit: int) -> list[bytes]:
+    """JPEGs for one message. Discord caps the whole upload (not each photo), so ten large photos can be refused
+    even when every one is small enough alone; shrink them together until the set fits."""
+    out: list[bytes] = []
+    for edge, quality in ((public_media.MAX_EDGE, 90), (2048, 85), (1600, 80), (1280, 72), (1024, 65), (800, 60)):
+        out = []
+        for img in images:
+            copy = img.copy()
+            copy.thumbnail((edge, edge))
+            buf = io.BytesIO()
+            copy.save(buf, "JPEG", quality=quality, optimize=True)
+            out.append(buf.getvalue())
+        if sum(len(b) for b in out) <= limit * 0.95:  # leave room for the caption and multipart overhead
+            return out
+    raise PublishError(f"These photos can't be made to fit under Discord's {limit // (1024 * 1024)} MB limit; use fewer")
 
 
 def _alt(media, filename: str) -> str:

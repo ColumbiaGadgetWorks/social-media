@@ -38,7 +38,7 @@
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.55 var(--font); }
 a { color: var(--accent-ink); }
 header.bar { background: var(--surface); border-bottom: 1px solid var(--line); padding: 0 16px; position: sticky; top: 0; z-index: 5; }
-header.bar .in { max-width: 1100px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; min-height: 52px; }
+header.bar .in { max-width: 1440px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; min-height: 52px; }
 .brand { font-weight: 700; letter-spacing: .02em; text-decoration: none; color: var(--fg); margin-right: 8px; }
 .brand span { color: var(--accent); }
 .brand img { width: 22px; height: 22px; vertical-align: -5px; margin-right: 6px; }
@@ -46,7 +46,7 @@ nav.main { display: flex; flex-wrap: wrap; gap: 2px 14px; flex: 1; }
 nav.main a { color: var(--muted); text-decoration: none; padding: 14px 0; border-bottom: 2px solid transparent; }
 nav.main a.on, nav.main a:hover { color: var(--fg); border-bottom-color: var(--accent); }
 .who { color: var(--muted); font-size: 13px; display: flex; gap: 10px; align-items: center; }
-main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+main { max-width: 1440px; margin: 0 auto; padding: 24px 16px 64px; }
 h1 { font-size: 26px; margin: 0 0 16px; text-wrap: balance; }
 h2 { font-size: 19px; margin: 28px 0 10px; }
 h3 { font-size: 16px; margin: 0 0 6px; }
@@ -72,7 +72,8 @@ h3 { font-size: 16px; margin: 0 0 6px; }
 label { display: block; font-weight: 600; font-size: 13px; margin: 10px 0 4px; }
 input[type=text], input[type=password], input[type=email], input[type=url], input[type=search], input[type=datetime-local], select, textarea {
   width: 100%; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 8px 10px; }
-textarea { min-height: 110px; resize: vertical; }
+/* Boxes grow to fit their text (field-sizing where the browser has it, app.js otherwise), so nothing needs resizing by hand. */
+textarea { min-height: 140px; max-height: 75vh; resize: vertical; field-sizing: content; }
 input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 button, .btn { font: 600 14px/1 var(--font); border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 5px; padding: 9px 14px; cursor: pointer; text-decoration: none; display: inline-block; }
 button.primary, .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
@@ -163,13 +164,13 @@ img.mini { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; }
 label.check { display: flex; gap: 8px; align-items: center; font-weight: 500; margin-top: 12px; }
 
 /* Platform previews: an approximation of each channel's feed, always drawn light so it reads like the real app. */
-.chan-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, 340px); gap: 18px; align-items: start; }
+.chan-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 400px); gap: 18px; align-items: start; }
 @media (max-width: 900px) { .chan-grid { grid-template-columns: minmax(0, 1fr); } }
 .sm-slot { position: sticky; top: 64px; }
 .sm-note { margin-top: 6px; }
 .sm { --ink: #111; --mute: #65676b; --line: #dbdbdb; --link: #0b57d0;
   background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
-  font: 14px/1.4 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 340px; }
+  font: 14px/1.4 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 400px; }
 .sm .lnk { color: var(--link); }
 .sm-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
 .sm-avatar { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: #fff; display: grid; place-items: center; flex: none; overflow: hidden; }
@@ -197,6 +198,20 @@ label.check { display: flex; gap: 8px; align-items: center; font-weight: 500; ma
 .sm-x .sm-media, .sm-bluesky .sm-media, .sm-threads .sm-media { width: calc(100% - 24px); margin: 0 12px; border-radius: 14px; }
 .sm-x .sm-dots, .sm-bluesky .sm-dots, .sm-threads .sm-dots { padding-bottom: 2px; }
 .sm-linkedin .sm-sub { font-size: 11px; }
+.sm-discord { --ink: #dbdee1; --mute: #949ba4; --line: #3f4147; --link: #00a8fc; background: #313338; border-radius: 8px; }
+.sm-dc-msg { display: flex; gap: 10px; padding: 12px; }
+.sm-dc-msg .sm-avatar { width: 38px; height: 38px; }
+.sm-dc-body { min-width: 0; flex: 1; }
+.sm-dc-line { display: flex; align-items: center; gap: 6px; }
+.sm-dc-line .sm-sub { font-size: 11px; }
+.sm-dc-tag { background: #5865f2; color: #fff; font-size: 10px; font-weight: 600; border-radius: 3px; padding: 0 4px; line-height: 15px; }
+.sm-discord .sm-text { padding: 2px 0 6px; }
+.sm-dc-grid { display: grid; gap: 4px; border-radius: 6px; overflow: hidden; }
+.sm-dc-grid img, .sm-dc-grid video { width: 100%; display: block; background: #1e1f22; }
+.sm-dc-grid.n1 img, .sm-dc-grid.n1 video { max-height: 320px; object-fit: contain; }
+.sm-dc-grid.n2, .sm-dc-grid.n3, .sm-dc-grid.n4 { grid-template-columns: 1fr 1fr; }
+.sm-dc-grid.n2 img, .sm-dc-grid.n2 video, .sm-dc-grid.n3 img, .sm-dc-grid.n3 video, .sm-dc-grid.n4 img, .sm-dc-grid.n4 video { height: 110px; object-fit: cover; }
+.sm-dc-grid.n3 > :first-child { grid-column: 1 / -1; height: 150px; }
 .sm-gbp .sm-head { padding-bottom: 0; }
 .sm-article { padding: 14px 16px 6px; }
 .sm-article h3 { margin: 0 0 2px; font-size: 18px; line-height: 1.25; }

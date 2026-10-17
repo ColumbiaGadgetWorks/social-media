@@ -59,3 +59,16 @@ document.querySelectorAll("form[data-confirm]").forEach((form) => {
     if (!window.confirm(form.dataset.confirm)) e.preventDefault();
   });
 });
+
+// Make every text box as tall as its text. Browsers with CSS field-sizing do this on their own.
+if (!(window.CSS && CSS.supports && CSS.supports("field-sizing", "content"))) {
+  const fit = (t) => {
+    if (!t.scrollHeight) return; // hidden (inside a closed <details>): fit when it opens
+    t.style.height = "auto";
+    t.style.height = `${t.scrollHeight + 2}px`;
+  };
+  const all = () => document.querySelectorAll("textarea");
+  all().forEach((t) => { fit(t); t.addEventListener("input", () => fit(t)); });
+  document.querySelectorAll("details").forEach((d) => d.addEventListener("toggle", () => all().forEach(fit)));
+  window.addEventListener("resize", () => all().forEach(fit));
+}
