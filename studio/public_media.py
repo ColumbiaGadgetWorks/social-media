@@ -28,8 +28,12 @@ def signature(media_id: int, variant: str) -> str:
     return hmac.new(key, f"public-media:{media_id}:{variant}".encode(), hashlib.sha256).hexdigest()[:32]
 
 
+def url_for(media_id: int, variant: str) -> str:
+    return f"{settings().media_base_url}/m/{media_id}/{variant}/{signature(media_id, variant)}.{VARIANTS[variant]}"
+
+
 def url(asset: MediaAsset, variant: str) -> str:
-    return f"{settings().media_base_url}/m/{asset.id}/{variant}/{signature(asset.id, variant)}.{VARIANTS[variant]}"
+    return url_for(asset.id, variant)
 
 
 def allowed(db: Session, media_id: int, variant: str, sig: str) -> bool:
@@ -38,7 +42,14 @@ def allowed(db: Session, media_id: int, variant: str, sig: str) -> bool:
     approved = db.scalar(
         select(Post.id).join(PostMedia).where(PostMedia.media_id == media_id, Post.status == "approved").limit(1)
     )
-    return approved is not None
+    if approved is not None:
+        return True
+    # A photo placed in an email (a "![...](photo:ID)" line) is public while that email is in review, approved or sent.
+    from .models import Announcement
+
+    marker = f"(photo:{media_id})"
+    return any(marker in f"{a.intro}\n{a.closing}" for a in db.scalars(
+        select(Announcement).where(Announcement.status.in_(("in_review", "approved", "sent")))))
 
 
 def _open(asset: MediaAsset) -> Image.Image:

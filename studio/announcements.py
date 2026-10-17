@@ -31,7 +31,14 @@ from sqlalchemy.orm import Session
 from . import mailer
 from .db import settings, utcnow
 from .dolibarr import Dolibarr, valid_email
-from .models import Announcement, AnnouncementRecipient, AppSetting, Event, Unsubscribe
+from .models import (
+    Announcement,
+    AnnouncementRecipient,
+    AppSetting,
+    Event,
+    MediaAsset,
+    Unsubscribe,
+)
 from .security import Actor, audit
 from .timeutil import local_now, to_local
 
@@ -200,6 +207,10 @@ def problems(db: Session, ann: Announcement) -> list[str]:
         found.append("the subject is empty")
     if not ann.intro.strip():
         found.append("the opening paragraph is empty")
+    for _, media_id in PHOTO_RE.findall(f"{ann.intro}\n{ann.closing}"):
+        asset = db.get(MediaAsset, int(media_id))
+        if asset is None or asset.kind != "image":
+            found.append(f"photo {media_id} isn't a photo in the library")
     if ann.kind == "monthly" and not ann.items:
         found.append("there are no classes or events in it; cancel it or add news to the opening")
     if any(not str(i.get("blurb", "")).strip() for i in ann.items):
@@ -305,11 +316,30 @@ def _inline(text: str) -> str:
                   r'<a href="\2" style="color:#983c1e">\1</a>', out)
 
 
+PHOTO_RE = re.compile(r"!\[([^\]]*)\]\(photo:(\d+)\)")
+
+
+def _photo(alt: str, media_id: str) -> str:
+    from . import public_media
+
+    return (f'<img src="{public_media.url_for(int(media_id), "jpg")}" alt="{html.escape(alt, quote=True)}" width="544" '
+            'style="display:block;width:100%;max-width:544px;height:auto;border-radius:6px;border:0">')
+
+
 def paragraphs(text: str) -> list[str]:
-    return [_inline(p.strip()).replace("\n", "<br>") for p in (text or "").split("\n\n") if p.strip()]
+    """Paragraphs as HTML. A paragraph that is only ![what's in it](photo:ID) becomes the library photo."""
+    out = []
+    for p in (text or "").split("\n\n"):
+        p = p.strip()
+        if not p:
+            continue
+        one = PHOTO_RE.fullmatch(p)
+        out.append(_photo(one.group(1), one.group(2)) if one else _inline(p).replace("\n", "<br>"))
+    return out
 
 
 def plain(text: str) -> str:
+    text = PHOTO_RE.sub(lambda m: f"[Photo: {m.group(1)}]" if m.group(1) else "", text or "")
     return re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r"\1 (\2)", (text or "").replace("**", ""))
 
 
@@ -424,7 +454,9 @@ def build_message(ann: Announcement, to: str, test: bool = False) -> EmailMessag
     msg["From"] = formataddr((sender_name(ann), address))
     msg["To"] = to
     msg["Reply-To"] = address
-    msg["Subject"] = ("[TEST] " if test else "") + ann.subject
+    # Each test has its own subject: mail apps (Gmail) fold same-subject messages into one thread and hide the
+    # repeated footer behind a "..." button, which makes a test look broken.
+    msg["Subject"] = (f"[TEST {local_now():%I:%M:%S %p}] " if test else "") + ann.subject
     msg["Message-ID"] = make_msgid(domain=address.split("@")[-1] or None)
     msg["List-Unsubscribe"] = f"<{unsub}>"
     msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"  # RFC 8058 one-click

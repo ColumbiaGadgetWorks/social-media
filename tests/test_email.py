@@ -209,7 +209,7 @@ def test_email_pages_and_test_send(app3, monkeypatch):
         page = c.get(f"/announcements/{ann_id}")
         assert page.status_code == 200 and "Big news" in page.text and "&lt;strong&gt;there" in page.text
         c.post(f"/announcements/{ann_id}/test", data={"csrf": csrf_of(c, f"/announcements/{ann_id}")})
-    assert mailer.outbox[-1]["Subject"] == "[TEST] Big news"
+    assert mailer.outbox[-1]["Subject"].startswith("[TEST ") and mailer.outbox[-1]["Subject"].endswith("] Big news")
     assert mailer.outbox[-1]["To"] == "adam@example.org"
 
 
@@ -373,3 +373,32 @@ def test_list_check_explains_where_contacts_drop_out(app3, monkeypatch):
     client = dol.Dolibarr(http=httpx.Client(transport=httpx.MockTransport(handler)))
     d = client.diagnose()
     assert d == {"tag": "Email updates", "tag_id": 1, "tagged": 4, "valid_email": 3, "active": 2, "subscribed": 1, "usable": 1}
+
+
+def test_a_library_photo_can_go_in_an_email_and_is_public_only_while_it_is_in_one(app3):
+    import io
+
+    from studio import public_media
+    from studio.media import process, store_upload
+    from studio.models import User
+
+    from .conftest import jpeg_bytes
+
+    with db_mod.session_scope() as s:
+        photo = store_upload(s, io.BytesIO(jpeg_bytes()), "p.jpg", "image/jpeg", s.scalar(select(User.id)), "Jeff at the mill")
+        process(photo)
+        pid = photo.id
+        a = Announcement(kind="special", subject="S", intro=f"Hi\n\n![Jeff working on the mill](photo:{pid})", closing="Bye",
+                         items=[], status="draft", send_at=db_mod.utcnow() + timedelta(days=3))
+        s.add(a)
+        s.flush()
+        html_body, text_body = ann_mod.render(a, "#u")
+        sig = public_media.signature(pid, "jpg")
+        assert f"/m/{pid}/jpg/{sig}.jpg" in html_body and 'alt="Jeff working on the mill"' in html_body
+        assert "[Photo: Jeff working on the mill]" in text_body and "photo:" not in text_body
+        assert not public_media.allowed(s, pid, "jpg", sig)  # a draft email doesn't make it public
+        a.status = "in_review"
+        s.flush()
+        assert public_media.allowed(s, pid, "jpg", sig)
+        a.closing = "![x](photo:99999)"
+        assert any("isn't a photo in the library" in p for p in ann_mod.problems(s, a))
