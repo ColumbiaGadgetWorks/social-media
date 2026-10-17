@@ -1439,6 +1439,17 @@ def public_media(media_id: int, variant: str, filename: str, db: Session = Depen
                     headers={"Cache-Control": "public, max-age=3600"})
 
 
+@router.get("/e/icon/{name}.png")
+def email_icon(name: str):
+    """The round social icons in the email footer (public: mail apps fetch them)."""
+    from . import icons
+
+    data = icons.png(name)
+    if data is None:
+        return Response(status_code=404)
+    return Response(data, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+
+
 @router.get("/healthz")
 def healthz():
     return {"ok": True}

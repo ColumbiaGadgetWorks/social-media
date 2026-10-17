@@ -106,7 +106,23 @@ def weekly_item(events: list[Event]) -> dict:
     days = [str(d.day) for d in local]
     dates = ", ".join(days[:-1]) + (" and " if len(days) > 1 else "") + days[-1]
     return {"event_id": first.id, "title": first.title, "when": f"{weekday}s, {when}: {local[0]:%B} {dates}",
-            "where": first.location, "link": first.url or f"{settings().website_url}/calendar/", "blurb": ""}
+            "where": first.location, "link": first.url or f"{settings().website_url}/calendar/", "blurb": "",
+            "weekly": True}
+
+
+def add_to_calendar_url(event: Event) -> str:
+    """A link that opens this one event in Google Calendar, ready to save (the site's own calendar page has no
+    per-event address to link to). Times go in as UTC."""
+    from urllib.parse import urlencode
+
+    if event.all_day:
+        first, last = event.start.date(), (event.end or event.start + timedelta(days=1)).date()
+        dates = f"{first:%Y%m%d}/{max(last, first + timedelta(days=1)):%Y%m%d}"
+    else:
+        dates = f"{event.start:%Y%m%dT%H%M%SZ}/{(event.end or event.start + timedelta(hours=2)):%Y%m%dT%H%M%SZ}"
+    query = {"action": "TEMPLATE", "text": event.title, "dates": dates, "location": event.location,
+             "details": f"{settings().website_url}/calendar/"}
+    return "https://calendar.google.com/calendar/render?" + urlencode(query)
 
 
 def month_items(db: Session, send_at: datetime, month_end: datetime) -> list[dict]:
@@ -334,12 +350,19 @@ def paragraphs(text: str) -> list[str]:
         if not p:
             continue
         one = PHOTO_RE.fullmatch(p)
-        out.append(_photo(one.group(1), one.group(2)) if one else _inline(p).replace("\n", "<br>"))
+        if one:
+            out.append(_photo(one.group(1), one.group(2)))
+        elif p.startswith("## "):
+            out.append(f'<span style="display:block;font-size:19px;font-weight:bold;line-height:1.3;color:#1f1f23">'
+                       f'{_inline(p[3:].strip())}</span>')
+        else:
+            out.append(_inline(p).replace("\n", "<br>"))
     return out
 
 
 def plain(text: str) -> str:
     text = PHOTO_RE.sub(lambda m: f"[Photo: {m.group(1)}]" if m.group(1) else "", text or "")
+    text = re.sub(r"^## ", "", text, flags=re.MULTILINE)
     return re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r"\1 (\2)", (text or "").replace("**", ""))
 
 
@@ -358,13 +381,26 @@ def social_links(ann: Announcement) -> list[dict]:
     for key, label in SOCIAL_SITES:
         row = db.get(AppSetting, f"social.{key}")
         if row is not None and row.value.strip():
-            out.append({"label": label, "url": row.value.strip()})
+            out.append({"key": key, "label": label, "url": row.value.strip()})
     return out
+
+
+def _item_calendar(ann: Announcement, item: dict) -> str:
+    """The "Add to calendar" link for a one-off event line (not weekly lines or cancelled events)."""
+    from sqlalchemy.orm import object_session
+
+    from .calendar_sync import is_cancelled
+
+    db = object_session(ann)
+    event = db.get(Event, item["event_id"]) if db is not None and item.get("event_id") and not item.get("weekly") else None
+    return add_to_calendar_url(event) if event is not None and not is_cancelled(event) else ""
 
 
 def render(ann: Announcement, unsubscribe_url: str) -> tuple[str, str]:
     ctx = {"a": ann, "intro": paragraphs(ann.intro), "closing": paragraphs(ann.closing),
-           "items": [{**i, "blurb_html": _inline(i.get("blurb", ""))} for i in ann.items],
+           "items": [{**i, "blurb_html": _inline(i.get("blurb", "")), "calendar_url": _item_calendar(ann, i)}
+                     for i in ann.items],
+           "icon_base": settings().media_base_url,
            "unsubscribe_url": unsubscribe_url, "address": settings().org_address,
            "site": settings().website_url, "plain": plain, "socials": social_links(ann)}
     return _env.get_template("announcement.html").render(ctx), _env.get_template("announcement.txt").render(ctx)

@@ -321,8 +321,8 @@ def test_social_links_set_in_settings_appear_in_the_email(app3):
         s.add(a)
         s.flush()
         html_body, text_body = ann_mod.render(a, "#u")
-        assert "Follow us:" in html_body and 'href="https://www.facebook.com/cgw"' in html_body
-        assert "Instagram: https://www.instagram.com/cgw" in text_body and "TikTok" not in html_body
+        assert "Follow us" in html_body and 'href="https://www.facebook.com/cgw"' in html_body
+        assert "Instagram: https://www.instagram.com/cgw" in text_body and "tiktok.png" not in html_body
 
 
 
@@ -402,3 +402,33 @@ def test_a_library_photo_can_go_in_an_email_and_is_public_only_while_it_is_in_on
         assert public_media.allowed(s, pid, "jpg", sig)
         a.closing = "![x](photo:99999)"
         assert any("isn't a photo in the library" in p for p in ann_mod.problems(s, a))
+
+
+def test_headings_icons_and_add_to_calendar(app3):
+    from studio.announcements import add_to_calendar_url
+    from studio.models import AppSetting
+
+    with db_mod.session_scope() as s:
+        start = db_mod.utcnow() + timedelta(days=20)
+        ev = Event(uid="u1", title="Learn CAD", start=start, end=start + timedelta(hours=2), location="The shop", status="active")
+        s.add(ev)
+        s.add(AppSetting(key="social.facebook", value="https://facebook.com/cgw"))
+        s.flush()
+        a = Announcement(kind="special", subject="S", intro="## Free classes start\n\nThe first is CAD.", closing="Bye",
+                         items=[{"event_id": ev.id, "title": "Learn CAD", "when": "x", "where": "", "link": "", "blurb": ""},
+                                {"event_id": ev.id, "title": "Weekly", "when": "x", "where": "", "link": "", "blurb": "", "weekly": True}],
+                         status="draft", send_at=db_mod.utcnow() + timedelta(days=3))
+        s.add(a)
+        s.flush()
+        html_body, text_body = ann_mod.render(a, "#u")
+        assert "font-size:19px" in html_body and "## " not in html_body and "## " not in text_body
+        assert html_body.count("Add to calendar") == 1  # the weekly line has none
+        assert "calendar.google.com/calendar/render?action=TEMPLATE" in add_to_calendar_url(ev)
+        assert "/e/icon/facebook.png" in html_body and "Add to calendar: https://calendar.google.com" in text_body
+
+
+def test_social_icons_are_public_pngs(app3):
+    c = TestClient(app3)
+    r = c.get("/e/icon/facebook.png")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png" and r.content[1:4] == b"PNG"
+    assert c.get("/e/icon/nope.png").status_code == 404

@@ -7,7 +7,8 @@
 {{ item.title }}
 {{ item.when }}{% if item.where %} · {{ item.where }}{% endif %}
 {{ plain(item.blurb) }}{% if item.link %}
-Details: {{ item.link }}{% endif %}
+Details: {{ item.link }}{% endif %}{% if item.calendar_url %}
+Add to calendar: {{ item.calendar_url }}{% endif %}
 {% endfor %}
 
 {{ plain(a.closing) }}
