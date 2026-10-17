@@ -340,3 +340,30 @@ def test_every_channel_has_a_preview_builder(approver_client):
     for key in ch.CHANNELS:
         assert f"{key}(p)" in js or f"builders.{key} =" in js, f"no preview for {key}"
     assert "sm-discord" in approver_client.get("/static/app.css").text
+
+
+def test_save_and_approve_approves_what_was_just_saved(approver_client):
+    post_id = upload(approver_client, [("a.jpg", jpeg_bytes(), "image/jpeg")])
+    fill_post(approver_client, post_id, bluesky="First caption.")
+    approver_client.post(f"/posts/{post_id}/submit", data={"csrf": csrf_of(approver_client, f"/posts/{post_id}")})
+    page = approver_client.get(f"/posts/{post_id}").text
+    assert 'id="approve-btn"' in page and "Save and approve" in page  # the script that swaps the label is on the page
+
+    data = {"csrf": csrf_of(approver_client, f"/posts/{post_id}"), "bluesky.present": "1", "bluesky.enabled": "1",
+            "bluesky.body": "Edited then approved in one step.", "bluesky.hashtags": "#makerspace",
+            "bluesky.scheduled_at": future(), "action": "approve"}
+    r = approver_client.post(f"/posts/{post_id}", data=data, follow_redirects=True)
+    assert "Saved and approved" in r.text
+    with db_mod.session_scope() as s:
+        post = s.get(Post, post_id)
+        assert post.status == "approved" and post.version("bluesky").body == "Edited then approved in one step."
+        assert post_svc.is_publishable(post) == (True, "")
+
+    # an edit that leaves a problem is saved but not approved
+    other = upload(approver_client, [("b.jpg", jpeg_bytes(), "image/jpeg")])
+    fill_post(approver_client, other, bluesky="Caption.")
+    approver_client.post(f"/posts/{other}/submit", data={"csrf": csrf_of(approver_client, f"/posts/{other}")})
+    data = {"csrf": csrf_of(approver_client, f"/posts/{other}"), "bluesky.present": "1", "bluesky.enabled": "1",
+            "bluesky.body": "word " * 80, "bluesky.hashtags": "", "bluesky.scheduled_at": future(), "action": "approve"}
+    r = approver_client.post(f"/posts/{other}", data=data, follow_redirects=True)
+    assert "Saved, but not approved" in r.text and status_of(other) == "in_review"

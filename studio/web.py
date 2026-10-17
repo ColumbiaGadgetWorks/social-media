@@ -662,7 +662,17 @@ async def post_save(request: Request, post_id: int, db: Session = Depends(get_db
         db.rollback()
         flash(request, str(exc), "error")
         return back(f"/posts/{post_id}")
-    if form.get("action") == "submit":
+    if form.get("action") == "approve":  # "Save and approve": what was just saved is what gets approved
+        try:
+            post_svc.approve(db, Actor("user", user), post, post_svc.approval_hash(post))
+        except post_svc.PostError as exc:
+            flash(request, f"Saved, but not approved. {exc}", "error")
+            return back(f"/posts/{post_id}")
+        if _by_hand(post):
+            flash(request, "Saved and approved. Now schedule it on the channels below.")
+            return back(f"/posts/{post_id}/schedule")
+        flash(request, "Saved and approved. Automatic channels will publish on time.")
+    elif form.get("action") == "submit":
         try:
             post_svc.submit_for_review(db, Actor("user", user), post)
             flash(request, "Saved and sent for review.")
