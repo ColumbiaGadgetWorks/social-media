@@ -547,7 +547,41 @@ def review(request: Request, db: Session = Depends(get_db)):
     user = require(request, db)
     waiting = db.scalars(select(Post).where(Post.status == "in_review").order_by(Post.submitted_at)).all()
     emails = db.scalars(select(Announcement).where(Announcement.status == "in_review")).all()
-    return render(request, "review.html", user, posts=waiting, emails=emails)
+    return render(request, "review.html", user, posts=waiting, emails=emails, scheduled=_withdrawable(db))
+
+
+def _withdrawable(db: Session) -> list[Post]:
+    """Approved posts that haven't started going out, soonest first: the ones that can still be sent back."""
+    approved = db.scalars(select(Post).where(Post.status == "approved")).all()
+    open_ = [p for p in approved if not any(v.publish_state == "published" for v in p.versions)]
+    return sorted(open_, key=lambda p: min((v.scheduled_at for v in p.enabled_versions if v.scheduled_at), default=utcnow()))
+
+
+@router.post("/review/withdraw")
+async def review_withdraw(request: Request, db: Session = Depends(get_db)):
+    """Send several approved posts back to draft in one go (to edit them, e.g. to add a channel)."""
+    user = require(request, db, "approver")
+    form = await form_with_csrf(request)
+    ids = [int(i) for i in form.getlist("post") if str(i).isdigit()]
+    comment = str(form.get("comment", "")).strip() or "Approval withdrawn to make changes."
+    if not ids:
+        flash(request, "Tick the posts to withdraw first.", "error")
+        return back("/review")
+    done, skipped = [], []
+    for post_id in ids:
+        post = db.get(Post, post_id)
+        try:
+            if post is None:
+                raise post_svc.PostError("no such post")
+            post_svc.request_changes(db, Actor("user", user), post, comment)
+            done.append(post_id)
+        except post_svc.PostError as exc:
+            skipped.append(f"{post_id}: {exc}")
+    message = f"Withdrew approval for {len(done)} post{'s' if len(done) != 1 else ''}; they're back in draft."
+    if skipped:
+        message += " Couldn't withdraw " + "; ".join(skipped)
+    flash(request, message, "error" if skipped and not done else "ok")
+    return back("/review")
 
 
 def _load_post(db: Session, post_id: int) -> Post | None:

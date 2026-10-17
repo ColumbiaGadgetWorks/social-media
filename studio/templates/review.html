@@ -20,4 +20,21 @@
   </div>
 {% endfor %}
 </div>
+{% if scheduled and user.has_role('approver') %}
+<h2>Approved and scheduled</h2>
+<p class="small muted">Need to change something, like adding a channel? Send these back to draft. They have to be approved again afterwards. Posts that have already started publishing can't be withdrawn.</p>
+<form method="post" action="/review/withdraw" class="card">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% for p in scheduled %}
+  <label class="row" style="align-items:flex-start;gap:10px;margin:8px 0;font-weight:400">
+    <input type="checkbox" name="post" value="{{ p.id }}" style="margin-top:4px">
+    <span><a href="/posts/{{ p.id }}">{{ p.display_title }}</a><br>
+      <span class="small muted">{% for v in p.enabled_versions %}{{ CHANNELS[v.channel].label }}{{ ', ' if not loop.last }}{% endfor %}{% if p.enabled_versions %} · {{ (p.enabled_versions | map(attribute='scheduled_at') | select | min) | local('%b %-d %-I:%M %p') }}{% endif %}</span></span>
+  </label>
+  {% endfor %}
+  <label for="withdraw-comment">Note (optional)</label>
+  <input type="text" id="withdraw-comment" name="comment" placeholder="e.g. Add Discord">
+  <p><button type="submit">Withdraw approval for the ticked posts</button></p>
+</form>
+{% endif %}
 {% endblock %}
