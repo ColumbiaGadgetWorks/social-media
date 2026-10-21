@@ -123,6 +123,8 @@ class InstagramClient:
                 self.g.call("POST", f"{self.user}/media", image_url=public_media.url(img, "ig"), is_carousel_item="true")["id"]
                 for img in images[:10]
             ]
+            for child in children:  # the platform fetches each photo in the background; the carousel needs them finished
+                self.g.wait_ready(child, "status_code")
             container = self.g.call("POST", f"{self.user}/media", media_type="CAROUSEL",
                                     children=",".join(children), caption=caption)["id"]
         else:
@@ -160,10 +162,16 @@ class ThreadsClient:
             self.g.wait_ready(container, "status")
         elif len(images) == 1:
             container = self._container(media_type="IMAGE", image_url=public_media.url(images[0], "jpg"), text=text)
+            self.g.wait_ready(container, "status")
         elif images:
             children = [self._container(media_type="IMAGE", image_url=public_media.url(i, "jpg"), is_carousel_item="true")
                         for i in images[:10]]
+            # Threads fetches each photo in the background; building the carousel before they're finished fails with
+            # "The children ... are invalid, nonexistent, or expired".
+            for child in children:
+                self.g.wait_ready(child, "status")
             container = self._container(media_type="CAROUSEL", children=",".join(children), text=text)
+            self.g.wait_ready(container, "status")
         else:
             container = self._container(media_type="TEXT", text=text)
         media_id = self.g.call("POST", f"{self.user}/threads_publish", creation_id=container)["id"]

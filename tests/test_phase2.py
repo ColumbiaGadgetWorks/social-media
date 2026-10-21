@@ -110,7 +110,7 @@ def test_post_with_video_must_be_alone(app2):
 
 
 class FakeGraph:
-    def __init__(self, statuses=("IN_PROGRESS", "FINISHED")):
+    def __init__(self, statuses=()):  # container statuses to report in order; "FINISHED" once they run out
         self.calls, self.statuses, self.n = [], list(statuses), 0
 
     def __call__(self, request: httpx.Request):
@@ -122,7 +122,7 @@ class FakeGraph:
         if path.endswith("media_publish") or path.endswith("threads_publish"):
             return httpx.Response(200, json={"id": "PUBLISHED1"})
         if request.method == "GET" and params.get("fields") in ("status_code", "status"):
-            return httpx.Response(200, json={params["fields"]: self.statuses.pop(0)})
+            return httpx.Response(200, json={params["fields"]: self.statuses.pop(0) if self.statuses else "FINISHED"})
         if request.method == "GET" and params.get("fields") == "permalink":
             return httpx.Response(200, json={"permalink": "https://www.instagram.com/p/abc/"})
         if path.endswith("/photos"):
@@ -171,6 +171,18 @@ def test_instagram_reel_waits_for_processing(app2):
     s.close()
     assert fake.calls[0][2]["media_type"] == "REELS"
     assert sum(1 for c in fake.calls if c[2].get("fields") == "status_code") == 3
+
+
+def test_threads_carousel_waits_for_every_photo_before_it_is_built(app2):
+    post_id = approved_post({"threads": "Three photos"}, images=3)
+    fake = FakeGraph(statuses=("IN_PROGRESS", "FINISHED", "IN_PROGRESS", "FINISHED", "FINISHED"))
+    s, v = version_of(post_id, "threads")
+    ThreadsClient(http=httpx.Client(transport=httpx.MockTransport(fake)), sleep=lambda _: None).publish(v)
+    s.close()
+    kinds = [("status" if c[2].get("fields") == "status" else c[2].get("media_type", c[1].rsplit("/", 1)[-1])) for c in fake.calls]
+    first_carousel = kinds.index("CAROUSEL")
+    assert kinds[:3] == ["IMAGE"] * 3 and kinds[3:first_carousel].count("status") >= 3  # every photo polled first
+    assert kinds[first_carousel + 1] == "status" and kinds.index("threads_publish") == first_carousel + 2  # and the carousel too
 
 
 def test_threads_text_post(app2):
