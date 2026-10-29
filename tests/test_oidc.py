@@ -190,3 +190,17 @@ def test_userinfo_can_supply_the_username_and_groups(settings, idp):
         assert sign_in(c, idp).headers["location"] == "/"
     with db_mod.session_scope() as s:
         assert s.scalar(select(User).where(User.username == "sam")).role == "editor"
+
+
+def test_a_web_page_instead_of_the_providers_settings_is_explained(settings, monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="<html>Sign in</html>", headers={"content-type": "text/html"})
+
+    monkeypatch.setattr(oidc, "_http", lambda: httpx.Client(transport=httpx.MockTransport(handler)))
+    oidc._discovery_cache.clear()
+    make_app(settings)
+    with TestClient(make_app(settings), client=("192.168.1.20", 50000)) as c:
+        c.get("/login/oidc", follow_redirects=False)
+        page = c.get("/login").text
+        assert "text/html" in page and "openid-configuration" in page and "STUDIO_OIDC_ISSUER" in page
+

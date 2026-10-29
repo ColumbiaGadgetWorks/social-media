@@ -41,7 +41,7 @@ def redirect_uri() -> str:
 
 
 def _http() -> httpx.Client:
-    return httpx.Client(timeout=15, follow_redirects=False)
+    return httpx.Client(timeout=15, follow_redirects=True)
 
 
 def _b64url(raw: bytes) -> str:
@@ -54,13 +54,24 @@ def discovery() -> dict:
     cached = _discovery_cache.get(issuer)
     if cached and cached[0] > time.time():
         return cached[1]
+    url = f"{issuer}/.well-known/openid-configuration"
     try:
         with _http() as http:
-            r = http.get(f"{issuer}/.well-known/openid-configuration")
-        r.raise_for_status()
+            r = http.get(url)
+    except httpx.HTTPError as exc:
+        raise OIDCError(f"Couldn't reach the sign-in provider at {url} ({exc.__class__.__name__}: {exc}). "
+                        "Check STUDIO_OIDC_ISSUER, and that the Studio container can reach that address.") from exc
+    if r.status_code != 200:
+        raise OIDCError(f"The sign-in provider answered HTTP {r.status_code} at {url}. Check STUDIO_OIDC_ISSUER.")
+    try:
         doc = r.json()
-    except (httpx.HTTPError, ValueError) as exc:
-        raise OIDCError(f"Couldn't reach the sign-in provider ({exc.__class__.__name__}). Try again in a minute.") from exc
+    except ValueError as exc:
+        kind = r.headers.get("content-type", "unknown type").split(";")[0]
+        raise OIDCError(f"{url} returned {kind}, not the provider's JSON settings. STUDIO_OIDC_ISSUER is probably "
+                        "wrong: use the address whose /.well-known/openid-configuration shows JSON in a browser "
+                        "(some providers need a path on the end, such as /oidc).") from exc
+    if not isinstance(doc, dict):
+        raise OIDCError(f"{url} didn't return the provider's settings. Check STUDIO_OIDC_ISSUER.")
     if str(doc.get("issuer", "")).rstrip("/") != issuer:
         raise OIDCError("The sign-in provider's address doesn't match STUDIO_OIDC_ISSUER.")
     if not doc.get("authorization_endpoint") or not doc.get("token_endpoint"):
