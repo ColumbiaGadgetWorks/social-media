@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from . import announcements as ann_mod
 from . import batch as batch_mod
-from . import calendar_sync, publishers, upload_batch
+from . import calendar_sync, oidc, publishers, upload_batch
 from . import channels as ch
 from . import metrics as metrics_mod
 from . import posts as post_svc
@@ -137,12 +137,17 @@ def login_page(request: Request, db: Session = Depends(get_db)):
     check_proxy(request)
     if current_user(request, db):
         return back("/")
-    return render(request, "login.html", None)
+    cfg = settings()
+    return render(request, "login.html", None, oidc=cfg.oidc_configured, oidc_only=cfg.oidc_only,
+                  oidc_label=cfg.oidc_button_label)
 
 
 @router.post("/login")
 async def login(request: Request, db: Session = Depends(get_db)):
     proxy_name = check_proxy(request)
+    if settings().oidc_only:  # passwords are off: the form isn't even shown, so this is someone posting to it directly
+        flash(request, "Password sign-in is turned off. Use the single sign-on button.", "error")
+        return back("/login")
     form = await form_with_csrf(request)
     ip = client_ip(request) or "?"
     username = str(form.get("username", "")).strip()
@@ -164,6 +169,39 @@ async def login(request: Request, db: Session = Depends(get_db)):
     request.session.clear()
     request.session["user_id"] = user.id
     audit(db, Actor("user", user), "signed_in", "user", user.id, ip=ip)
+    return back("/")
+
+
+@router.get("/login/oidc")
+def oidc_start(request: Request):
+    check_proxy(request)
+    if not oidc.configured():
+        flash(request, "Single sign-on isn't set up (STUDIO_OIDC_ISSUER and STUDIO_OIDC_CLIENT_ID).", "error")
+        return back("/login")
+    try:
+        return RedirectResponse(oidc.authorize_url(request.session), status_code=303)
+    except oidc.OIDCError as exc:
+        flash(request, str(exc), "error")
+        return back("/login")
+
+
+@router.get("/login/oidc/callback")
+def oidc_callback(request: Request, db: Session = Depends(get_db)):
+    proxy_name = check_proxy(request)
+    ip = client_ip(request) or "?"
+    try:
+        user, changes = oidc.finish(db, request.session, dict(request.query_params))
+    except oidc.OIDCError as exc:
+        db.rollback()
+        flash(request, str(exc), "error")
+        return back("/login")
+    if settings().require_proxy_auth and (proxy_name or "").lower() != (user.proxy_username or user.username).lower():
+        db.rollback()
+        flash(request, "The proxy's sign-in doesn't match this Studio account.", "error")
+        return back("/login")
+    request.session.clear()
+    request.session["user_id"] = user.id
+    audit(db, Actor("user", user), "signed_in", "user", user.id, ip=ip, method="oidc", **changes)
     return back("/")
 
 

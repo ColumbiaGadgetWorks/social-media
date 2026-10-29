@@ -45,6 +45,21 @@ class Settings:
     proxy_user_header: str
     trusted_proxies: list = field(default_factory=list)
     secure_cookies: bool = False
+    # Sign in with OpenID Connect (VoidAuth, Authentik, Authelia, Keycloak...). oidc_only turns password sign-in off.
+    oidc_issuer: str = ""
+    oidc_client_id: str = ""
+    oidc_client_secret: str = ""
+    oidc_scopes: str = "openid profile email"
+    oidc_username_claim: str = "preferred_username"
+    oidc_auto_create: bool = False
+    oidc_default_role: str = "contributor"
+    oidc_groups_claim: str = "groups"
+    oidc_allowed_groups: list = field(default_factory=list)
+    oidc_editor_groups: list = field(default_factory=list)
+    oidc_approver_groups: list = field(default_factory=list)
+    oidc_admin_groups: list = field(default_factory=list)
+    oidc_button_label: str = "Sign in with SSO"
+    oidc_only: bool = False
     # MCP
     mcp_allowed_networks: list = field(default_factory=list)
     # Email
@@ -123,6 +138,10 @@ class Settings:
         return (self.public_url or self.base_url).rstrip("/")
 
     @property
+    def oidc_configured(self) -> bool:
+        return bool(self.oidc_issuer and self.oidc_client_id)
+
+    @property
     def meta_configured(self) -> bool:
         return bool(self.meta_page_id and self.meta_page_token)
 
@@ -182,6 +201,20 @@ def load_settings() -> Settings:
         proxy_user_header=os.environ.get("STUDIO_PROXY_USER_HEADER", "Remote-User"),
         trusted_proxies=_networks(os.environ.get("STUDIO_TRUSTED_PROXIES", "")),
         secure_cookies=_bool("STUDIO_SECURE_COOKIES", False),
+        oidc_issuer=os.environ.get("STUDIO_OIDC_ISSUER", "").strip().rstrip("/"),
+        oidc_client_id=os.environ.get("STUDIO_OIDC_CLIENT_ID", "").strip(),
+        oidc_client_secret=os.environ.get("STUDIO_OIDC_CLIENT_SECRET", "").strip(),
+        oidc_scopes=os.environ.get("STUDIO_OIDC_SCOPES", "").strip() or "openid profile email",
+        oidc_username_claim=os.environ.get("STUDIO_OIDC_USERNAME_CLAIM", "").strip() or "preferred_username",
+        oidc_auto_create=_bool("STUDIO_OIDC_AUTO_CREATE", False),
+        oidc_default_role=os.environ.get("STUDIO_OIDC_DEFAULT_ROLE", "").strip().lower() or "contributor",
+        oidc_groups_claim=os.environ.get("STUDIO_OIDC_GROUPS_CLAIM", "").strip() or "groups",
+        oidc_allowed_groups=_list(os.environ.get("STUDIO_OIDC_ALLOWED_GROUPS", "")),
+        oidc_editor_groups=_list(os.environ.get("STUDIO_OIDC_EDITOR_GROUPS", "")),
+        oidc_approver_groups=_list(os.environ.get("STUDIO_OIDC_APPROVER_GROUPS", "")),
+        oidc_admin_groups=_list(os.environ.get("STUDIO_OIDC_ADMIN_GROUPS", "")),
+        oidc_button_label=os.environ.get("STUDIO_OIDC_BUTTON_LABEL", "").strip() or "Sign in with SSO",
+        oidc_only=_bool("STUDIO_OIDC_ONLY", False),
         mcp_allowed_networks=_networks(os.environ.get("STUDIO_MCP_ALLOWED_NETWORKS", PRIVATE_NETWORKS)),
         mail_backend=os.environ.get("STUDIO_MAIL_BACKEND", "console"),
         smtp_host=os.environ.get("STUDIO_SMTP_HOST", "mail.smtp2go.com"),

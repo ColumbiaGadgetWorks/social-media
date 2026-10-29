@@ -3,13 +3,21 @@
 {% block content %}
 <div class="card" style="max-width:380px;margin:40px auto">
   <h1>CGW Content Studio</h1>
+  {% if oidc %}
+  <p><a class="btn primary" href="/login/oidc">{{ oidc_label }}</a></p>
+  {% elif oidc_only %}
+  <p class="small">Single sign-on is the only way in, but it isn't set up. Check STUDIO_OIDC_ISSUER and STUDIO_OIDC_CLIENT_ID.</p>
+  {% endif %}
+  {% if not oidc_only %}
+  {% if oidc %}<p class="small muted">Or use a Studio password:</p>{% endif %}
   <form method="post" action="/login">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <label for="username">Username</label>
-    <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+    <input type="text" id="username" name="username" autocomplete="username" required {{ '' if oidc else 'autofocus' }}>
     <label for="password">Password</label>
     <input type="password" id="password" name="password" autocomplete="current-password" required>
     <p><button class="primary" type="submit">Sign in</button></p>
   </form>
+  {% endif %}
 </div>
 {% endblock %}

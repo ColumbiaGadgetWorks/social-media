@@ -107,6 +107,16 @@ proxy, set *Require proxy auth* and *Secure cookies* to `false`; turn both back 
 4. Sign in with the admin account. Under **Users**, set each person's proxy username if it differs
    from their Studio username, and add an email address for reminders.
 
+## Single sign-on (OpenID Connect)
+
+Instead of (or as well as) the proxy's header sign-in, the Studio can sign people in with any OpenID
+Connect provider (VoidAuth, Authentik, Authelia, Keycloak). Because the Studio then checks sign-ins
+itself, the proxy no longer has to guard the whole site: `/m/*`, `/u/*` and `/e/icon/*` are public in the
+app already, `/mcp` stays LAN-only and `/api/ext/` stays token-only. Set `STUDIO_OIDC_ISSUER` and
+`STUDIO_OIDC_CLIENT_ID` (plus the secret), and `STUDIO_OIDC_ONLY=true` to turn passwords off. On
+Unraid, `unraid/add-oidc-env.sh` asks for the values and adds them to your container template.
+Full steps: [docs/setup-oidc.md](docs/setup-oidc.md).
+
 ## Connect Claude Code (or Claude Desktop)
 
 1. Set **LAN address** (`STUDIO_LAN_URL`, e.g. `http://192.168.1.50:8095`) in the Unraid template so
