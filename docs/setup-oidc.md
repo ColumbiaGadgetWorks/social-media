@@ -17,6 +17,20 @@ Create an OIDC client/app with:
 - **Scopes:** `openid profile email` (add `groups` if you want groups to set roles)
 - A client ID and, normally, a client secret
 
+### Provider notes
+
+| Provider | `STUDIO_OIDC_ISSUER` |
+|---|---|
+| **VoidAuth** | `https://<your auth address>/oidc` (the `/oidc` is required; the bare address serves its web page) |
+| Authentik | `https://<authentik address>/application/o/<app slug>` |
+| Authelia | `https://<authelia address>` |
+| Keycloak | `https://<keycloak address>/realms/<realm>` |
+
+Whatever the provider, the right value is the one whose `/.well-known/openid-configuration` shows JSON in a
+browser, and it must equal the `"issuer"` line in that JSON, with no trailing slash. VoidAuth sends the
+`preferred_username`, `email`, `email_verified`, `name` and `groups` claims; add `groups` to the scopes
+(`openid profile email groups`) if you use the group settings.
+
 ## 2. Environment variables
 
 | Variable | What it does | Default |

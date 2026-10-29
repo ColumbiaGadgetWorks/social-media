@@ -76,12 +76,16 @@ echo "Use the authorization code flow. Then answer these:" >&2
 echo >&2
 
 while true; do
-  ask_required ISSUER "Issuer URL (the address that serves /.well-known/openid-configuration, e.g. https://auth.example.com)"
+  echo "Issuer examples: VoidAuth https://auth.example.com/oidc (the /oidc is needed), Keycloak https://kc.example.com/realms/NAME," >&2
+  echo "Authentik https://auth.example.com/application/o/APP, Authelia https://auth.example.com. It is the address whose" >&2
+  echo "/.well-known/openid-configuration shows JSON in a browser." >&2
+  ask_required ISSUER "Issuer URL"
   ISSUER="${ISSUER%/}"
   case "$ISSUER" in https://*|http://*) break ;; *) echo "  It should start with https://" >&2 ;; esac
 done
 ask_required CLIENT_ID "Client ID"
 ask_secret CLIENT_SECRET "Client secret"
+echo "Scopes: add groups (openid profile email groups) if you use the group questions below." >&2
 ask SCOPES "Scopes" "openid profile email"
 ask USERNAME_CLAIM "Which claim holds the username (it must match a Studio username or proxy username)" "preferred_username"
 yesno AUTO_CREATE "Create a Studio account the first time someone signs in who doesn't have one?" n

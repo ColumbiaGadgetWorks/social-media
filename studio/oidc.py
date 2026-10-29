@@ -69,7 +69,7 @@ def discovery() -> dict:
         kind = r.headers.get("content-type", "unknown type").split(";")[0]
         raise OIDCError(f"{url} returned {kind}, not the provider's JSON settings. STUDIO_OIDC_ISSUER is probably "
                         "wrong: use the address whose /.well-known/openid-configuration shows JSON in a browser "
-                        "(some providers need a path on the end, such as /oidc).") from exc
+                        "(VoidAuth needs /oidc on the end, Keycloak /realms/NAME, Authentik /application/o/APP).") from exc
     if not isinstance(doc, dict):
         raise OIDCError(f"{url} didn't return the provider's settings. Check STUDIO_OIDC_ISSUER.")
     if str(doc.get("issuer", "")).rstrip("/") != issuer:
