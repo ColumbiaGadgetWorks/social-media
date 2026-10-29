@@ -106,9 +106,10 @@ def _post_summary(p: Post, db: Session | None = None) -> dict:
         summary["aim_for"] = input_value(p.target_at)
         summary["event_instructions"] = (
             "Facts (date, time, place, price, link) come only from `event`. Schedule close to `aim_for`. "
-            "The attached event card shows the facts. Better: lead with a real photo (a project, a past session, the "
+            "The attached event card shows the facts. Lead with a real photo (a project, a past session, the "
             "people or tools involved) via attach_media with replace=true. The Studio adds the event's date badge "
-            "to the photo's top-right corner, so the photo carries the post and the badge carries the facts."
+            "to the photo's top-right corner, so the photo carries the post and the badge carries the facts. "
+            "submit_drafts refuses a post that has only the card, except a cancellation or a new-class announcement."
         )
         if p.event.series and p.purpose == "weekly" and db is not None:
             summary["weekly"] = calendar_sync.series_context(db, p)
@@ -116,11 +117,13 @@ def _post_summary(p: Post, db: Session | None = None) -> dict:
                 "This is this week's post for a weekly event. Follow `weekly.angle_brief` (or pick one of "
                 "`other_angles` if the media clearly suits it better, and say so in notes). It must read differently "
                 "from every `weekly.recent_posts` entry: a new hook and opening line, a different photo. Prefer real "
-                "photos from `weekly.candidate_media` (previews below) over the event card; use attach_media with "
-                "replace=true, and the Studio adds the date badge to the photo's corner. The card is a last resort. If `weekly.needs_photos` is true or nothing fits, ask the "
-                "person in this session before drafting: for photos from the last session (they can upload them in "
-                "the Studio with 'Taken at' set) or one thing that happened there worth telling. Facts (date, time, "
-                "place, price, link) still come only from `event`."
+                "photos from `weekly.candidate_media` (previews below); use attach_media with "
+                "replace=true, and the Studio adds the date badge to the photo's corner. Every Open Hack Night post "
+                "must feature a member project or user-submitted media, and submit_drafts refuses one that has only "
+                "the event card. If `weekly.needs_photos` is true or nothing fits, stop and ask the person in this "
+                "session before drafting: for photos from the last session (they can upload them in the Studio with "
+                "'Taken at' set, or send them in the Discord uploads channel) or a project worth showing. Facts "
+                "(date, time, place, price, link) still come only from `event`."
             )
     return summary
 
@@ -526,6 +529,9 @@ def submit_drafts(
             post.status = "draft"
         result = {"post_id": post.id, "status": post.status}
         found = post_svc.problems(post)
+        poster = calendar_sync.poster_only_problem(post)
+        if poster:
+            found.setdefault("", []).append(poster)
         if found:
             result["problems"] = found
         elif submit_for_review:

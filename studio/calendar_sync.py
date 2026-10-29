@@ -199,6 +199,29 @@ def is_cancelled(event: Event) -> bool:
     return event.status == "cancelled" or event.title.strip().lower().startswith(("cancelled", "canceled"))
 
 
+POSTER_RULE = (
+    "Open Hack Night and other event posts need a member project or user-submitted photo or video, not just the "
+    "event poster. Attach one with attach_media (replace=true); if the library has nothing that fits, ask the "
+    "person for photos or a story and don't draft yet. The poster alone is only for a cancellation notice or the "
+    "announcement of a new class."
+)
+
+
+def poster_only_problem(post) -> str | None:
+    """Why this event post can't go to review with just the event poster, or None if it's fine."""
+    event = post.event
+    if event is None:
+        return None
+    if is_cancelled(event) or post.purpose == "cancellation":
+        return None
+    if post.media and any("event-card" not in (m.tags or []) for m in post.media):
+        return None  # a real photo or clip is in the post (the poster may sit beside it)
+    is_class = "class" in (event.title + " " + event.description).lower()
+    if is_class and post.purpose == "announce":
+        return None
+    return POSTER_RULE
+
+
 def render_card(event: Event, price: str = "") -> bytes:
     """A plain, on-brand event graphic: facts only, straight from the calendar."""
     img = Image.new("RGB", CARD_SIZE, ACCENT)

@@ -48,13 +48,15 @@ time, place, price, link) are the only facts you may use. Schedule near `aim_for
 about two weeks out, reminders two days out. A `cancellation` post tells people the event is off;
 keep it short and point to the calendar at https://columbiagadgetworks.org/calendar/.
 
-The plain orange event card is only a placeholder, and a feed full of identical cards is dull. Lead
-with a real photo instead: a project someone is working on, a past session, the tool or the people
-behind the event. Use `search_media` and `view_media` to find one, then `attach_media` with
+Never draft an event post with only the plain orange event card, and never an Open Hack Night post
+without a member project or user-submitted photo or clip. The card may stand alone for only two
+things: a cancellation notice (for example Open Hack Night is cancelled), and the announcement of a
+new class. `submit_drafts` refuses anything else that has only the card. Lead with a real photo
+instead: a project someone is working on, a past session, the tool or the people behind the event. Use `search_media` and `view_media` to find one, then `attach_media` with
 `replace: true`. The Studio adds the event's date badge to the photo's top-right corner, so the
 photo tells the story and the badge carries the facts (the first photo gets the badge; the rest stay
-plain). The announcement and the reminder for one event get different photos. If nothing fits, ask in the session for a photo or a story, and only fall back to the card
-when there's truly nothing. Write the caption around the story, and keep the facts to one line.
+plain). The announcement and the reminder for one event get different photos. If nothing fits, stop and ask in the session for a photo or a story, and don't draft that post until
+there is one. Write the caption around the story, and keep the facts to one line.
 
 ## Uploads from Discord
 
@@ -73,12 +75,13 @@ follow us see every one of them, so each week has to earn the scroll on its own.
   Use the hook bank for starting points and rewrite them.
 - Lead with a real photo. `candidate_media` lists fresh photos from recent sessions (their previews
   come with the work item); attach the best with `attach_media` (`replace: true` drops the card; the Studio puts the date badge on the photo).
-  The plain event card is a last resort; if you do use it, the caption has to carry the post.
+  Never use the plain event card alone for a Hack Night post (the Studio refuses it).
 - When there's no good photo or nothing specific to say (`needs_photos: true`, or the candidates
   are weak), stop and ask the person in this session before drafting, for example: "Hack Night is
   Thursday. Any photos from last week, or one thing someone made or fixed?" They can upload in the
-  Studio with "Taken at" set; then call `get_work_item` again. If they have nothing, pick a
-  non-photo angle (first-timer, question, fix-it) and make the caption specific.
+  Studio with "Taken at" set, or send them in the Discord uploads channel; then call
+  `get_work_item` again. If they have nothing, leave the post waiting and say so in your summary.
+  Don't fall back to the card.
 - Name what's in the photo (the project, the tool, the material), not "makers making things".
   Credit people by first name only if the note gives it.
 - The facts are always the same (Thursdays 6-8 pm, free, open to everyone, no sign-up), so put

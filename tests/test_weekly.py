@@ -129,6 +129,40 @@ def test_no_photos_means_card_and_a_non_photo_angle(app3):
         assert calendar_sync.series_context(s, post)["needs_photos"] is True
 
 
+def test_event_posts_with_only_the_poster_are_refused_except_cancellations_and_new_classes(app3):
+    with db_mod.session_scope() as s:
+        calendar_sync.sync(s, flattened_feed(offsets=(2, 9)))
+        hack = s.scalars(select(Post).where(Post.purpose == "weekly")).first()
+        hack_id = hack.id
+        cls = s.scalars(select(Post).join(Event).where(Event.title == "Free public class", Post.purpose == "announce")).first()
+        reminder = s.scalars(select(Post).join(Event).where(Event.title == "Free public class", Post.purpose == "reminder")).first()
+        assert calendar_sync.poster_only_problem(hack) and "member project" in calendar_sync.poster_only_problem(hack)
+        assert calendar_sync.poster_only_problem(cls) is None  # a new class may use the poster alone
+        assert calendar_sync.poster_only_problem(reminder)
+        cancelled = Event(uid="c@site", start=db_mod.utcnow() + timedelta(days=4),
+                          title="Cancelled: Open Hack Night (Thanksgiving)", promote=True)
+        s.add(cancelled)
+        s.flush()
+        poster = hack.media[0]
+        note = create_post(s, Actor.system(), [poster.id], note="x")
+        note.event_id, note.purpose = cancelled.id, "announce"
+        assert calendar_sync.poster_only_problem(note) is None  # a cancellation may too
+        real = photo(s, "A member's ukulele")
+        hack_photo = create_post(s, Actor.system(), [real], note="y")
+        hack_photo.event_id, hack_photo.purpose = hack.event_id, "weekly"
+        assert calendar_sync.poster_only_problem(hack_photo) is None
+    with TestClient(app3, client=("192.168.1.20", 50000)) as web:
+        with db_mod.session_scope() as s:
+            token = create_api_token(s, s.scalar(select(User)), "t")
+        mcp = MCP(web, token).init()
+        when = (db_mod.utcnow() + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
+        out = json.loads(mcp.call("submit_drafts", post_id=hack_id, submit_for_review=False, versions=[
+            {"channel": "facebook", "body": "Thursday 6 pm, free.", "scheduled_at": when}])["content"][0]["text"])
+        assert any("member project" in p for p in out["problems"][""])
+        summary = json.loads(mcp.call("get_work_item", post_id=hack_id)["content"][0]["text"])
+        assert "refuses" in summary["event_instructions"]
+
+
 def test_old_announce_reminder_pairs_are_replaced(app3):
     feed = flattened_feed(offsets=(2, 9))
     with db_mod.session_scope() as s:  # as the previous version saw it: two one-off events
