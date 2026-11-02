@@ -27,6 +27,22 @@ AUTH_URL = "https://www.linkedin.com/oauth/v2/authorization"
 TOKEN_URL = "https://www.linkedin.com/oauth/v2/accessToken"
 API = "https://api.linkedin.com/rest"
 SCOPES = "w_organization_social r_organization_social"
+VERSION_MAX_AGE_MONTHS = 10  # LinkedIn retires each monthly API version about a year after it comes out
+
+
+def api_version(today=None) -> str:
+    """The LinkedIn-Version header (YYYYMM). Unless STUDIO_LINKEDIN_API_VERSION pins a month that is still
+    recent, use the month two months back: always released, and far from retirement."""
+    today = today or utcnow().date()
+    now = today.year * 12 + today.month - 1
+    idx = now - 2
+    auto = f"{idx // 12:04d}{idx % 12 + 1:02d}"
+    pinned = settings().linkedin_api_version.strip()
+    if re.fullmatch(r"\d{4}(0[1-9]|1[0-2])", pinned):
+        age = now - (int(pinned[:4]) * 12 + int(pinned[4:]) - 1)
+        if -1 <= age <= VERSION_MAX_AGE_MONTHS:
+            return pinned
+    return auto
 KEYS = ("linkedin_access", "linkedin_refresh", "linkedin_expires", "linkedin_refresh_expires")
 MAX_TEXT = 3000
 RESERVED = re.compile(r"([\\|{}@\[\]()<>#*_~])")  # LinkedIn "little text" reserved characters
@@ -179,7 +195,7 @@ class LinkedInClient:
         self.owner = f"urn:li:organization:{s.linkedin_org_id}"
         self.http = http or httpx.Client(timeout=120)
         self.sleep = sleep
-        self.headers = {"Authorization": f"Bearer {token}", "LinkedIn-Version": s.linkedin_api_version,
+        self.headers = {"Authorization": f"Bearer {token}", "LinkedIn-Version": api_version(),
                         "X-Restli-Protocol-Version": "2.0.0"}
 
     def _call(self, method: str, path: str, **kw) -> httpx.Response:
@@ -187,8 +203,8 @@ class LinkedInClient:
         if r.status_code == 401:
             raise PublishError("LinkedIn sign-in expired: Settings → Connect LinkedIn again")
         if r.status_code == 426 or "NONEXISTENT_VERSION" in r.text[:500]:
-            raise PublishError(f"LinkedIn API version {settings().linkedin_api_version} isn't accepted any more; "
-                               "set STUDIO_LINKEDIN_API_VERSION to a recent month (YYYYMM)")
+            raise PublishError(f"LinkedIn API version {api_version()} isn't accepted; leave "
+                               "STUDIO_LINKEDIN_API_VERSION empty so the Studio picks a current month (or set one, YYYYMM)")
         if r.status_code >= 400:
             raise PublishError(f"LinkedIn error (HTTP {r.status_code}): {r.text[:300]}")
         return r

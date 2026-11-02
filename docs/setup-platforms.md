@@ -171,9 +171,9 @@ batch day.
 7. Once LinkedIn has approved the product: Settings → **Connect LinkedIn** (sign in as a page admin
    and allow). LinkedIn becomes automatic. The sign-in lasts 60 days; with a refresh token the Studio
    renews it nightly for about a year, and Settings shows when to connect again.
-8. `STUDIO_LINKEDIN_API_VERSION` (YYYYMM, default 202509) is the LinkedIn API version the Studio
-   asks for. LinkedIn retires versions after about a year; if a post fails with "version isn't
-   accepted", set it to a recent month.
+8. `STUDIO_LINKEDIN_API_VERSION` (YYYYMM) is the LinkedIn API version the Studio asks for. Leave it empty:
+   the Studio then uses a current month on its own (two months back). LinkedIn retires each version after about
+   a year, so a pinned month older than ten months is ignored and replaced the same way.
 
 ## 9. Apply for the remaining APIs (free, takes weeks)
 

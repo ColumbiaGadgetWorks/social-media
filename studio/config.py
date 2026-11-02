@@ -97,7 +97,7 @@ class Settings:
     linkedin_client_id: str = ""
     linkedin_client_secret: str = ""
     linkedin_org_id: str = ""
-    linkedin_api_version: str = "202509"
+    linkedin_api_version: str = ""  # empty: the Studio picks a current month
     # Calendar
     calendar_ics_url: str = ""
     # Where to post Google Business Profile updates by hand (the business profile's own link)
@@ -243,7 +243,7 @@ def load_settings() -> Settings:
         linkedin_client_id=os.environ.get("STUDIO_LINKEDIN_CLIENT_ID", "").strip(),
         linkedin_client_secret=os.environ.get("STUDIO_LINKEDIN_CLIENT_SECRET", "").strip(),
         linkedin_org_id="".join(c for c in os.environ.get("STUDIO_LINKEDIN_ORG_ID", "") if c.isdigit()),
-        linkedin_api_version=os.environ.get("STUDIO_LINKEDIN_API_VERSION", "202509").strip(),
+        linkedin_api_version=os.environ.get("STUDIO_LINKEDIN_API_VERSION", "").strip(),
         calendar_ics_url=os.environ.get(
             "STUDIO_CALENDAR_ICS_URL", "https://columbiagadgetworks.org/api/calendar.ics"
         ),

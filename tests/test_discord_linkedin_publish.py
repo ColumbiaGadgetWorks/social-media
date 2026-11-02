@@ -179,3 +179,17 @@ def test_discord_photos_are_shrunk_to_fit_one_message_and_errors_explain_themsel
 
     refusal = httpx.Response(403, json={"message": "Missing Permissions", "code": 50013})
     assert "Missing Permissions (code 50013)" in discord_pub._why(refusal)
+
+
+def test_linkedin_version_is_automatic_and_old_pins_are_ignored(app_pub):
+    from datetime import date
+
+    from studio.publishers.linkedin import api_version
+
+    cfg = db_mod.settings()
+    for pinned, today, want in (("", date(2026, 11, 2), "202609"), ("", date(2027, 1, 15), "202611"),
+                                ("202509", date(2026, 11, 2), "202609"),   # a year old: ignored
+                                ("202606", date(2026, 11, 2), "202606"),   # recent pin is respected
+                                ("garbage", date(2026, 11, 2), "202609")):
+        object.__setattr__(cfg, "linkedin_api_version", pinned)
+        assert api_version(today) == want
