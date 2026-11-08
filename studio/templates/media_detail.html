@@ -80,7 +80,7 @@
     <p><strong>Uploaded:</strong> {{ asset.created_at | local }}{% if asset.uploader %} by {{ asset.uploader.label }}{% endif %}</p>
     <p><a href="/files/{{ asset.id }}/original" download>Download original</a></p>
     <h3>Used in</h3>
-    {% for p in used_in %}<p><a href="/posts/{{ p.id }}">{{ p.display_title }}</a> {{ st(p.status) }}</p>{% else %}<p class="muted">Not in any post yet.</p>{% endfor %}
+    {% for p in used_in %}<p><a href="/posts/{{ p.id }}"><span class="muted">#{{ p.id }}</span> {{ p.display_title }}</a> {{ st(p.status) }}</p>{% else %}<p class="muted">Not in any post yet.</p>{% endfor %}
   </aside>
 </div>
 {% endblock %}

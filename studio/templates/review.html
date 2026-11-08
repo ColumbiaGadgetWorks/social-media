@@ -12,7 +12,7 @@
 <div class="stack">
 {% for p in posts %}
   <div class="card">
-    <div class="row spread"><h3><a href="/posts/{{ p.id }}">{{ p.display_title }}</a></h3>
+    <div class="row spread"><h3><a href="/posts/{{ p.id }}"><span class="muted">#{{ p.id }}</span> {{ p.display_title }}</a></h3>
       <span class="small muted">Submitted {{ p.submitted_at | local }}</span></div>
     {{ post_thumbs(p) }}
     <p class="small">{% for v in p.enabled_versions %}<span class="tag">{{ CHANNELS[v.channel].label }} · {{ v.scheduled_at | local('%b %-d %-I:%M %p') }}</span> {% endfor %}</p>
@@ -30,7 +30,7 @@
 <div class="stack" style="margin-bottom:16px">
 {% for p in sent_back %}
   <div class="card">
-    <div class="row spread"><h3><a href="/posts/{{ p.id }}">{{ p.display_title }}</a></h3>
+    <div class="row spread"><h3><a href="/posts/{{ p.id }}"><span class="muted">#{{ p.id }}</span> {{ p.display_title }}</a></h3>
       <span class="tag {{ 'accent' if p.status == 'needs_claude' else '' }}">{{ STATUS_LABELS[p.status] }}</span></div>
     {% if p.review_comment %}<p class="small">“{{ p.review_comment }}”</p>{% endif %}
     {% if user.has_role('approver') %}<form method="post" action="/review/discard" style="margin:0"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="post" value="{{ p.id }}">
@@ -47,7 +47,7 @@
   {% for p in scheduled %}
   <label class="row" style="align-items:flex-start;gap:10px;margin:8px 0;font-weight:400">
     <input type="checkbox" name="post" value="{{ p.id }}" style="margin-top:4px">
-    <span><a href="/posts/{{ p.id }}">{{ p.display_title }}</a><br>
+    <span><a href="/posts/{{ p.id }}"><span class="muted">#{{ p.id }}</span> {{ p.display_title }}</a><br>
       <span class="small muted">{% for v in p.enabled_versions %}{{ CHANNELS[v.channel].label }}{{ ', ' if not loop.last }}{% endfor %}{% if p.enabled_versions %} · {{ (p.enabled_versions | map(attribute='scheduled_at') | select | min) | local('%b %-d %-I:%M %p') }}{% endif %}</span></span>
   </label>
   {% endfor %}

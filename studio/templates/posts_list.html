@@ -13,7 +13,7 @@
   <tbody>{% for p in posts %}
   <tr>
     <td style="width:140px">{{ post_thumbs(p, 1) }}</td>
-    <td><a href="/posts/{{ p.id }}">{{ p.display_title }}</a>{% if p.pillar %}<div class="small muted">{{ PILLAR_LABELS.get(p.pillar, p.pillar) }}</div>{% endif %}</td>
+    <td><a href="/posts/{{ p.id }}"><span class="muted">#{{ p.id }}</span> {{ p.display_title }}</a>{% if p.pillar %}<div class="small muted">{{ PILLAR_LABELS.get(p.pillar, p.pillar) }}</div>{% endif %}</td>
     <td>{{ st(p.status) }}</td>
     <td class="small">{{ p.enabled_versions | map(attribute='channel') | map('replace', '_', ' ') | join(', ') }}</td>
     <td class="small muted">{{ p.updated_at | local }}</td>

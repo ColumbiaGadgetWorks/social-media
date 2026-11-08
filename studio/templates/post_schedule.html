@@ -2,7 +2,7 @@
 {% block title %}Schedule · CGW Studio{% endblock %}
 {% block content %}
 <div class="row spread"><h1>Schedule it</h1><a href="/posts/{{ post.id }}">Back to the post</a></div>
-<p class="muted"><strong>{{ post.display_title }}</strong> is approved. Some channels can't be scheduled by the Studio, so do these by hand: open the link, paste the caption, add the pictures, set the time, then mark it done.</p>
+<p class="muted"><strong><span class="muted">#{{ post.id }}</span> {{ post.display_title }}</strong> is approved. Some channels can't be scheduled by the Studio, so do these by hand: open the link, paste the caption, add the pictures, set the time, then mark it done.</p>
 {% if not ok %}<div class="problems small">Not ready to post: {{ reason }}</div>{% endif %}
 {% if not items %}<div class="card"><p>Nothing left to schedule by hand. Automatic channels will publish on time.</p></div>{% endif %}
 <div class="stack">

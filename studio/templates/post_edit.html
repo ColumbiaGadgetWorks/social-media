@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% from "_status.html" import status as st %}
-{% block title %}{{ post.display_title }} · CGW Studio{% endblock %}
+{% block title %}#{{ post.id }} {{ post.display_title }} · CGW Studio{% endblock %}
 {% block content %}
 {% set any_published = post.versions | selectattr('publish_state', 'equalto', 'published') | list %}
 {% set locked = post.status == 'done' or any_published %}
-<div class="row spread"><h1>{{ post.display_title }}</h1>{{ st(post.status) }}</div>
+<div class="row spread"><h1><span class="muted">#{{ post.id }}</span> {{ post.display_title }}</h1>{{ st(post.status) }}</div>
 
 <div class="two">
 <div class="stack">

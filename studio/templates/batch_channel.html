@@ -17,7 +17,7 @@
         {% if not item.approved %}<span class="tag stop">Blocked: {{ item.reason }}</span>{% endif %}
       </div>
     </div>
-    <p class="small"><a href="/posts/{{ item.post.id }}">{{ item.post.display_title }}</a> · files start with <span class="mono">{{ item.stem }}</span></p>
+    <p class="small"><a href="/posts/{{ item.post.id }}"><span class="muted">#{{ item.post.id }}</span> {{ item.post.display_title }}</a> · files start with <span class="mono">{{ item.stem }}</span></p>
     <div class="thumbs">{% for m in item.post.media %}<a href="/files/{{ m.id }}/export" download="{{ item.stem }}{{ 'abcdefghij'[loop.index0] if item.post.media|length > 1 }}"><img src="/files/{{ m.id }}/thumb" alt="{{ m.alt_text }}"></a>{% endfor %}</div>
     {% if v.title %}<label>Title <button type="button" class="link small" data-copy="title-{{ v.id }}">Copy</button></label><div class="caption" id="title-{{ v.id }}">{{ v.title }}</div>{% endif %}
     <label>Caption <button type="button" class="link small" data-copy="cap-{{ v.id }}">Copy</button></label>

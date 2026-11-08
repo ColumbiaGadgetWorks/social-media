@@ -35,7 +35,7 @@
 <div class="stack">
 {% for v in failed %}
   <div class="card row spread">
-    <div><span class="tag stop">Failed</span> <strong>{{ CHANNELS[v.channel].label }}</strong>: <a href="/posts/{{ v.post_id }}">{{ v.post.display_title }}</a>
+    <div><span class="tag stop">Failed</span> <strong>{{ CHANNELS[v.channel].label }}</strong>: <a href="/posts/{{ v.post_id }}"><span class="muted">#{{ v.post.id }}</span> {{ v.post.display_title }}</a>
     <div class="small muted">{{ v.last_error }}</div></div>
   </div>
 {% endfor %}
@@ -49,7 +49,7 @@
   <tbody>
   {% for r in upcoming %}
     <tr><td>{{ r.when | local }}</td>
-    <td><a href="/posts/{{ r.post.id }}">{{ r.post.display_title }}</a></td>
+    <td><a href="/posts/{{ r.post.id }}"><span class="muted">#{{ r.post.id }}</span> {{ r.post.display_title }}</a></td>
     <td class="small">{% for c in r.channels %}<span class="tag{{ '' if c.mode == 'direct' else ' warn' }}" title="{{ {'direct': 'Automatic', 'batch': 'You schedule it on batch day', 'on_day': 'You post it by hand on the day'}[c.mode] }}">{{ c.label }}</span> {% endfor %}</td></tr>
   {% endfor %}
   </tbody>

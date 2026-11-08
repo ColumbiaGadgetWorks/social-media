@@ -27,7 +27,7 @@
 <div class="table-wrap"><table>
   <thead><tr><th>Post</th><th>Channel</th><th>Pillar</th><th>Format</th><th style="text-align:right">Engagement</th><th>Numbers</th></tr></thead>
   <tbody>{% for p in top %}<tr>
-    <td><a href="/posts/{{ p.post_id }}">{{ p.title }}</a>{% if p.url %} · <a href="{{ p.url }}" rel="noopener" target="_blank">live</a>{% endif %}</td>
+    <td><a href="/posts/{{ p.post_id }}"><span class="muted">#{{ p.post_id }}</span> {{ p.title }}</a>{% if p.url %} · <a href="{{ p.url }}" rel="noopener" target="_blank">live</a>{% endif %}</td>
     <td class="small">{{ channel_labels.get(p.channel, p.channel) }}</td>
     <td class="small">{{ PILLAR_LABELS.get(p.pillar, p.pillar or '—') }}</td>
     <td class="small">{{ p.format }}</td>
