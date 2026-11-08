@@ -325,7 +325,7 @@ def build_montage_commands(spec: dict, paths: dict[int, Path], work: Path, music
     durs = [c["end"] - c["start"] for c in clips]
     threads = str(settings().ffmpeg_threads)
     inputs: list[str] = []
-    for c, d in zip(clips, durs):
+    for c, d in zip(clips, durs, strict=True):
         inputs += ["-ss", str(c["start"]), "-t", f"{d:.2f}", "-i", str(paths[c["media_id"]])]
     for i, c in enumerate(clips):
         png = work / f"label{i}.png"
