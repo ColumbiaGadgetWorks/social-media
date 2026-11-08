@@ -372,6 +372,42 @@ def get_music() -> str:
                            for t in tracks], indent=1)
 
 
+class ClipSpec(BaseModel):
+    media_id: int
+    label: str = Field(default="", description="Text shown on screen over this clip, e.g. the printer's name (40 characters)")
+    start: float = Field(default=0, description="Where to start in this clip, in seconds")
+    end: float | None = Field(default=None, description="Where to stop, in seconds (default: the end of the clip)")
+
+
+@server.tool()
+def request_montage(
+    post_id: int,
+    clips: list[ClipSpec],
+    shape: str = "9:16",
+    fit: str = "pad",
+    transition: float = 0.4,
+    music_track_id: int | None = None,
+    music_volume: float = 0.25,
+    end_card_text: str = "",
+) -> str:
+    """Queue ONE combined video from several clips, in the order given: each clip is fitted, trimmed, labelled
+    with its own on-screen text and cross-faded into the next, then the logo and the 2-second end card are added.
+    The post must hold one of the clips (the result replaces it and the post's other media must be none).
+    The clips' own sound is dropped; add a music bed from get_music if you want one. Keep cuts honest."""
+    with session_scope() as db:
+        actor = _actor(db)
+        post = db.get(Post, post_id)
+        if post is None:
+            return f"Error: post {post_id} doesn't exist."
+        raw = {"clips": [c.model_dump() for c in clips], "shape": shape, "fit": fit, "transition": transition,
+               "music_track_id": music_track_id, "music_volume": music_volume, "end_card_text": end_card_text}
+        try:
+            job = video.request_montage(db, actor, post, raw)
+        except (video.RenderError, KeyError, ValueError) as exc:
+            return f"Error: {exc}"
+        return json.dumps({"render_id": job.id, "seconds": job.spec["end"], "note": "Queued"})
+
+
 @server.tool()
 def request_render(
     post_id: int,

@@ -80,6 +80,73 @@ def clean_spec(raw: dict, source: MediaAsset) -> dict:
     }
 
 
+MAX_CLIPS = 12
+LABEL_SECONDS_MIN = 1.0
+
+
+def clean_montage_spec(raw: dict, db: Session) -> dict:
+    """Validate a combined video: 2 to 12 clips, each with its own trim and an on-screen label."""
+    clips_raw = raw.get("clips") or []
+    if not 2 <= len(clips_raw) <= MAX_CLIPS:
+        raise RenderError(f"A combined video needs 2 to {MAX_CLIPS} clips.")
+    clips = []
+    for c in clips_raw:
+        asset = db.get(MediaAsset, int(c["media_id"]))
+        if asset is None or asset.kind != "video":
+            raise RenderError(f"Media {c.get('media_id')} isn't a video.")
+        duration = asset.duration_s or 0
+        start = max(0.0, float(c.get("start") or 0))
+        end = c.get("end")
+        end = float(end) if end not in (None, "") else duration
+        if duration:
+            end = min(end, duration)
+        if end - start < LABEL_SECONDS_MIN:
+            raise RenderError(f"Clip {asset.id} needs at least {LABEL_SECONDS_MIN:g} second between start and end.")
+        clips.append({"media_id": asset.id, "start": round(start, 2), "end": round(end, 2),
+                      "label": str(c.get("label") or "").strip()[:40]})
+    shape = raw.get("shape") or "9:16"
+    if shape not in SHAPES:
+        raise RenderError(f"Shape must be one of {', '.join(SHAPES)}.")
+    fit = raw.get("fit") or "pad"
+    if fit not in ("pad", "crop"):
+        raise RenderError("Fit must be pad or crop.")
+    shortest = min(c["end"] - c["start"] for c in clips)
+    transition = min(1.0, max(0.0, float(raw.get("transition", 0.4) or 0)), shortest / 3)
+    total = sum(c["end"] - c["start"] for c in clips) - transition * (len(clips) - 1)
+    if total > MAX_SECONDS:
+        raise RenderError(f"The combined video would run {total:.0f} seconds; the limit is {MAX_SECONDS}.")
+    music = raw.get("music_track_id")
+    music = int(music) if music not in (None, "", 0, "0") else None
+    return {
+        "clips": clips, "shape": shape, "fit": fit, "transition": round(transition, 2), "start": 0.0,
+        "end": round(total, 2), "subtitles": False, "music_track_id": music,
+        "music_volume": min(1.0, max(0.05, float(raw.get("music_volume") or 0.25))),
+        "keep_audio": False,  # the clips' own sound is dropped; a music bed is optional
+        "logo": raw.get("logo", True) not in (False, "0", "false", ""),
+        "end_card": raw.get("end_card", True) not in (False, "0", "false", ""),
+        "end_card_text": (raw.get("end_card_text") or DEFAULT_END_CARD).strip()[:80],
+    }
+
+
+def request_montage(db: Session, actor: Actor, post: Post, raw: dict) -> RenderJob:
+    """Queue a combined video for a post. One of the clips has to be the post's own video: the result replaces it."""
+    if post.status in ("approved", "done"):
+        raise RenderError("This post is approved; edit the video before approving, or send the post back first.")
+    spec = clean_montage_spec(raw, db)
+    in_post = {m.id for m in post.media}
+    source_id = next((c["media_id"] for c in spec["clips"] if c["media_id"] in in_post), None)
+    if source_id is None:
+        raise RenderError("None of the clips is in that post. Put one of them in the post (create_post or "
+                          "attach_media) first; the combined video replaces it.")
+    if spec["music_track_id"] and db.get(MusicTrack, spec["music_track_id"]) is None:
+        raise RenderError("That music track doesn't exist.")
+    job = RenderJob(source_media_id=source_id, post_id=post.id, spec=spec, requested_by=actor.label)
+    db.add(job)
+    db.flush()
+    audit(db, actor, "render_requested", "media", source_id, job=job.id, post=post.id, spec=spec)
+    return job
+
+
 def request(db: Session, actor: Actor, source: MediaAsset, raw: dict, post: Post | None = None) -> RenderJob:
     if post is not None and post.status in ("approved", "done"):
         raise RenderError("This post is approved; edit the video before approving, or send the post back first.")
@@ -225,6 +292,97 @@ def end_card(size: tuple[int, int], text: str) -> Image.Image:
     return img
 
 
+def label_overlay(size: tuple[int, int], text: str) -> Image.Image:
+    """A full-frame transparent picture with the clip's name in a rounded dark pill near the bottom."""
+    w, h = size
+    img = Image.new("RGBA", size, (0, 0, 0, 0))
+    if not text:
+        return img
+    d = ImageDraw.Draw(img)
+    font = _font(w // 13)
+    tw = d.textlength(text, font=font)
+    pad_x, pad_y = w // 22, w // 40
+    box_w, box_h = tw + 2 * pad_x, font.size + 2 * pad_y
+    left, top = (w - box_w) / 2, h * 0.74
+    d.rounded_rectangle((left, top, left + box_w, top + box_h), radius=box_h / 2, fill=(20, 20, 20, 190))
+    d.rounded_rectangle((left, top, left + box_w, top + box_h), radius=box_h / 2, outline=ACCENT + (255,), width=4)
+    d.text((left + pad_x, top + pad_y - font.size * 0.08), text, font=font, fill=PAPER + (255,))
+    return img
+
+
+def _fit_chain(spec: dict, i: int, w: int, h: int) -> str:
+    if spec["fit"] == "pad":
+        return (f"[{i}:v]split[a{i}][b{i}];[a{i}]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},"
+                f"boxblur=24:2,eq=brightness=-0.08[bg{i}];[b{i}]scale={w}:{h}:force_original_aspect_ratio=decrease[fg{i}];"
+                f"[bg{i}][fg{i}]overlay=(W-w)/2:(H-h)/2,setsar=1,fps=30[s{i}]")
+    return f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1,fps=30[s{i}]"
+
+
+def build_montage_commands(spec: dict, paths: dict[int, Path], work: Path, music: Path | None) -> list[list[str]]:
+    """The ffmpeg commands for a combined video: each clip fitted and labelled, joined with short cross-fades."""
+    w, h = SHAPES[spec["shape"]]
+    clips, n, t = spec["clips"], len(spec["clips"]), spec["transition"]
+    durs = [c["end"] - c["start"] for c in clips]
+    threads = str(settings().ffmpeg_threads)
+    inputs: list[str] = []
+    for c, d in zip(clips, durs):
+        inputs += ["-ss", str(c["start"]), "-t", f"{d:.2f}", "-i", str(paths[c["media_id"]])]
+    for i, c in enumerate(clips):
+        png = work / f"label{i}.png"
+        label_overlay((w, h), c["label"]).save(png)
+        inputs += ["-i", str(png)]
+    vf = []
+    for i in range(n):
+        vf.append(_fit_chain(spec, i, w, h))
+        vf.append(f"[s{i}][{n + i}:v]overlay=0:0:format=auto,format=yuv420p[c{i}]")
+    if t > 0:
+        cur, acc = "c0", durs[0]
+        for k in range(1, n):
+            vf.append(f"[{cur}][c{k}]xfade=transition=fade:duration={t:.2f}:offset={acc - t:.2f}[x{k}]")
+            cur, acc = f"x{k}", acc + durs[k] - t
+    else:
+        vf.append("".join(f"[c{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[x{n - 1}]")
+        cur = f"x{n - 1}"
+    total = spec["end"]
+    nxt = 2 * n
+    if spec["logo"] and LOGO.exists():
+        inputs += ["-i", str(LOGO)]
+        vf.append(f"[{nxt}:v]scale={w // 9}:-1,format=rgba,colorchannelmixer=aa=0.85[lg];"
+                  f"[{cur}][lg]overlay=W-w-{w // 24}:{w // 24}[vl]")
+        cur, nxt = "vl", nxt + 1
+    vf.append(f"[{cur}]format=yuv420p[vout]")
+    if music is not None:
+        inputs += ["-stream_loop", "-1", "-i", str(music)]
+        fade = max(0.0, total - 1.5)
+        af = (f"[{nxt}:a]atrim=0:{total:.2f},asetpts=PTS-STARTPTS,aresample=44100,aformat=channel_layouts=stereo,"
+              f"volume={spec['music_volume']},afade=t=out:st={fade:.2f}:d=1.5[aout]")
+    else:
+        inputs += ["-f", "lavfi", "-t", f"{total:.2f}", "-i", "anullsrc=r=44100:cl=stereo"]
+        af = f"[{nxt}:a]anull[aout]"
+    main = work / "main.mp4"
+    encode = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", "-c:a", "aac",
+              "-b:a", "128k", "-ar", "44100", "-threads", threads]
+    commands = [["ffmpeg", "-v", "error", "-y", *inputs, "-filter_complex", ";".join(vf + [af]),
+                 "-map", "[vout]", "-map", "[aout]", "-t", f"{total:.2f}", *encode, str(main)]]
+    return commands + _finish(spec, main, work, (w, h), encode)
+
+
+def _finish(spec: dict, main: Path, work: Path, size: tuple[int, int], encode: list[str]) -> list[list[str]]:
+    """Add the end card (or just tidy the file for streaming): the last commands of every render."""
+    if spec["end_card"]:
+        card_png = work / "card.png"
+        end_card(size, spec["end_card_text"]).save(card_png)
+        card = work / "card.mp4"
+        return [["ffmpeg", "-v", "error", "-y", "-loop", "1", "-t", str(END_CARD_SECONDS), "-i", str(card_png),
+                 "-f", "lavfi", "-t", str(END_CARD_SECONDS), "-i", "anullsrc=r=44100:cl=stereo",
+                 "-vf", "fps=30,format=yuv420p", "-shortest", *encode, str(card)],
+                ["ffmpeg", "-v", "error", "-y", "-i", str(main), "-i", str(card), "-filter_complex",
+                 "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[v][a]", "-map", "[v]", "-map", "[a]",
+                 *encode, "-movflags", "+faststart", str(work / "out.mp4")]]
+    return [["ffmpeg", "-v", "error", "-y", "-i", str(main), "-c", "copy", "-movflags", "+faststart",
+             str(work / "out.mp4")]]
+
+
 def _probe_has_audio(path: Path) -> bool:
     out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=index",
                           "-of", "json", str(path)], capture_output=True, text=True, timeout=60)
@@ -286,19 +444,7 @@ def build_commands(spec: dict, src: Path, work: Path, music: Path | None, segmen
               "-b:a", "128k", "-ar", "44100", "-threads", threads]
     commands = [["ffmpeg", "-v", "error", "-y", *inputs, "-filter_complex", ";".join(vf + af),
                  "-map", "[vout]", "-map", "[aout]", "-t", f"{dur:.2f}", *encode, str(main)]]
-    if spec["end_card"]:
-        card_png = work / "card.png"
-        end_card((w, h), spec["end_card_text"]).save(card_png)
-        card = work / "card.mp4"
-        commands.append(["ffmpeg", "-v", "error", "-y", "-loop", "1", "-t", str(END_CARD_SECONDS), "-i", str(card_png),
-                         "-f", "lavfi", "-t", str(END_CARD_SECONDS), "-i", "anullsrc=r=44100:cl=stereo",
-                         "-vf", "fps=30,format=yuv420p", "-shortest", *encode, str(card)])
-        commands.append(["ffmpeg", "-v", "error", "-y", "-i", str(main), "-i", str(card), "-filter_complex",
-                         "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[v][a]", "-map", "[v]", "-map", "[a]",
-                         *encode, "-movflags", "+faststart", str(work / "out.mp4")])
-    else:
-        commands.append(["ffmpeg", "-v", "error", "-y", "-i", str(main), "-c", "copy", "-movflags", "+faststart",
-                         str(work / "out.mp4")])
+    commands += _finish(spec, main, work, (w, h), encode)
     return commands
 
 
@@ -315,7 +461,14 @@ def run(db: Session, job: RenderJob) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
             music_path = media_mod.abs_path(music.path) if music else None
-            for cmd in build_commands(job.spec, media_mod.abs_path(source.path), work, music_path, source.transcript):
+            if job.spec.get("clips"):
+                paths = {c["media_id"]: media_mod.abs_path(db.get(MediaAsset, c["media_id"]).path)
+                         for c in job.spec["clips"]}
+                commands = build_montage_commands(job.spec, paths, work, music_path)
+            else:
+                commands = build_commands(job.spec, media_mod.abs_path(source.path), work, music_path,
+                                          source.transcript)
+            for cmd in commands:
                 done = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
                 if done.returncode != 0:
                     raise RenderError((done.stderr or "ffmpeg failed").strip()[-400:])
@@ -324,7 +477,7 @@ def run(db: Session, job: RenderJob) -> None:
         output = MediaAsset(
             kind="video", original_name=f"edit-{job.id}-{source.original_name}"[:256], path=rel, mime="video/mp4",
             size_bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), uploader_id=source.uploader_id,
-            note=source.note, tags=sorted(set(source.tags) | {"edited"}), description=source.description,
+            note=source.note, tags=sorted(set(source.tags) | {"edited"} | ({"montage"} if job.spec.get("clips") else set())), description=source.description,
             alt_text=source.alt_text, frames=[], transcript=[], source_media_id=source.id,
             credit=music.credit_line if music and music.credit_line and music.license not in NO_CREDIT_LICENSES else "",
         )

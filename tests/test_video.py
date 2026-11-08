@@ -5,6 +5,7 @@ import zipfile
 from types import SimpleNamespace
 
 import pytest
+from pytest import approx as pytest_approx
 from sqlalchemy import select
 
 from studio import db as db_mod
@@ -232,3 +233,42 @@ def test_tracks_that_need_no_credit_dont_force_one_into_captions(app):
         assert "Credit line saved" in save(free_id, "")
     with db_mod.session_scope() as s:
         assert s.get(MusicTrack, free_id).credit_line == "" and "CC BY" in s.get(MusicTrack, by_id).credit_line
+
+
+def test_combined_video_joins_labelled_clips(app, tmp_path):
+    make_user("adam", "admin")
+    ids = []
+    with db_mod.session_scope() as s:
+        actor = Actor("user", s.scalar(select(User)))
+        for i, seconds in enumerate((3, 4, 2)):
+            src = ffmpeg_clip(tmp_path / f"c{i}.mp4", seconds=seconds, size="480x854", audio=bool(i % 2))
+            asset = store_upload(s, src.open("rb"), f"c{i}.mp4", "video/mp4", actor.user.id)
+            process(asset)
+            ids.append(asset.id)
+        post = post_svc.create_post(s, Actor.system(), [ids[0]])
+        post_id = post.id
+        raw = {"clips": [{"media_id": ids[0], "label": "Uno"}, {"media_id": ids[1], "label": "Jill", "start": 1},
+                         {"media_id": ids[2], "label": "Mizar M", "end": 2}], "end_card": True, "transition": 0.4}
+        job = video.request_montage(s, actor, post, raw)
+        assert job.spec["end"] == pytest_approx(3 + 3 + 2 - 0.8)  # fades overlap, so the total is shorter
+        job_id = job.id
+        # a combined video needs a clip that is in the post, and at least two clips
+        with pytest.raises(video.RenderError):
+            video.request_montage(s, actor, post_svc.create_post(s, Actor.system(), [], note="x"), raw)
+        with pytest.raises(video.RenderError):
+            video.request_montage(s, actor, post, {"clips": raw["clips"][:1]})
+    with db_mod.session_scope() as s:
+        video.run_pending(s)
+        job = s.get(RenderJob, job_id)
+        assert job.status == "done", job.error
+        info = probe(abs_path(job.output.path))
+        assert {st["codec_type"] for st in info["streams"]} == {"video", "audio"}
+        assert abs(float(info["format"]["duration"]) - (7.2 + video.END_CARD_SECONDS)) < 0.6
+        assert "montage" in job.output.tags and job.note.startswith("Swapped into post")
+        assert [m.id for m in s.get(Post, post_id).media] == [job.output_media_id]
+
+
+def test_label_pictures_and_montage_commands(tmp_path):
+    img = video.label_overlay((1080, 1920), "Mizar M")
+    assert img.size == (1080, 1920) and img.getbbox() is not None
+    assert video.label_overlay((1080, 1920), "").getbbox() is None

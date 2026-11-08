@@ -38,7 +38,8 @@ For each video, the work item includes a transcript (when Whisper could hear spe
 For Reels, Shorts and TikTok, call `request_render`: trim to the strongest 10-45 seconds (the
 reveal, the moment something works), shape 9:16, subtitles on when there's speech, and a quiet music
 bed from `get_music` only when it suits the clip (none for talking-heavy clips). The edit replaces the
-original in the post a minute or two later. If a track has a `credit_line`, put it at the end of
+original in the post a minute or two later. To combine several short clips into one video (for example
+one clip per machine), call `request_montage` with the clips in order and a short label for each. If a track has a `credit_line`, put it at the end of
 every caption for that post. Never cut a clip so it misrepresents what happened.
 
 ## Event promos
