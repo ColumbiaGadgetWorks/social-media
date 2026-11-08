@@ -266,6 +266,12 @@
       document.querySelectorAll(".sm-slot").forEach(render);
     });
   }
-  form.addEventListener("input", renderAll);
+  // Only the caption fields redraw the previews. A video's own controls (the progress bar) fire "input" events too,
+  // and redrawing on those rebuilt the <video> and restarted it.
+  form.addEventListener("input", (e) => {
+    const t = e.target;
+    if (t && t.closest && (t.closest(".sm-slot") || t.tagName === "VIDEO" || t.tagName === "AUDIO")) return;
+    renderAll();
+  });
   renderAll();
 })();
