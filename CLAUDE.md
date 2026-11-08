@@ -20,7 +20,8 @@ them. Never try to approve, publish, schedule on a platform, or send email by an
   `is_sendable()` right before sending, edits clear approval) and a 2-per-month cap. Social posts
   must never be emailable. Dolibarr is the list and the unsubscribe source of truth.
 - Token scopes: `mcp` tokens only work for `/mcp`, `extension` tokens only for `/api/ext/`.
-- MCP tools (`studio/mcp_server.py`) may only read, create drafts, and edit non-approved posts.
+- MCP tools (`studio/mcp_server.py`) may read, create drafts, edit non-approved posts and cancel posts
+  (`cancel_post`; cancelling only stops things).
   Don't add tools that approve, publish, or send.
 - Every state change gets an `audit(...)` entry.
 - Run `.venv/bin/python -m pytest` and `.venv/bin/ruff check studio tests` before committing.

@@ -492,6 +492,23 @@ def attach_media(post_id: int, media_ids: list[int], replace: bool = False, allo
 
 
 @server.tool()
+def cancel_post(post_id: int, reason: str = "") -> str:
+    """Cancel a post for good (it moves to Rejected and never publishes). Use it when the person asks you to remove or
+    cancel a post, or for duplicates you replaced. Works at any stage before something has gone out. It can't be undone
+    from here. This never approves anything."""
+    with session_scope() as db:
+        actor = _actor(db)
+        post = db.get(Post, post_id)
+        if post is None:
+            return f"Error: post {post_id} doesn't exist."
+        try:
+            post_svc.discard(db, actor, post, reason or "Cancelled in a Claude session")
+        except post_svc.PostError as exc:
+            return f"Error: {exc}"
+        return json.dumps({"post_id": post.id, "status": post.status})
+
+
+@server.tool()
 def create_post(media_ids: list[int], note: str, pillar: str = "", allow_reuse: bool = False) -> str:
     """Start a new post from library media (e.g. unused photos to fill a schedule gap).
     Then fill it with submit_drafts. A photo or clip that's already in another post is refused unless

@@ -42,6 +42,10 @@ original in the post a minute or two later. To combine several short clips into 
 one clip per machine), call `request_montage` with the clips in order and a short label for each. If a track has a `credit_line`, put it at the end of
 every caption for that post. Never cut a clip so it misrepresents what happened.
 
+## Cancelling posts
+
+When the person asks you to remove a post, or you replaced several posts with one (for example single-clip posts folded into a montage), call `cancel_post` with a short reason. It moves the post to Rejected and nothing is published. Cancel only what the person asked for. You still can't approve anything.
+
 ## Event promos
 
 Posts created from the events calendar carry an `event` block in `get_work_item`. Its facts (date,

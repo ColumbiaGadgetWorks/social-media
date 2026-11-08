@@ -225,8 +225,9 @@ def request_changes(db: Session, actor: Actor, post: Post, comment: str, *, reje
 
 def discard(db: Session, actor: Actor, post: Post, comment: str = "") -> None:
     """Cancel a post for good (it moves to Rejected and never publishes): at any stage before it starts going out,
-    including a draft still waiting for Claude."""
-    if not actor.is_human or not actor.user.has_role("approver"):
+    including a draft still waiting for Claude. Approvers can do it, and so can Claude's session (cancelling only ever
+    stops something from going out; approving stays with people)."""
+    if actor.type != "mcp" and (not actor.is_human or not actor.user.has_role("approver")):
         raise PostError("Only an approver can cancel a post.")
     if post.status not in ("needs_claude", "draft", "in_review", "approved"):
         raise PostError(f"A post that is {post.status} can't be cancelled.")

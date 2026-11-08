@@ -149,6 +149,18 @@ def test_claude_cannot_edit_an_approved_post(setup):
         assert post.status == "approved" and post.version("bluesky").body == "Hi"
 
 
+def test_claude_can_cancel_a_post_but_the_tool_never_approves(setup):
+    web, token, post_id = setup
+    mcp = MCP(web, token).init()
+    text = mcp.call("cancel_post", post_id=post_id, reason="duplicate")["content"][0]["text"]
+    assert '"rejected"' in text
+    with db_mod.session_scope() as s:
+        post = s.get(Post, post_id)
+        assert post.status == "rejected" and post.approved_hash is None and post.review_comment == "duplicate"
+    assert "can't be cancelled" in mcp.call("cancel_post", post_id=post_id)["content"][0]["text"]
+    assert "doesn't exist" in mcp.call("cancel_post", post_id=999)["content"][0]["text"]
+
+
 def test_phase2_tools(setup):
     web, token, post_id = setup
     mcp = MCP(web, token).init()
