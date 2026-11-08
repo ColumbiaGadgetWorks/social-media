@@ -441,18 +441,28 @@ def request_render(
         return json.dumps({"render_id": job.id, "spec": job.spec, "note": "Queued" + note})
 
 
+LOCKED = ("approved", "done")  # in a post a person approved (or already out): never reusable, even with allow_reuse
+
+
+def _reuse_blocked(conflicts: list[dict], allow_reuse: bool) -> bool:
+    return any(c["status"] in LOCKED for c in conflicts) or (bool(conflicts) and not allow_reuse)
+
+
 def _reuse_error(conflicts: list[dict]) -> str:
     where = "; ".join(f"media {c['media_id']} is already in post {c['post_id']} ({c['post']}, {c['status']})"
                       for c in conflicts)
     return (f"Error: {where}. The same photo or clip shouldn't go out in more than one post (an announcement and "
-            "its reminder should lead with different photos). Pick another one (search_media with unused_only), or "
-            "pass allow_reuse=true if there's a real reason, and say why in your notes.")
+            "its reminder should lead with different photos). Pick another one (search_media with unused_only)."
+            + (" Media in an approved or published post can't be reused at all." if any(
+                c["status"] in LOCKED for c in conflicts) else
+               " Pass allow_reuse=true only if there's a real reason, and say why in your notes."))
 
 
 @server.tool()
 def attach_media(post_id: int, media_ids: list[int], replace: bool = False, allow_reuse: bool = False) -> str:
     """Add library photos/videos to a post that isn't approved yet (or replace its media with replace=true).
-    A photo or clip that's already in another post is refused unless allow_reuse=true."""
+    A photo or clip that's already in another post is refused unless allow_reuse=true, and one in an
+    approved or published post is always refused."""
     with session_scope() as db:
         actor = _actor(db)
         post = db.get(Post, post_id)
@@ -464,7 +474,7 @@ def attach_media(post_id: int, media_ids: list[int], replace: bool = False, allo
         if any(a is None for a in assets):
             return "Error: one of those media ids doesn't exist."
         conflicts = post_svc.media_conflicts(db, media_ids, exclude_post_id=post.id)
-        if conflicts and not allow_reuse:
+        if _reuse_blocked(conflicts, allow_reuse):
             return _reuse_error(conflicts)
         if replace:
             post.media_links.clear()
@@ -516,7 +526,7 @@ def create_post(media_ids: list[int], note: str, pillar: str = "", allow_reuse: 
     with session_scope() as db:
         actor = _actor(db)
         conflicts = post_svc.media_conflicts(db, media_ids)
-        if conflicts and not allow_reuse:
+        if _reuse_blocked(conflicts, allow_reuse):
             return _reuse_error(conflicts)
         try:
             post = post_svc.create_post(db, actor, media_ids, note=note, pillar=pillar, for_claude=False, source="claude")

@@ -163,6 +163,14 @@ def test_event_posts_with_only_the_poster_are_refused_except_cancellations_and_n
         assert "refuses" in summary["event_instructions"]
 
 
+def test_a_cancelled_event_gets_one_notice_not_an_announcement_and_a_reminder():
+    start = db_mod.utcnow() + timedelta(days=40)
+    normal = Event(uid="a", start=start, end=start + timedelta(hours=2), title="Open House")
+    cancelled = Event(uid="b", start=start, end=start + timedelta(hours=2), title="Cancelled: Open House")
+    assert set(calendar_sync.promo_targets(normal)) == {"announce", "reminder"}
+    assert set(calendar_sync.promo_targets(cancelled)) == {"announce"}
+
+
 def test_old_announce_reminder_pairs_are_replaced(app3):
     feed = flattened_feed(offsets=(2, 9))
     with db_mod.session_scope() as s:  # as the previous version saw it: two one-off events

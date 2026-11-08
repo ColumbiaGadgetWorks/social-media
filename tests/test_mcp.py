@@ -161,6 +161,16 @@ def test_claude_can_cancel_a_post_but_the_tool_never_approves(setup):
     assert "doesn't exist" in mcp.call("cancel_post", post_id=999)["content"][0]["text"]
 
 
+def test_media_in_an_approved_post_is_never_reusable_even_with_allow_reuse(setup):
+    web, token, post_id = setup
+    mcp = MCP(web, token).init()
+    with db_mod.session_scope() as s:
+        media_id = s.get(Post, post_id).media[0].id
+        s.get(Post, post_id).status = "approved"
+    out = mcp.call("create_post", media_ids=[media_id], note="again", allow_reuse=True)["content"][0]["text"]
+    assert out.startswith("Error") and "can't be reused at all" in out
+
+
 def test_phase2_tools(setup):
     web, token, post_id = setup
     mcp = MCP(web, token).init()

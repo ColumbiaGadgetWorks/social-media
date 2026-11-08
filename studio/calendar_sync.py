@@ -461,6 +461,8 @@ def promo_targets(event: Event) -> dict[str, datetime]:
     if announce < now + timedelta(days=1):
         announce = _at_local(to_local(now).date() + timedelta(days=1), 11, 30)
     targets = {"announce": announce}
+    if is_cancelled(event):  # one notice is enough; a second post with the same card is just a duplicate
+        return targets
     reminder = _at_local(local_start - timedelta(days=2), 11, 30)
     if reminder - announce >= timedelta(days=3) and reminder > now:
         targets["reminder"] = reminder
