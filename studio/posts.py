@@ -126,8 +126,6 @@ def update_post(
     """Apply edits. Returns the list of fields that changed."""
     if post.status == "done":
         raise PostError("This post is finished and can't be edited. Create a new post instead.")
-    if actor.type == "mcp" and post.status == "approved":
-        raise PostError("Approved posts can only be edited in the web app.")
     if _has_published(post):
         raise PostError("Part of this post is already published. Create a new post instead.")
 

@@ -548,6 +548,10 @@ def submit_drafts(
 ) -> str:
     """Save captions for each channel, media descriptions/alt text, and send the post for human review.
 
+    Also the way to make a small edit to a post that's already in review or approved (captions, hashtags,
+    times): an edit to an approved post clears its approval and sends it back to review. It can't change media
+    on an approved post, and nothing is published until a person approves it again.
+
     Only include channels you want enabled (set enabled=false to drop one). If validation fails the
     drafts are still saved and the problems are returned so you can fix them and call again.
     For a weekly event post, pass `angle` (a key from `weekly.other_angles`) if you used a different
@@ -558,8 +562,9 @@ def submit_drafts(
         post = db.get(Post, post_id)
         if post is None:
             return f"Error: post {post_id} doesn't exist."
-        if post.status in ("approved", "done"):
-            return "Error: this post is already approved; edits happen in the web app."
+        if post.status == "done":
+            return "Error: this post is finished; create a new post instead."
+        was_approved = post.status == "approved"  # an edit sends it back to a person for approval
         payload = []
         for v in versions:
             if v.channel not in ch.CHANNELS:
@@ -597,9 +602,11 @@ def submit_drafts(
             found.setdefault("", []).append(poster)
         if found:
             result["problems"] = found
-        elif submit_for_review:
+        elif submit_for_review and post.status in ("needs_claude", "draft", "rejected"):
             post_svc.submit_for_review(db, actor, post)
             result["status"] = post.status
+        if was_approved and post.status != "approved":
+            result["note"] = "The post was approved; your edit cleared that and it's back in review for a person to approve."
         audit(db, actor, "claude_drafted", "post", post.id, channels=[v["channel"] for v in payload])
         return json.dumps(result)
 

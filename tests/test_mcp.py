@@ -129,7 +129,7 @@ def test_submit_returns_problems_instead_of_submitting(setup):
     assert "x" in result["problems"]
 
 
-def test_claude_cannot_edit_an_approved_post(setup):
+def test_claude_edit_of_an_approved_post_sends_it_back_for_approval(setup):
     web, token, post_id = setup
     with db_mod.session_scope() as s:
         from sqlalchemy import select
@@ -143,10 +143,12 @@ def test_claude_cannot_edit_an_approved_post(setup):
         post_svc.approve(s, Actor("user", adam), post, post_svc.approval_hash(post))
     mcp = MCP(web, token).init()
     text = mcp.call("submit_drafts", post_id=post_id, versions=[{"channel": "bluesky", "body": "Sneaky edit"}])["content"][0]["text"]
-    assert "already approved" in text
+    assert '"in_review"' in text and "back in review" in text
     with db_mod.session_scope() as s:
         post = s.get(Post, post_id)
-        assert post.status == "approved" and post.version("bluesky").body == "Hi"
+        assert post.status == "in_review" and post.approved_hash is None and post.version("bluesky").body == "Sneaky edit"
+    again = mcp.call("submit_drafts", post_id=post_id, versions=[{"channel": "bluesky", "body": "Second edit"}])["content"][0]["text"]
+    assert '"in_review"' in again  # editing a post that is already in review works too
 
 
 def test_claude_can_cancel_a_post_but_the_tool_never_approves(setup):
