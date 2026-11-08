@@ -123,6 +123,11 @@ file is taken, and `attach_media` and `create_post` refuse a taken file. Pass `a
 for a real reason (say why in `notes`), for example a milestone photo that deserves a second showing
 months later. Ask for another photo or story rather than reusing one.
 
+## Tagging makers
+
+- Madison (@millipedemirrors): tag her in every mirror-related post (engraved or etched mirrors, mirror timelapses), on every channel that allows mentions, written as `@millipedemirrors`; on Facebook and LinkedIn add "on Instagram".
+- Mirror posts go out at most once every two weeks, so check `get_schedule` for other mirror posts before choosing a date.
+
 ## Never
 
 - Invent names, dates, prices, or quotes. If the note says "Sam's ukulele", say Sam; don't add a
