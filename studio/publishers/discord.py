@@ -23,6 +23,7 @@ from .bluesky import PublishError
 API = "https://discord.com/api/v10"
 ANNOUNCEMENT = 5  # Discord channel type for announcement (news) channels
 MAX_TEXT = 2000
+SUPPRESS_NOTIFICATIONS = 1 << 12  # Discord message flag: the same as typing "@silent", so the post pings nobody
 
 
 class DiscordClient:
@@ -69,7 +70,7 @@ class DiscordClient:
                 files.append((f"cgw-{m.id}.jpg", data, "image/jpeg"))
         if len(text) > MAX_TEXT:
             raise PublishError(f"Discord messages are limited to {MAX_TEXT} characters ({len(text)} here)")
-        payload = {"content": text, "allowed_mentions": {"parse": []},
+        payload = {"content": text, "allowed_mentions": {"parse": []}, "flags": SUPPRESS_NOTIFICATIONS,
                    "attachments": [{"id": i, "filename": name, "description": _alt(media, name)[:1024]}
                                    for i, (name, _, _) in enumerate(files)]}
         if files:

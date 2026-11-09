@@ -79,7 +79,7 @@ class Discord:
         try:
             self.http.post(f"{API}/channels/{channel_id}/messages", headers=self.headers,
                            json={"content": text[:1900], "message_reference": {"message_id": message_id},
-                                 "allowed_mentions": {"parse": []}})
+                                 "allowed_mentions": {"parse": []}, "flags": 1 << 12})  # 1<<12: silent, no ping
         except httpx.HTTPError:
             log.warning("couldn't reply to Discord message %s", message_id)
 

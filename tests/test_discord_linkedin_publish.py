@@ -68,7 +68,7 @@ def test_discord_posts_photos_and_crossposts(app_pub):
     s.close()
     assert url == "https://discord.com/channels/999/555/4242" and msg_id == "4242"
     sent = fake.sent[0]
-    assert sent["files"] == 3 and sent["content"].startswith("New in the shop") and sent["allowed_mentions"] == {"parse": []}
+    assert sent["files"] == 3 and sent["content"].startswith("New in the shop") and sent["allowed_mentions"] == {"parse": []} and sent["flags"] == 4096  # silent: nobody is pinged
     assert fake.crossposted  # an Announcement channel also reaches servers that follow it
 
 
