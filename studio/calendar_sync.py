@@ -455,6 +455,13 @@ def promo_targets(event: Event) -> dict[str, datetime]:
     A weekly event's one post goes out the day before."""
     now = utcnow()
     local_start = to_local(event.start).date()
+    if is_cancelled(event):  # one notice, on the Friday 7-13 days ahead (not the weekday of the event: confusing)
+        day = local_start - timedelta(days=7)
+        day -= timedelta(days=(day.weekday() - 4) % 7)  # back to the Friday on or before
+        notice = _at_local(day, 11, 30)
+        if notice < now + timedelta(hours=2):  # too late for that Friday: as soon as it can go out
+            notice = max(notice, _at_local(to_local(now).date() + timedelta(days=1), 11, 30))
+        return {"weekly" if event.series else "announce": notice}
     if event.series:
         return {"weekly": max(_at_local(local_start - timedelta(days=1), 11, 30), now + timedelta(hours=2))}
     announce = _at_local(local_start - timedelta(days=14), 11, 30)

@@ -171,6 +171,16 @@ def test_a_cancelled_event_gets_one_notice_not_an_announcement_and_a_reminder():
     assert set(calendar_sync.promo_targets(cancelled)) == {"announce"}
 
 
+def test_a_cancellation_notice_goes_out_on_a_friday_one_to_two_weeks_ahead():
+    for days in range(20, 40):
+        start = db_mod.utcnow() + timedelta(days=days)
+        cancelled = Event(uid="c", start=start, end=start + timedelta(hours=2), title="Cancelled: Open Hack Night")
+        notice = calendar_sync.promo_targets(cancelled)["announce"]
+        local = calendar_sync.to_local(notice)
+        ahead = (calendar_sync.to_local(start).date() - local.date()).days
+        assert local.weekday() == 4 and 7 <= ahead <= 13
+
+
 def test_old_announce_reminder_pairs_are_replaced(app3):
     feed = flattened_feed(offsets=(2, 9))
     with db_mod.session_scope() as s:  # as the previous version saw it: two one-off events
