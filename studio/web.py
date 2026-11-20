@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from . import announcements as ann_mod
 from . import batch as batch_mod
-from . import calendar_sync, oidc, publishers, upload_batch
+from . import calendar_sync, event_listings, oidc, publishers, upload_batch
 from . import channels as ch
 from . import metrics as metrics_mod
 from . import posts as post_svc
@@ -43,6 +43,7 @@ from .models import (
     AuditLog,
     ChannelVersion,
     Event,
+    EventListing,
     MediaAsset,
     MusicTrack,
     Post,
@@ -1107,8 +1108,47 @@ def events_page(request: Request, db: Session = Depends(get_db)):
     for e in events:
         if e.recurring and not e.posts:
             series.setdefault(e.title, []).append(e)
+    listings = {e.id: {"hash": event_listings.listing_hash(e), "listable": event_listings.is_listable(e)[0],
+                       "kit": event_listings.manual_kit(e)}
+                for e in one_off if event_listings.wants_listing(e) and e.status == "active"}
     return render(request, "events.html", user, events=one_off, series=series, when=calendar_sync.event_when,
-                  ics=settings().calendar_ics_url)
+                  ics=settings().calendar_ics_url, listings=listings, platforms=event_listings.PLATFORMS,
+                  enabled_platforms=event_listings.enabled_platforms())
+
+
+@router.post("/events/{event_id}/listing/approve")
+async def event_listing_approve(request: Request, event_id: int, db: Session = Depends(get_db)):
+    user = require(request, db)
+    form = await form_with_csrf(request)
+    event = db.get(Event, event_id)
+    if event is None:
+        return back("/events")
+    try:
+        event_listings.approve(db, Actor("user", user), event, str(form.get("seen_hash", "")))
+        db.commit()
+        flash(request, f"Listing approved: {event.title}. Automatic platforms pick it up on the next pass.")
+    except event_listings.ListingError as exc:
+        db.rollback()
+        flash(request, str(exc), "error")
+    return back(f"/events#event-{event_id}")
+
+
+@router.post("/events/{event_id}/listing/{platform}/done")
+async def event_listing_done(request: Request, event_id: int, platform: str, db: Session = Depends(get_db)):
+    user = require(request, db)
+    form = await form_with_csrf(request)
+    row = db.scalar(select(EventListing).where(EventListing.event_id == event_id, EventListing.platform == platform))
+    if row is None:
+        flash(request, "Approve the listing first.", "error")
+        return back(f"/events#event-{event_id}")
+    try:
+        event_listings.mark_listed_by_hand(db, Actor("user", user), row, str(form.get("url", "")))
+        db.commit()
+        flash(request, f"Recorded the {event_listings.PLATFORMS[platform].label}.")
+    except event_listings.ListingError as exc:
+        db.rollback()
+        flash(request, str(exc), "error")
+    return back(f"/events#event-{event_id}")
 
 
 # --- batch days ----------------------------------------------------------

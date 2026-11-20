@@ -102,6 +102,13 @@ class Settings:
     calendar_ics_url: str = ""
     # Where to post Google Business Profile updates by hand (the business profile's own link)
     gbp_url: str = "https://www.google.com/search?q=Columbia+Gadget+Works"
+    # Event listings (studio/event_listings.py): platforms that get a native event, after an approver approves it
+    event_listing_platforms: list = field(default_factory=list)  # e.g. ["bluesky", "google"]; manual ones always show
+    gbp_account_id: str = ""  # Business Profile API (needs Google's API access approval)
+    gbp_location_id: str = ""
+    gbp_client_id: str = ""
+    gbp_client_secret: str = ""
+    gbp_refresh_token: str = ""
     calendar_poll_minutes: int = 15
     calendar_lookahead_days: int = 60
     weekly_promo_days: int = 10  # weekly events get their post this many days ahead, so fresh photos can be used
@@ -248,6 +255,12 @@ def load_settings() -> Settings:
             "STUDIO_CALENDAR_ICS_URL", "https://columbiagadgetworks.org/api/calendar.ics"
         ),
         gbp_url=os.environ.get("STUDIO_GBP_URL", "").strip() or "https://www.google.com/search?q=Columbia+Gadget+Works",
+        event_listing_platforms=_list(os.environ.get("STUDIO_EVENT_LISTINGS", "")),
+        gbp_account_id="".join(c for c in os.environ.get("STUDIO_GBP_ACCOUNT_ID", "") if c.isdigit()),
+        gbp_location_id="".join(c for c in os.environ.get("STUDIO_GBP_LOCATION_ID", "") if c.isdigit()),
+        gbp_client_id=os.environ.get("STUDIO_GBP_CLIENT_ID", "").strip(),
+        gbp_client_secret=os.environ.get("STUDIO_GBP_CLIENT_SECRET", "").strip(),
+        gbp_refresh_token=os.environ.get("STUDIO_GBP_REFRESH_TOKEN", "").strip(),
         calendar_poll_minutes=_int("STUDIO_CALENDAR_POLL_MINUTES", 15),
         calendar_lookahead_days=_int("STUDIO_CALENDAR_LOOKAHEAD_DAYS", 60),
         weekly_promo_days=_int("STUDIO_WEEKLY_PROMO_DAYS", 10),

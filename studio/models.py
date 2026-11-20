@@ -271,6 +271,30 @@ class Event(Base):
     promos_created: Mapped[bool] = mapped_column(Boolean, default=False)
     card_media_id: Mapped[int | None] = mapped_column(ForeignKey("media.id"), nullable=True)
     posts: Mapped[list[Post]] = relationship(back_populates="event")
+    listing_approved_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)  # event_listings.approve()
+    listing_approved_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    listing_approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    listings: Mapped[list[EventListing]] = relationship(back_populates="event", cascade="all, delete-orphan")
+
+
+class EventListing(Base):
+    """The event itself on another platform (a Bluesky/Smoke Signal event, a Google Business event post, a Facebook
+    event made by hand). One row per event and platform."""
+
+    __tablename__ = "event_listings"
+    __table_args__ = (UniqueConstraint("event_id", "platform"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"))
+    platform: Mapped[str] = mapped_column(String(32))
+    # pending (not on the platform yet) | listed | cancelled (taken down / marked cancelled there) | failed
+    state: Mapped[str] = mapped_column(String(16), default="pending")
+    listed_hash: Mapped[str] = mapped_column(String(64), default="")  # the facts as they are on the platform now
+    external_id: Mapped[str] = mapped_column(String(256), default="")
+    external_url: Mapped[str] = mapped_column(String(512), default="")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    event: Mapped[Event] = relationship(back_populates="listings")
 
 
 class MetricSnapshot(Base):
