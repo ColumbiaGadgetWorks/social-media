@@ -13,47 +13,11 @@
 <div class="stack">
 {% for e in events %}
   {% set day, time = when(e) %}
-  <div class="card" id="event-{{ e.id }}">
+  <div class="card">
     <div class="row spread"><h3>{{ e.title }}</h3>
       <div class="row">{% if e.status == 'cancelled' %}<span class="tag stop">Cancelled</span>{% endif %}{% if e.recurring %}<span class="tag">Recurring</span>{% endif %}{% if not e.promote %}<span class="tag">Not promoted</span>{% endif %}</div></div>
     <p class="small">{{ day }}, {{ time }}{% if e.location %} · {{ e.location }}{% endif %}{% if e.url %} · <a href="{{ e.url }}" rel="noopener" target="_blank">Link</a>{% endif %}</p>
     {% if e.posts %}<p class="small">{% for p in e.posts %}<a href="/posts/{{ p.id }}">#{{ p.id }} {{ (p.purpose or 'post') | capitalize }}</a> {{ st(p.status) }}&nbsp;&nbsp;{% endfor %}</p>{% endif %}
-    {% set l = listings.get(e.id) %}
-    {% if l %}
-    {% set rows = {} %}{% for r in e.listings %}{% set _ = rows.update({r.platform: r}) %}{% endfor %}
-    <details class="small" style="margin-top:6px">
-      <summary>Event listings{% if l.listable %} · approved{% elif e.listing_approved_hash %} · <span class="tag stop">changed since approval</span>{% else %} · not approved yet{% endif %}</summary>
-      <p class="muted">The event itself on other platforms (RSVPs, reminders, event search), not a post. Nothing is listed until an approver approves these facts; a calendar change needs a fresh approval.</p>
-      {% if not l.listable and user.has_role('approver') %}
-      <form method="post" action="/events/{{ e.id }}/listing/approve">
-        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="seen_hash" value="{{ l.hash }}">
-        <button>Approve listing as shown</button>
-      </form>
-      {% endif %}
-      <ul>
-      {% for key in enabled_platforms %}{% set p = platforms[key] %}{% set r = rows.get(key) %}
-        <li><strong>{{ p.label }}</strong>:
-          {% if r and r.state == 'listed' %}listed{% if r.external_url %} · <a href="{{ r.external_url }}" rel="noopener" target="_blank">open</a>{% endif %}
-          {% elif r and r.state == 'failed' %}<span class="tag stop">failed</span> {{ r.last_error }}
-          {% elif p.mode == 'auto' %}{{ 'waiting for the next pass' if l.listable else 'after approval' }}
-          {% else %}{{ p.how }}
-            {% if l.listable %}
-            <div class="mono" style="white-space:pre-wrap;margin:6px 0">Name: {{ l.kit.name }}
-Date: {{ l.kit.date }}  {{ l.kit.start_time }}{% if l.kit.end_time %} to {{ l.kit.end_time }}{% endif %}
-Location: {{ l.kit.location }}
-Link: {{ l.kit.link }}
-
-{{ l.kit.details }}</div>
-            <form method="post" action="/events/{{ e.id }}/listing/{{ key }}/done" class="row">
-              <input type="hidden" name="csrf" value="{{ csrf }}">
-              <input name="url" placeholder="Paste the event link once it's made" style="flex:1"><button>Done</button>
-            </form>
-            {% endif %}
-          {% endif %}</li>
-      {% endfor %}
-      </ul>
-    </details>
-    {% endif %}
   </div>
 {% else %}<p class="muted">No upcoming events found yet. The calendar is read from {{ ics or 'nowhere (STUDIO_CALENDAR_ICS_URL is empty)' }}.</p>{% endfor %}
 </div>

@@ -11,7 +11,6 @@ from . import (
     announcements,
     calendar_sync,
     discord_ingest,
-    event_listings,
     media,
     metrics,
     publishers,
@@ -81,10 +80,6 @@ def _calendar() -> None:
         result = calendar_sync.sync(db, text)
     if any(result.values()):
         log.info("calendar sync: %s", result)
-    with session_scope() as db:  # native events on other platforms (approved listings only)
-        listed = event_listings.sync_due(db)
-    if any(listed.values()):
-        log.info("event listings: %s", listed)
 
 
 def _nightly() -> None:
