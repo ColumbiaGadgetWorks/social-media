@@ -143,19 +143,38 @@ def month_items(db: Session, send_at: datetime, month_end: datetime) -> list[dic
         select(Event).where(Event.start >= send_at, Event.start < month_end, Event.status.in_(("active", "cancelled")),
                             Event.recurring.is_(False), Event.email_ok.is_(True)).order_by(Event.start)
     ).all()
-    items, seen = [], set()
+    from .calendar_sync import is_cancelled
+
+    # Days a weekly series already lists as cancelled, and start times that still have a live event.
+    series_off = {(to_local(x.start).date()) for x in events if x.series and is_cancelled(x)}
+    live_starts = {x.start for x in events if not is_cancelled(x)}
+    keyed, seen = [], set()
     for e in events:
         if e.series:
             if e.series in seen:
                 continue
             seen.add(e.series)
-            items.append(weekly_item([x for x in events if x.series == e.series]))
+            keyed.append((e.start, weekly_item([x for x in events if x.series == e.series])))
+        elif is_cancelled(e) and (to_local(e.start).date() in series_off or e.start in live_starts):
+            continue  # already named in a weekly line, or replaced by another event at the same time
         else:
-            items.append(event_item(e))
-    return items
+            keyed.append((e.start, event_item(e)))
+    return [item for _, item in sorted(keyed, key=lambda k: k[0])]  # in date order
 
 
-def member_projects(db: Session, limit: int = 2, days: int = 60) -> list[dict]:
+def emailed_media(db: Session, exclude_id: int | None = None) -> dict[int, str]:
+    """Photos already used in another email (sent, or still waiting), as {media id: that email's subject}.
+    A photo goes in one email only."""
+    out: dict[int, str] = {}
+    for other in db.scalars(select(Announcement).where(Announcement.status != "cancelled")).all():
+        if other.id == exclude_id:
+            continue
+        for _, media_id in PHOTO_RE.findall(f"{other.intro}\n{other.closing}"):
+            out.setdefault(int(media_id), other.subject)
+    return out
+
+
+def member_projects(db: Session, limit: int = 2, days: int = 60, exclude_id: int | None = None) -> list[dict]:
     """The latest member-project posts that actually went out on social media, newest first, for the monthly
     email's closing. Photos come first (a video can't sit in an email); each has the caption that was posted."""
     from .models import ChannelVersion, Post
@@ -166,12 +185,16 @@ def member_projects(db: Session, limit: int = 2, days: int = 60) -> list[dict]:
             Post.pillar == "member_projects", ChannelVersion.publish_state == "published",
             ChannelVersion.published_at >= since).order_by(ChannelVersion.published_at.desc())
     ).all()
+    used = emailed_media(db, exclude_id)
     out, seen = [], set()
     for version, post in rows:
         if post.id in seen:
             continue
         seen.add(post.id)
-        photo = next((m for m in post.media if m.kind == "image" and not {"event-card", "event-badge"} & set(m.tags or [])), None)
+        photo = next((m for m in post.media if m.kind == "image" and not {"event-card", "event-badge"} & set(m.tags or [])
+                      and m.id not in used), None)
+        if any(m.id in used for m in post.media):
+            continue  # this project already went out in an earlier email
         out.append({"post_id": post.id, "title": post.display_title, "posted_on": version.channel,
                     "caption": version.body.strip(), "photo_media_id": photo.id if photo else None,
                     "photo_description": photo.description if photo else "",
@@ -280,6 +303,10 @@ def problems(db: Session, ann: Announcement) -> list[str]:
         asset = db.get(MediaAsset, int(media_id))
         if asset is None or asset.kind != "image":
             found.append(f"photo {media_id} isn't a photo in the library")
+    used = emailed_media(db, ann.id)
+    for _, media_id in PHOTO_RE.findall(f"{ann.intro}\n{ann.closing}"):
+        if int(media_id) in used:
+            found.append(f"photo {media_id} was already in the email \"{used[int(media_id)]}\"; use a different one")
     if ann.kind == "monthly" and ann.month:
         found += other_month_mentions(ann)
     if ann.kind == "monthly" and not ann.items:

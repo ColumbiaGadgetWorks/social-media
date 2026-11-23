@@ -441,13 +441,21 @@ def test_monthly_covers_its_own_month_and_lists_cancelled_hack_nights(app3, monk
                         series="hack|Thu|18:00", status=status))
         s.add(Event(uid="nov", start=datetime(2026, 11, 4, 0, 0), title="Free Public CGW Class: CAD"))
         s.add(Event(uid="dec", start=datetime(2026, 12, 9, 0, 0), title="December thing"))
-        s.add(Event(uid="gone", start=datetime(2026, 11, 20, 0, 0), title="Soldering night", status="cancelled"))
+        s.add(Event(uid="gone", start=datetime(2026, 11, 10, 0, 0), title="Soldering night", status="cancelled"))
+        # Duplicates that must not get their own lines: the Hack Night already named as cancelled on the 19th, and a
+        # cancelled placeholder whose slot another event took over.
+        s.add(Event(uid="dup", start=datetime(2026, 11, 20, 0, 0), title="Cancelled: Open Hack Night (Thanksgiving)"))
+        s.add(Event(uid="old", start=datetime(2026, 11, 4, 0, 0), title="Free Public CGW Class", status="cancelled"))
     at_local(monkeypatch, datetime(2026, 10, 12, 9, 0))
     with db_mod.session_scope() as s:
         a = ann_mod.ensure_monthly(s, early=True)
         titles = [i["title"] for i in a.items]
         assert "December thing" not in titles
         assert "Cancelled: Soldering night" in titles
+        assert "Cancelled: Open Hack Night (Thanksgiving)" not in titles  # the weekly line already says so
+        assert "Cancelled: Free Public CGW Class" not in titles and "Free Public CGW Class: CAD" in titles
+        starts = [next(e.start for e in s.scalars(select(Event)).all() if e.id == i["event_id"]) for i in a.items]
+        assert starts == sorted(starts)  # date order
         hack = next(i for i in a.items if i["title"] == "Open Hack Night")
         assert hack["when"].startswith("Every Thursday") and hack["when"].endswith("Cancelled: November 19")
         a.intro, a.closing = "Hi.", "More in December."
@@ -475,6 +483,31 @@ def test_member_projects_are_the_latest_posted_ones(app3):
         got = ann_mod.member_projects(s)
         assert [p["title"] for p in got] == ["Project 2", "Project 1"]  # photos first; unposted and other pillars skipped
         assert got[0]["caption"] == "Caption 2" and got[0]["photo_media_id"]
+
+
+def test_a_photo_goes_in_one_email_only(app3):
+    from studio.models import ChannelVersion, MediaAsset, Post, PostMedia
+
+    with db_mod.session_scope() as s:
+        m = MediaAsset(kind="image", original_name="a.jpg", mime="image/jpeg", size_bytes=1, sha256="x", path="a",
+                       processing_status="ready")
+        post = Post(title="Mill", pillar="member_projects", status="done")
+        post.versions.append(ChannelVersion(channel="facebook", body="Caption", publish_state="published",
+                                            published_at=utcnow_minus(days=3)))
+        post.media_links.append(PostMedia(media=m))
+        s.add_all([post, Announcement(kind="special", subject="November", intro="Hi.", status="sent", items=[],
+                                      closing=f"![Mill](photo:{1})")])
+        s.flush()
+        m_id = m.id
+        first = s.scalars(select(Announcement)).first()
+        first.closing = f"![Mill](photo:{m_id})"
+        later = Announcement(kind="special", subject="December", intro="Hi.", closing=f"![Mill again](photo:{m_id})",
+                             items=[], status="draft")
+        s.add(later)
+        s.flush()
+        assert any("already in the email" in p for p in ann_mod.problems(s, later))
+        assert ann_mod.member_projects(s, exclude_id=later.id) == []  # that project already went out
+        assert ann_mod.emailed_media(s, later.id) == {m_id: "November"}
 
 
 def utcnow_minus(days):

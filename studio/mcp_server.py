@@ -191,8 +191,12 @@ def get_announcement(announcement_id: int) -> str:
                 "if you do). Say Open Hack Night is every Thursday and name any cancelled dates; it needs no "
                 "other description. Put the two member_projects below in the closing, each as a short "
                 "heading, its photo (photo_media_id) and 1-2 sentences from its caption; credit the maker if the "
-                "caption does; add nothing the caption doesn't say.")
-            data["member_projects"] = announcements.member_projects(db)
+                "caption does; add nothing the caption doesn't say. A photo goes in one email only: never use "
+                "one that an earlier email used (member_projects already leaves those out; the draft is flagged "
+                "if you reuse one). If fewer than two projects are listed, use what's there and say so in the "
+                "review note.")
+            data["member_projects"] = announcements.member_projects(db, exclude_id=a.id)
+            data["photos_already_emailed"] = sorted(announcements.emailed_media(db, a.id))
         return json.dumps(data, indent=1)
 
 
