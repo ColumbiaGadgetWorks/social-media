@@ -42,6 +42,8 @@ class BatchItem:
 
 def items(db: Session, channel_key: str) -> list[BatchItem]:
     channel = ch.CHANNELS[channel_key]
+    if not ch.is_enabled(db, channel):
+        return []
     now = utcnow()
     end = now + timedelta(days=CYCLE_WINDOW_DAYS)
     horizon_end = now + timedelta(days=channel.horizon_days) if channel.horizon_days else None
@@ -72,8 +74,9 @@ def items(db: Session, channel_key: str) -> list[BatchItem]:
 
 def overview(db: Session) -> list[dict]:
     rows = []
+    off = ch.disabled_keys(db)
     for c in ch.CHANNELS.values():
-        if ch.mode(c) not in ch.MANUAL_MODES:
+        if c.key in off or ch.mode(c) not in ch.MANUAL_MODES:
             continue
         found = items(db, c.key)
         rows.append({"channel": c, "count": len(found), "overdue": sum(1 for i in found if i.overdue)})

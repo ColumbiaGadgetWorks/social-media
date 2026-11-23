@@ -90,9 +90,12 @@ def unused_media(db: Session, limit: int = 30) -> list[MediaAsset]:
     return [m for m in rows if not {"event-card", "event-badge"} & set(m.tags or [])][:limit]
 
 
-def channel_rules_text() -> str:
+def channel_rules_text(db: Session | None = None) -> str:
     lines = []
+    off = ch.disabled_keys(db) if db is not None else set()
     for c in ch.CHANNELS.values():
+        if c.key in off:
+            continue
         accepts = ", ".join(k for k, ok in (("images", c.images), ("video", c.video), ("text only", c.text_only)) if ok)
         how = {"direct": "published automatically", "batch": "scheduled by hand on batch day", "on_day": "posted by hand on the day"}[ch.mode(c)]
         extra = f" Title up to {c.title_chars} chars." if c.title_chars else ""

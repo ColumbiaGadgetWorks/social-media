@@ -134,7 +134,9 @@ def get_guidelines() -> str:
     parts = []
     for path in sorted(GUIDELINES_DIR.glob("*.md")):
         parts.append(path.read_text())
-    parts.append("## Channel rules (from the Studio)\n" + queue.channel_rules_text())
+    with session_scope() as db:
+        parts.append("## Channel rules (from the Studio)\n" + queue.channel_rules_text(db)
+                     + "\n\nChannels not listed here are turned off in the Studio's Settings: don't draft for them.")
     parts.append("## Pillar keys\n" + "\n".join(f"- {k}: {label}" for k, label in PILLARS))
     parts.append(f"Timezone for scheduled_at: {settings().timezone.key}.")
     return "\n\n".join(parts)

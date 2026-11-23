@@ -100,6 +100,19 @@
   <p class="small muted">When a post can't be sent to Bluesky, Facebook, Instagram, Threads or the website, the Studio tries again on its next pass (about a minute later) up to this many times before giving up and emailing you. 0 turns automatic retries off, so the first failure is final. You can always press Retry on the post.</p>
   <p>{% if is_admin %}<button type="submit">Save</button>{% else %}<span class="small muted">Only an admin can change this.</span>{% endif %}</p>
 </form>
+<form method="post" action="/settings/channels" class="card">
+  <h2 style="margin-top:0">Channels</h2>
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% for r in channel_rows %}
+  <p style="margin:.4rem 0"><label style="display:flex;gap:.5rem;align-items:center;margin:0">
+    <input type="checkbox" name="on" value="{{ r.c.key }}" {{ 'checked' if r.on }} {{ 'disabled' if not is_admin }} style="width:auto">
+    <strong>{{ r.c.label }}</strong>
+    <span class="tag">{{ {'direct': 'Automatic', 'batch': 'Batch day', 'on_day': 'By hand on the day'}[r.mode] }}</span>
+  </label></p>
+  {% endfor %}
+  <p class="small muted">A channel that's off isn't offered on new posts, Claude doesn't draft for it, it drops off the batch pages and nothing is published to it. Posts that already include it keep their other channels; untick it there to get past review.</p>
+  <p>{% if is_admin %}<button type="submit">Save</button>{% else %}<span class="small muted">Only an admin can change this.</span>{% endif %}</p>
+</form>
 <form method="post" action="/settings/appearance" class="card">
   <h2 style="margin-top:0">Appearance</h2>
   <input type="hidden" name="csrf" value="{{ csrf }}">

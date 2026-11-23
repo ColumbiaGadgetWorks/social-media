@@ -13,7 +13,7 @@ from datetime import timedelta
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from . import channels as ch
 from .db import utcnow
@@ -37,7 +37,15 @@ def image_count(post: Post) -> int:
 
 def compatible_channels(post: Post) -> list[ch.Channel]:
     kinds = media_kinds(post)
-    return [c for c in ch.CHANNELS.values() if ch.compatible(c, kinds)]
+    db = object_session(post)
+    off = ch.disabled_keys(db) if db is not None else set()
+    return [c for c in ch.CHANNELS.values() if c.key not in off and ch.compatible(c, kinds)]
+
+
+def _off(post: Post) -> set[str]:
+    """Channels turned off in Settings."""
+    db = object_session(post)
+    return ch.disabled_keys(db) if db is not None else set()
 
 
 def ensure_versions(post: Post) -> None:
@@ -79,10 +87,14 @@ def problems(post: Post) -> dict[str, list[str]]:
         out.setdefault("", []).append("a post with a video can't have other photos or videos; split it into separate posts")
     kinds, images = media_kinds(post), image_count(post)
     credits = [m.credit for m in post.media if m.credit]
+    off = _off(post)
     for v in enabled:
         channel = ch.CHANNELS.get(v.channel)
         if channel is None:
             out[v.channel] = ["unknown channel"]
+            continue
+        if v.channel in off:
+            out[v.channel] = ["this channel is turned off in Settings; untick it"]
             continue
         found = ch.validate(channel, body=v.body, hashtags=v.hashtags, title=v.title, kinds=kinds, image_count=images)
         for credit in credits:  # music licenses like CC BY need the credit in every caption
@@ -143,6 +155,8 @@ def update_post(
         if version is None:
             version = ChannelVersion(channel=key, enabled=False)
             post.versions.append(version)
+        if data.get("enabled") and not version.enabled and not ch.is_enabled(db, key):
+            raise PostError(f"{ch.CHANNELS[key].label} is turned off in Settings.")
         for field in EDITABLE_FIELDS:
             if field not in data:
                 continue
@@ -270,7 +284,10 @@ def skip_version(db: Session, actor: Actor, version: ChannelVersion) -> None:
 
 
 def finish_if_complete(db: Session, post: Post) -> None:
-    if post.status == "approved" and all(v.publish_state in ("published", "skipped") for v in post.enabled_versions):
+    off = ch.disabled_keys(db)  # a channel turned off later never holds a post open
+    if post.status == "approved" and all(
+        v.publish_state in ("published", "skipped") or v.channel in off for v in post.enabled_versions
+    ):
         post.status = "done"
         audit(db, Actor.system(), "post_done", "post", post.id)
 

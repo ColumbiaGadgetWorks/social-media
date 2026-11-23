@@ -15,6 +15,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 
 @dataclass(frozen=True)
 class Channel:
@@ -148,6 +151,35 @@ def mode(channel: Channel | str) -> str:
         if getattr(importlib.import_module(module), func)():
             return "direct"
     return c.mode
+
+
+def disabled_keys(db: Session) -> set[str]:
+    """Channels an admin has turned off in Settings (everything is on by default)."""
+    from .models import AppSetting
+
+    rows = db.scalars(select(AppSetting).where(AppSetting.key.like("channel.%"))).all()
+    return {r.key.removeprefix("channel.") for r in rows if r.value == "off"} & set(CHANNELS)
+
+
+def is_enabled(db: Session, channel: Channel | str) -> bool:
+    key = channel if isinstance(channel, str) else channel.key
+    return key not in disabled_keys(db)
+
+
+def set_enabled(db: Session, key: str, on: bool) -> bool:
+    """Turn a channel on or off. Returns True when the setting changed."""
+    from .models import AppSetting
+
+    if key not in CHANNELS:
+        raise KeyError(key)
+    if on == is_enabled(db, key):
+        return False
+    row = db.get(AppSetting, f"channel.{key}")
+    if row is None:
+        db.add(AppSetting(key=f"channel.{key}", value="on" if on else "off"))
+    else:
+        row.value = "on" if on else "off"
+    return True
 
 
 UNSAFE_HTML = ("<script", "<iframe", "<object", "<embed", "javascript:", "onerror=", "onload=")

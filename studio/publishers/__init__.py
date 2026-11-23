@@ -80,7 +80,8 @@ PUBLISHERS: dict[str, Callable] = {
 
 
 def due_versions(db: Session) -> list[ChannelVersion]:
-    direct = [c.key for c in ch.CHANNELS.values() if ch.mode(c) == "direct"]
+    off = ch.disabled_keys(db)
+    direct = [c.key for c in ch.CHANNELS.values() if c.key not in off and ch.mode(c) == "direct"]
     return db.scalars(
         select(ChannelVersion)
         .join(Post)

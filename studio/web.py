@@ -1123,7 +1123,7 @@ def batch_overview(request: Request, db: Session = Depends(get_db)):
 @router.get("/batch/{channel}")
 def batch_channel(request: Request, channel: str, db: Session = Depends(get_db)):
     user = require(request, db)
-    if channel not in ch.CHANNELS or ch.mode(channel) not in ch.MANUAL_MODES:
+    if channel not in ch.CHANNELS or ch.mode(channel) not in ch.MANUAL_MODES or not ch.is_enabled(db, channel):
         return render(request, "error.html", user, message="That channel doesn't have a batch page.")
     return render(request, "batch_channel.html", user, channel=ch.CHANNELS[channel],
                   items=batch_mod.items(db, channel), cycle=batch_mod.cycle_info())
@@ -1132,7 +1132,7 @@ def batch_channel(request: Request, channel: str, db: Session = Depends(get_db))
 @router.get("/batch/{channel}/download")
 def batch_download(request: Request, channel: str, db: Session = Depends(get_db)):
     user = require(request, db)
-    if channel not in ch.CHANNELS or ch.mode(channel) not in ch.MANUAL_MODES:
+    if channel not in ch.CHANNELS or ch.mode(channel) not in ch.MANUAL_MODES or not ch.is_enabled(db, channel):
         return Response(status_code=404)
     data, count = batch_mod.build_zip(db, channel)
     audit(db, Actor("user", user), "batch_downloaded", "channel", None, channel=channel, items=count)
@@ -1178,10 +1178,13 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
         ("Subtitles (Whisper)", bool(s.whisper_model), f"STUDIO_WHISPER_MODEL={s.whisper_model or '(off)'}"),
     ]
     lan = lan_address(request)
+    channels_off = ch.disabled_keys(db)
     return render(request, "settings.html", user, tokens=tokens, new_token=new_token, new_scope=new_scope,
                   base_url=s.base_url, lan=lan, lan_configured=bool(s.lan_url),
                   connections=connections, media_base=s.media_base_url, is_admin=user.has_role("admin"), tab="general",
                   retries=publishers.max_retries(db), max_retries=publishers.MAX_RETRIES,
+                  channel_rows=[{"c": c, "on": c.key not in channels_off, "mode": ch.mode(c)}
+                                for c in ch.CHANNELS.values()],
                   linkedin=linkedin_pub.status(db), linkedin_redirect=linkedin_pub.redirect_uri())
 
 
@@ -1354,6 +1357,23 @@ async def settings_publishing(request: Request, db: Session = Depends(get_db)):
         row.value = str(value)
     audit(db, Actor("user", user), "publish_retries_changed", "user", user.id, retries=value)
     flash(request, "Automatic retries are off." if value == 0 else f"Failed posts will be retried up to {value} times.")
+    return back("/settings")
+
+
+@router.post("/settings/channels")
+async def settings_channels(request: Request, db: Session = Depends(get_db)):
+    user = require(request, db)
+    form = await form_with_csrf(request)
+    if not user.has_role("admin"):
+        flash(request, "Only an admin can turn channels on or off.", "error")
+        return back("/settings")
+    wanted = {str(k) for k in form.getlist("on")}
+    changes = []
+    for key, c in ch.CHANNELS.items():
+        if ch.set_enabled(db, key, key in wanted):
+            changes.append(f"{c.label} {'on' if key in wanted else 'off'}")
+            audit(db, Actor("user", user), "channel_toggled", "channel", None, channel=key, enabled=key in wanted)
+    flash(request, ("Saved: " + ", ".join(changes) + ".") if changes else "No changes.")
     return back("/settings")
 
 
