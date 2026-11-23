@@ -28,6 +28,7 @@ from . import channels as ch
 from . import metrics as metrics_mod
 from . import posts as post_svc
 from . import public_media as public_media_mod
+from . import version as app_version
 from . import video as video_mod
 from .auth import check_csrf, check_proxy, client_ip, current_user, require
 from .config import ip_in
@@ -96,6 +97,7 @@ PILLARS = [
     ("community", "Community & partners"),
 ]
 templates.env.globals["PILLARS"] = PILLARS
+templates.env.globals["APP_VERSION"] = app_version.VERSION
 # Static files get a version from their contents, so browsers fetch new styles after every update.
 templates.env.globals["ASSET_V"] = hashlib.sha256(b"".join(
     p.read_bytes() for p in sorted((Path(__file__).parent / "static").glob("*.[jc]s*")))).hexdigest()[:10]

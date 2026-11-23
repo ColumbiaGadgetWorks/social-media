@@ -15,7 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY studio ./studio
 COPY guidelines ./guidelines
 
-ENV STUDIO_DATA_DIR=/data \
+ARG STUDIO_VERSION=dev
+ENV STUDIO_VERSION=$STUDIO_VERSION \
+    STUDIO_DATA_DIR=/data \
     STUDIO_MEDIA_DIR=/media \
     PYTHONUNBUFFERED=1
 

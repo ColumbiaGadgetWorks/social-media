@@ -30,6 +30,7 @@
     {% if user.has_role('admin') %}<a href="/admin/users" class="{{ 'on' if here.startswith('/admin') }}">Users</a>{% endif %}
   </nav>
   <div class="who">
+    <span class="small muted mono" title="Studio version">v{{ APP_VERSION }}</span>
     <a href="/settings">{{ user.label }}</a>
     <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link">Sign out</button></form>
   </div>
