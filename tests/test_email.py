@@ -339,7 +339,7 @@ def test_weekly_events_are_one_line_and_cancelled_ones_have_no_link(app3, monkey
         titles = [i["title"] for i in a.items]
         assert titles == ["Free Public CGW Class: CAD", "Open Hack Night", "Cancelled: Open Hack Night (Thanksgiving)"]
         hack = a.items[1]
-        assert hack["when"].startswith("Thursdays, ") and hack["when"].endswith("November 5, 12 and 19")
+        assert hack["when"].startswith("Every Thursday, ") and "November 5" not in hack["when"]
         assert hack["link"] and a.items[0]["link"]
         assert a.items[2]["link"] == ""  # nothing to link for a cancelled event
         html_body, text_body = ann_mod.render(a, "#u")
@@ -432,3 +432,50 @@ def test_social_icons_are_public_pngs(app3):
     r = c.get("/e/icon/facebook.png")
     assert r.status_code == 200 and r.headers["content-type"] == "image/png" and r.content[1:4] == b"PNG"
     assert c.get("/e/icon/nope.png").status_code == 404
+
+
+def test_monthly_covers_its_own_month_and_lists_cancelled_hack_nights(app3, monkeypatch):
+    with db_mod.session_scope() as s:
+        for day, status in ((6, "active"), (13, "active"), (20, "cancelled")):  # 6 PM Central is midnight UTC the next day
+            s.add(Event(uid=f"hn{day}", start=datetime(2026, 11, day, 0, 0), title="Open Hack Night",
+                        series="hack|Thu|18:00", status=status))
+        s.add(Event(uid="nov", start=datetime(2026, 11, 4, 0, 0), title="Free Public CGW Class: CAD"))
+        s.add(Event(uid="dec", start=datetime(2026, 12, 9, 0, 0), title="December thing"))
+        s.add(Event(uid="gone", start=datetime(2026, 11, 20, 0, 0), title="Soldering night", status="cancelled"))
+    at_local(monkeypatch, datetime(2026, 10, 12, 9, 0))
+    with db_mod.session_scope() as s:
+        a = ann_mod.ensure_monthly(s, early=True)
+        titles = [i["title"] for i in a.items]
+        assert "December thing" not in titles
+        assert "Cancelled: Soldering night" in titles
+        hack = next(i for i in a.items if i["title"] == "Open Hack Night")
+        assert hack["when"].startswith("Every Thursday") and hack["when"].endswith("Cancelled: November 19")
+        a.intro, a.closing = "Hi.", "More in December."
+        assert any("December" in p for p in ann_mod.problems(s, a))
+        a.closing = "See you in November."
+        assert not any("mentions" in p for p in ann_mod.problems(s, a))
+
+
+def test_member_projects_are_the_latest_posted_ones(app3):
+    from studio.models import ChannelVersion, MediaAsset, Post, PostMedia
+
+    with db_mod.session_scope() as s:
+        for n, pillar, state in ((1, "member_projects", "published"), (2, "member_projects", "published"),
+                                 (3, "member_projects", "pending"), (4, "shop_humor", "published"),
+                                 (5, "member_projects", "published")):
+            post = Post(title=f"Project {n}", pillar=pillar, status="done")
+            post.versions.append(ChannelVersion(channel="facebook", body=f"Caption {n}", publish_state=state,
+                                                published_at=utcnow_minus(days=10 - n)))
+            if n != 5:  # the newest has only a video
+                m = MediaAsset(kind="image", original_name="a.jpg", mime="image/jpeg", size_bytes=1, sha256=str(n),
+                               path="a", processing_status="ready")
+                post.media_links.append(PostMedia(media=m))
+            s.add(post)
+        s.flush()
+        got = ann_mod.member_projects(s)
+        assert [p["title"] for p in got] == ["Project 2", "Project 1"]  # photos first; unposted and other pillars skipped
+        assert got[0]["caption"] == "Caption 2" and got[0]["photo_media_id"]
+
+
+def utcnow_minus(days):
+    return db_mod.utcnow() - timedelta(days=days)

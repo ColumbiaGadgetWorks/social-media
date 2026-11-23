@@ -91,21 +91,32 @@ def event_item(event: Event) -> dict:
 
     day, when = event_when(event)
     link = "" if is_cancelled(event) else (event.url or f"{settings().website_url}/calendar/")  # nothing to see for a cancelled event
-    return {"event_id": event.id, "title": event.title, "when": f"{day}, {when}", "where": event.location,
+    title = event.title
+    if is_cancelled(event) and not title.strip().lower().startswith(("cancelled", "canceled")):
+        title = f"Cancelled: {title}"
+    return {"event_id": event.id, "title": title, "when": f"{day}, {when}", "where": event.location,
             "link": link, "blurb": ""}
 
 
-def weekly_item(events: list[Event]) -> dict:
-    """One line for a weekly event (Open Hack Night): the weekday and time, then every date in the month."""
-    from .calendar_sync import event_when
-
-    first = events[0]
-    day, when = event_when(first)
-    weekday = day.split(",")[0]
+def _dates(events: list[Event]) -> str:
     local = [to_local(e.start) for e in events]
     days = [str(d.day) for d in local]
-    dates = ", ".join(days[:-1]) + (" and " if len(days) > 1 else "") + days[-1]
-    return {"event_id": first.id, "title": first.title, "when": f"{weekday}s, {when}: {local[0]:%B} {dates}",
+    return f"{local[0]:%B} " + ", ".join(days[:-1]) + (" and " if len(days) > 1 else "") + days[-1]
+
+
+def weekly_item(events: list[Event]) -> dict:
+    """One line for a weekly event (Open Hack Night): "every Thursday" and the time, plus the dates in the
+    month that are cancelled, if any. The regular dates aren't listed."""
+    from .calendar_sync import event_when, is_cancelled
+
+    running = [e for e in events if not is_cancelled(e)]
+    off = [e for e in events if is_cancelled(e)]
+    first = (running or off)[0]
+    day, when = event_when(first)
+    line = f"Every {day.split(',')[0]}, {when}"
+    if off:
+        line += f". Cancelled: {_dates(off)}"
+    return {"event_id": first.id, "title": first.title, "when": line,
             "where": first.location, "link": first.url or f"{settings().website_url}/calendar/", "blurb": "",
             "weekly": True}
 
@@ -126,9 +137,10 @@ def add_to_calendar_url(event: Event) -> str:
 
 
 def month_items(db: Session, send_at: datetime, month_end: datetime) -> list[dict]:
-    """What goes in a month's newsletter: each one-off event, and each weekly event as a single line."""
+    """What goes in a month's newsletter: each one-off event in that month (cancelled ones too, marked as such),
+    and each weekly event as a single line. Nothing outside the month."""
     events = db.scalars(
-        select(Event).where(Event.start >= send_at, Event.start < month_end, Event.status == "active",
+        select(Event).where(Event.start >= send_at, Event.start < month_end, Event.status.in_(("active", "cancelled")),
                             Event.recurring.is_(False), Event.email_ok.is_(True)).order_by(Event.start)
     ).all()
     items, seen = [], set()
@@ -141,6 +153,31 @@ def month_items(db: Session, send_at: datetime, month_end: datetime) -> list[dic
         else:
             items.append(event_item(e))
     return items
+
+
+def member_projects(db: Session, limit: int = 2, days: int = 60) -> list[dict]:
+    """The latest member-project posts that actually went out on social media, newest first, for the monthly
+    email's closing. Photos come first (a video can't sit in an email); each has the caption that was posted."""
+    from .models import ChannelVersion, Post
+
+    since = utcnow() - timedelta(days=days)
+    rows = db.execute(
+        select(ChannelVersion, Post).join(Post).where(
+            Post.pillar == "member_projects", ChannelVersion.publish_state == "published",
+            ChannelVersion.published_at >= since).order_by(ChannelVersion.published_at.desc())
+    ).all()
+    out, seen = [], set()
+    for version, post in rows:
+        if post.id in seen:
+            continue
+        seen.add(post.id)
+        photo = next((m for m in post.media if m.kind == "image" and not {"event-card", "event-badge"} & set(m.tags or [])), None)
+        out.append({"post_id": post.id, "title": post.display_title, "posted_on": version.channel,
+                    "caption": version.body.strip(), "photo_media_id": photo.id if photo else None,
+                    "photo_description": photo.description if photo else "",
+                    "credit": next((m.credit for m in post.media if m.credit), "")})
+    out.sort(key=lambda p: p["photo_media_id"] is None)
+    return out[:limit]
 
 
 def refresh_items(db: Session, actor: Actor, ann: Announcement) -> list[dict]:
@@ -217,6 +254,22 @@ def same_month_count(db: Session, ann: Announcement) -> int:
         Announcement.send_at >= start, Announcement.send_at < end)).all())
 
 
+MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September",
+               "October", "November", "December"]
+
+
+def other_month_mentions(ann: Announcement) -> list[str]:
+    """The monthly email covers its own month only: flag the text if it names another month."""
+    own = MONTH_NAMES[int(ann.month.split("-")[1]) - 1]
+    text = f"{ann.subject}\n{ann.preheader}\n{ann.intro}\n{ann.closing}"
+    found = []
+    for name in MONTH_NAMES:
+        pattern = r"\bMay\b(?= \d)" if name == "May" else rf"\b{name}\b"
+        if name != own and re.search(pattern, text):
+            found.append(f"it mentions {name}, but this email is only about {own}")
+    return found
+
+
 def problems(db: Session, ann: Announcement) -> list[str]:
     found = []
     if not ann.subject.strip():
@@ -227,6 +280,8 @@ def problems(db: Session, ann: Announcement) -> list[str]:
         asset = db.get(MediaAsset, int(media_id))
         if asset is None or asset.kind != "image":
             found.append(f"photo {media_id} isn't a photo in the library")
+    if ann.kind == "monthly" and ann.month:
+        found += other_month_mentions(ann)
     if ann.kind == "monthly" and not ann.items:
         found.append("there are no classes or events in it; cancel it or add news to the opening")
     if any(not str(i.get("blurb", "")).strip() for i in ann.items):

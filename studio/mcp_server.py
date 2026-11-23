@@ -177,14 +177,23 @@ def get_announcement(announcement_id: int) -> str:
         a = db.get(Announcement, announcement_id)
         if a is None:
             return "Error: no such email."
-        return json.dumps({
+        data = {
             "announcement_id": a.id, "kind": a.kind, "status": a.status, "sends": fmt_local(a.send_at),
             "subject": a.subject, "preheader": a.preheader, "intro": a.intro, "closing": a.closing,
             "items": [{"index": i, **item} for i, item in enumerate(a.items)], "review_comment": a.review_comment,
             "rules": "Email is for classes, events and important news only. Professional and warm, no hype, no "
                      "emoji, no hashtags. Facts (dates, times, places, prices, links) only from the items. "
                      "Opening: 2-4 sentences. You can't add or remove items; a person does that.",
-        }, indent=1)
+        }
+        if a.kind == "monthly":
+            data["rules"] += (
+                " A monthly email covers its own month only: never mention another month (the draft is flagged "
+                "if you do). Say Open Hack Night is every Thursday and name any cancelled dates; it needs no "
+                "other description. Put the two member_projects below in the closing, each as a short "
+                "heading, its photo (photo_media_id) and 1-2 sentences from its caption; credit the maker if the "
+                "caption does; add nothing the caption doesn't say.")
+            data["member_projects"] = announcements.member_projects(db)
+        return json.dumps(data, indent=1)
 
 
 @server.tool()
