@@ -5,11 +5,12 @@
   {% for b in open_batches[:3] %}<a href="/upload/batch/{{ b.batch }}">Sort {{ b.count }}</a>{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
 <div class="grid">
   <div class="card">
-    <span class="tag accent">Needs Claude</span>
+    <span class="tag accent">{{ 'Needs media' if claude.all_need_media else 'Needs Claude' }}</span>
     <div class="stat">{{ claude.count }}</div>
     {% if claude.count %}
+      {% for n in claude.needs_media %}<p class="small"><a href="/posts/{{ n.post_id }}">Post {{ n.post_id }}</a> - needs {{ n.missing }}</p>{% endfor %}
       <p class="small muted">Oldest waiting {{ claude.oldest_days }} day(s). About {{ claude.minutes }} min of Claude time.</p>
-      <p class="small">In Claude Code, run <span class="mono">/cgw-session</span></p>
+      {% if not claude.all_need_media %}<p class="small">In Claude Code, run <span class="mono">/cgw-session</span></p>{% endif %}
     {% else %}<p class="small muted">Nothing waiting. Upload photos or videos to start.</p>{% endif %}
   </div>
   <div class="card">

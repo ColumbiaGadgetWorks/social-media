@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
@@ -23,13 +24,33 @@ def claude_queue(db: Session) -> list[Post]:
     return sorted(items, key=lambda p: p.target_at or p.created_at + timedelta(days=2))
 
 
+_PLACEHOLDER_CLASS = re.compile(r"^(free )?(public )?(cgw )?class$", re.IGNORECASE)
+
+
+def missing_for(post: Post) -> str:
+    """What a waiting post needs from a person before Claude can draft it ("" if nothing: Claude's turn)."""
+    from .calendar_sync import poster_only_problem
+
+    event = post.event
+    if event is None or poster_only_problem(post) is None:
+        return ""
+    angle = (post.angle or "").removesuffix("_spotlight").replace("_", " ")
+    photo = f"{angle} photo" if post.purpose == "weekly" and angle else "photo"
+    if "class" in event.title.lower() and _PLACEHOLDER_CLASS.match(event.title.strip()):
+        return f"class theme and {photo}"
+    return photo
+
+
 def queue_summary(db: Session) -> dict:
     from .models import Announcement
 
     items = claude_queue(db)
     emails = db.scalars(select(Announcement).where(Announcement.status == "needs_claude")).all()
     oldest = min([p.created_at for p in items] + [a.created_at for a in emails], default=None)
+    waiting = [(p.id, m) for p in items if (m := missing_for(p))]
     return {
+        "needs_media": [{"post_id": pid, "missing": m} for pid, m in waiting],
+        "all_need_media": bool(waiting) and len(waiting) == len(items) + len(emails),
         "count": len(items) + len(emails),
         "emails": len(emails),
         "oldest_days": (utcnow() - oldest).days if oldest else 0,

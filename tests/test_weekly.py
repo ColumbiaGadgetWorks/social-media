@@ -129,6 +129,21 @@ def test_no_photos_means_card_and_a_non_photo_angle(app3):
         assert calendar_sync.series_context(s, post)["needs_photos"] is True
 
 
+def test_dashboard_lists_what_each_waiting_post_needs(app3):
+    from studio import queue
+
+    with db_mod.session_scope() as s:
+        calendar_sync.sync(s, flattened_feed(offsets=(2, 9)))
+        hack = s.scalars(select(Post).where(Post.purpose == "weekly")).first()
+        hack.angle = "tool_spotlight"
+        reminder = s.scalars(select(Post).join(Event).where(Event.title == "Free public class", Post.purpose == "reminder")).first()
+        assert queue.missing_for(hack) == "tool photo"
+        assert queue.missing_for(reminder) == "class theme and photo"  # a generic class title has no theme yet
+        reminder.event.title = "Soldering class"
+        assert queue.missing_for(reminder) == "photo"
+        assert any(n["missing"] == "tool photo" for n in queue.queue_summary(s)["needs_media"])
+
+
 def test_event_posts_with_only_the_poster_are_refused_except_cancellations_and_new_classes(app3):
     with db_mod.session_scope() as s:
         calendar_sync.sync(s, flattened_feed(offsets=(2, 9)))
